@@ -1,0 +1,1 @@
+import{createClient}from"@/lib/supabase/server";import{redirect}from"next/navigation";export default async function Home(){const{data}=await(await createClient()).auth.getClaims();redirect(data?.claims?"/dashboard":"/login")}
