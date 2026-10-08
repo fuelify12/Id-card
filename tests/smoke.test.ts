@@ -1,0 +1,1 @@
+import{describe,expect,it}from"vitest";describe("foundation",()=>{it("normalizes serial values",()=>{const n=(v:string|number)=>String(v).trim().replace(/^0+/,"")||"0";expect(n("00017")).toBe("17");expect(n(18)).toBe("18")})});
