@@ -541,12 +541,14 @@ export type Database = {
           created_at: string
           height_px: number | null
           id: string
+          is_active: boolean
           name: string
           owner_id: string
           project_id: string
           source_path: string | null
           source_type: string
           updated_at: string
+          version_number: number
           width_px: number | null
         }
         Insert: {
@@ -555,12 +557,14 @@ export type Database = {
           created_at?: string
           height_px?: number | null
           id?: string
+          is_active?: boolean
           name: string
           owner_id: string
           project_id: string
           source_path?: string | null
           source_type: string
           updated_at?: string
+          version_number?: number
           width_px?: number | null
         }
         Update: {
@@ -569,12 +573,14 @@ export type Database = {
           created_at?: string
           height_px?: number | null
           id?: string
+          is_active?: boolean
           name?: string
           owner_id?: string
           project_id?: string
           source_path?: string | null
           source_type?: string
           updated_at?: string
+          version_number?: number
           width_px?: number | null
         }
         Relationships: [
@@ -627,7 +633,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      set_active_template_version: {
+        Args: { p_project_id: string; p_template_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
