@@ -1,0 +1,1 @@
+export default function Loading(){return <div className="space-y-5 animate-pulse"><div className="h-8 w-64 rounded bg-slate-800"/><div className="grid gap-4 md:grid-cols-3"><div className="h-28 rounded-2xl bg-slate-900"/><div className="h-28 rounded-2xl bg-slate-900"/><div className="h-28 rounded-2xl bg-slate-900"/></div><div className="h-48 rounded-2xl bg-slate-900"/></div>}
