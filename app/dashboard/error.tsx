@@ -1,0 +1,1 @@
+"use client";export default function Error({reset}:{error:Error&{digest?:string};reset:()=>void}){return <div className="pf-panel p-8 text-center"><h2 className="text-xl font-bold">Dashboard error</h2><p className="pf-muted mt-2">The workspace could not be loaded.</p><button className="pf-button mt-5" onClick={reset}>Try again</button></div>}
