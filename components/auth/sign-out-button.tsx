@@ -1,0 +1,1 @@
+"use client";import{createClient}from"@/lib/supabase/client";import{useState}from"react";export function SignOutButton(){const[busy,setBusy]=useState(false);return <button className="pf-button-secondary" disabled={busy} onClick={async()=>{setBusy(true);await createClient().auth.signOut();location.assign("/login")}}>{busy?"Signing out…":"Sign out"}</button>}
