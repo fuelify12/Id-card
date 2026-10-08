@@ -1,0 +1,8 @@
+"use client";
+import { useState } from "react";
+import { updateProject } from "@/app/dashboard/actions";
+export function ProjectSettingsForm({project}:{project:{id:string;name:string;school_name:string;school_address:string|null;academic_session:string|null}}){
+ const[n,setN]=useState(project.name),[s,setS]=useState(project.school_name),[a,setA]=useState(project.school_address??""),[session,setSession]=useState(project.academic_session??""),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false);
+ async function save(e:React.FormEvent){e.preventDefault();setBusy(true);setMsg("");try{await updateProject({projectId:project.id,name:n,schoolName:s,schoolAddress:a,academicSession:session});setMsg("Saved");}catch(e){setMsg(e instanceof Error?e.message:"Save failed")}finally{setBusy(false)}}
+ return <form onSubmit={save} className="pf-panel p-5 space-y-3"><div><h2 className="font-bold">School details</h2><p className="pf-muted text-sm mt-1">Project metadata stays private to this workspace.</p></div><input className="pf-input" required placeholder="Project name" value={n} onChange={e=>setN(e.target.value)}/><input className="pf-input" required placeholder="School name" value={s} onChange={e=>setS(e.target.value)}/><input className="pf-input" placeholder="School address (optional)" value={a} onChange={e=>setA(e.target.value)}/><input className="pf-input" placeholder="Academic session (optional)" value={session} onChange={e=>setSession(e.target.value)}/><div className="flex items-center gap-3"><button className="pf-button" disabled={busy}>{busy?"Saving…":"Save details"}</button>{msg&&<span className="text-sm text-slate-400">{msg}</span>}</div></form>
+}
