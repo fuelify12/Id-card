@@ -1,0 +1,1 @@
+export default function NotFound(){return <div className="pf-panel p-10 text-center"><h1 className="text-2xl font-bold">Project not found</h1><p className="pf-muted mt-2">This project does not exist or is not accessible.</p></div>}
