@@ -1,7 +1,7 @@
 "use client";
 import {useEffect,useRef,useState} from "react";
 import {createTemplatePreview,saveTemplateFields} from "@/app/dashboard/actions";
-type Field={id:string;key:string;label:string;field_type:string;confidence:number|null;x:number;y:number;width:number;height:number;font_family:string|null;font_size:number|null;color:string|null;alignment:string|null;fit_mode:string|null;required:boolean;source_column:string|null};
+type Field={id:string;key:string;label:string;field_type:string;confidence:number|null;x:number;y:number;width:number;height:number;font_family:string|null;font_size:number|null;font_weight:string|null;color:string|null;alignment:string|null;fit_mode:string|null;required:boolean;source_column:string|null};
 export function TemplateAnalysisEditor({projectId,templateId,width,height,sourcePath,fields:initialFields}:{projectId:string;templateId:string;width:number;height:number;sourcePath:string;fields:Field[]}){
  const[fields,setFields]=useState(initialFields),[busy,setBusy]=useState(false),[msg,setMsg]=useState(""),[image,setImage]=useState(""),drag=useRef<{id:string;mode:"move"|"resize";sx:number;sy:number;ox:number;oy:number;ow:number;oh:number}|null>(null);
  useEffect(()=>{createTemplatePreview({bucket:"printforge-templates",path:sourcePath}).then(setImage).catch(()=>setMsg("Template preview unavailable."))},[sourcePath]);
