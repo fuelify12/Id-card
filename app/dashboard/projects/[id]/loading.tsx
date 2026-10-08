@@ -1,0 +1,1 @@
+export default function Loading(){return <div className="pf-panel h-64 animate-pulse bg-slate-900"/>}
