@@ -82,17 +82,19 @@ export function parseWorkbook(buffer: ArrayBuffer, fileName: string): Spreadshee
   return {sheetName:chosen.name,headers,normalizedHeaders,headerRow:chosen.headerIndex+1,serialColumn,rows,summary:{total:dataRows.length,blank:rows.filter(r=>r.blank).length,missingSerial:dataRows.filter(r=>!r.serialNumber).length,duplicates:dataRows.filter(r=>r.issues.includes("Duplicate serial number")).length,invalid:dataRows.filter(r=>r.issues.length>0).length}};
 }
 export function validateStudentRows(rows: ParsedStudentRow[], serialColumn: string | null) {
-  const seen = new Set<string>();
-  return rows.filter(r=>!r.blank).map(r=>{
-    const issues = r.issues.filter(i=>!["Serial-number column not detected; choose a column before importing.","Missing serial number","Duplicate serial number"].includes(i));
+  const candidates = rows.filter(r=>!r.blank).map(r=>{
     const raw = serialColumn ? r.values[serialColumn] : null;
     const serial = raw === null || raw === undefined ? "" : String(raw).trim();
+    return { row: r, serial, serialKey: serial ? serialDuplicateKey(serial) : "" };
+  });
+  const counts = new Map<string,number>();
+  candidates.forEach(({serialKey})=>{if(serialKey)counts.set(serialKey,(counts.get(serialKey)??0)+1);});
+  return candidates.map(({row,serial,serialKey})=>{
+    const issues = row.issues.filter(i=>!["Serial-number column not detected; choose a column before importing.","Missing serial number","Duplicate serial number"].includes(i));
     if (!serial) issues.push("Missing serial number");
     else if (!/^\d+$/.test(serial)) issues.push("Serial number must be a whole number");
-    const serialKey = serial ? serialDuplicateKey(serial) : "";
-    if (serialKey && seen.has(serialKey)) issues.push("Duplicate serial number");
-    if (serialKey) seen.add(serialKey);
-    if (!Object.values(r.values).some(v=>v!==null && String(v).trim()!=="")) issues.push("Row contains no values");
-    return {...r,serialNumber:serial||null,issues};
+    if (serialKey && (counts.get(serialKey)??0)>1) issues.push("Duplicate serial number");
+    if (!Object.values(row.values).some(v=>v!==null && String(v).trim()!=="")) issues.push("Row contains no values");
+    return {...row,serialNumber:serial||null,issues};
   });
 }
