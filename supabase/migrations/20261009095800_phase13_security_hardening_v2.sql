@@ -1,0 +1,3 @@
+-- History reconciliation for the applied Phase 13 security migration.
+-- Tenant-qualified policies and least-privilege grants are defined in
+-- 20261009095425_phase13_security_hardening.sql. No additional DDL is needed.
