@@ -1,0 +1,16 @@
+-- Validate the tenant-integrity constraints after the online-safe NOT VALID add.
+-- This checks existing rows without deleting or rewriting them.
+begin;
+alter table public.students validate constraint students_project_owner_security_fkey;
+alter table public.templates validate constraint templates_project_owner_security_fkey;
+alter table public.batches validate constraint batches_project_owner_security_fkey;
+alter table public.batches validate constraint batches_template_project_owner_security_fkey;
+alter table public.processing_jobs validate constraint processing_jobs_project_owner_security_fkey;
+alter table public.generated_cards validate constraint generated_cards_project_owner_security_fkey;
+alter table public.generated_cards validate constraint generated_cards_student_project_security_fkey;
+alter table public.generated_cards validate constraint generated_cards_template_project_owner_security_fkey;
+alter table public.validation_results validate constraint validation_results_card_owner_security_fkey;
+alter table public.card_validation_findings validate constraint card_validation_findings_project_owner_security_fkey;
+alter table public.batch_generation_items validate constraint batch_items_student_project_security_fkey;
+alter table public.batch_generation_items validate constraint batch_items_batch_project_owner_security_fkey;
+commit;
