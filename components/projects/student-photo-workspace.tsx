@@ -40,7 +40,7 @@ export function StudentPhotoWorkspace({projectId,initialPrefix=null}:{projectId:
  const [workspace,setWorkspace]=useState<Workspace|null>(null);const [loading,setLoading]=useState(true);const [queue,setQueue]=useState<QueueItem[]>([]);const [busy,setBusy]=useState(false);const cancelRef=useRef(false);
  const [error,setError]=useState("");const [notice,setNotice]=useState("");const [search,setSearch]=useState("");const [filter,setFilter]=useState("ALL");const [studentSearch,setStudentSearch]=useState("");const [prefix,setPrefix]=useState(initialPrefix??"");const [dragging,setDragging]=useState(false);
  const refresh=useCallback(async()=>{try{const w=await loadPhotoWorkspace(projectId) as Workspace;setWorkspace(w);}catch(e){setError(e instanceof Error?e.message:"Could not load photo workspace.");}finally{setLoading(false);}},[projectId]);
- useEffect(()=>{void refresh();},[refresh]);
+ useEffect(()=>{const timer=window.setTimeout(()=>{void refresh();},0);return()=>window.clearTimeout(timer);},[refresh]);
  const studentById=useMemo(()=>new Map((workspace?.students??[]).map(s=>[s.id,s])),[workspace]);
  const studentBySerial=useMemo(()=>new Map((workspace?.students??[]).map(s=>[String(s.serial_number),s])),[workspace]);
  const filteredPhotos=useMemo(()=>{const q=search.trim().toLowerCase();return(workspace?.photos??[]).filter(p=>(filter==="ALL"||p.match_status===filter)&&( !q||p.original_filename.toLowerCase().includes(q)||String(p.serial_number??p.normalized_serial_number??"").includes(q)||(p.student_id&&studentById.get(p.student_id)&&studentLabel(studentById.get(p.student_id)!).toLowerCase().includes(q))));},[workspace,filter,search,studentById]);
