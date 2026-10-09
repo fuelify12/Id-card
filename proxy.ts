@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabasePublicEnv } from "@/lib/env";
+import { PRIVATE_RESPONSE_CACHE_CONTROL } from "@/lib/security/headers";
 
 export async function proxy(request: NextRequest) {
   const env = getSupabasePublicEnv();
@@ -30,7 +31,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
-  response.headers.set("Cache-Control", "private, no-store, max-age=0");
+  response.headers.set("Cache-Control", PRIVATE_RESPONSE_CACHE_CONTROL);
   return response;
 }
 
