@@ -37,3 +37,166 @@ export async function importStudentRows(input:{projectId:string;rows:Array<{sour
  await s.from("audit_logs").insert({owner_id:uid,project_id:input.projectId,action:"student_spreadsheet_imported",entity_type:"students",metadata:{count:normalized.length,source:"spreadsheet",replaced:!!input.replaceExisting}});
  return {imported:normalized.length};
 }
+
+
+import { assertPhotoAssignmentProject, parsePhotoFilename, proposePhotoMatch } from "@/lib/photos/matching";
+import { inspectPhotoBuffer } from "@/lib/photos/image-validation";
+const PHOTO_MAX_BYTES = 10 * 1024 * 1024;
+const PHOTO_MAX_FILES = 500;
+const PHOTO_MAX_BATCH_BYTES = 500 * 1024 * 1024;
+const PHOTO_BUCKET = STORAGE_BUCKETS.studentPhotos;
+function displayPhotoFilename(name:string) { return name.replace(/[\u0000-\u001f]/g,"").slice(0,255)||"photo"; }
+function safePhotoFilename(name:string) {
+ const base=name.split(/[\\/]/).pop()?.replace(/[\u0000-\u001f]/g,"").trim()||"photo";
+ return base.slice(0,180).replace(/[^a-zA-Z0-9._ -]/g,"_")||"photo";
+}
+async function getOwnedProject(s:Awaited<ReturnType<typeof createClient>>, projectId:string, uid:string) {
+ const {data,error}=await s.from("school_projects").select("id,photo_serial_prefix").eq("id",projectId).eq("owner_id",uid).maybeSingle();
+ if(error) throw new Error(error.message);
+ if(!data) throw new Error("Project not found or access denied.");
+ return data;
+}
+export async function createPhotoBatch(input:{projectId:string;totalCount:number;name?:string}) {
+ const {s,uid}=await auth(); await getOwnedProject(s,input.projectId,uid);
+ if(!Number.isInteger(input.totalCount)||input.totalCount<1||input.totalCount>PHOTO_MAX_FILES) throw new Error("A photo batch must contain 1–500 image files.");
+ const {data,error}=await s.from("batches").insert({owner_id:uid,project_id:input.projectId,name:(input.name||"Photo upload").slice(0,120),status:"uploading",total_count:input.totalCount,completed_count:0,failed_count:0,review_count:0,started_at:new Date().toISOString()}).select("id,name,total_count,status").single();
+ if(error) throw new Error(error.message); return data;
+}
+export async function createPhotoUploadTicket(input:{projectId:string;batchId:string;filename:string;size:number}) {
+ const {s,uid}=await auth(); await getOwnedProject(s,input.projectId,uid);
+ if(!Number.isInteger(input.size)||input.size<1||input.size>PHOTO_MAX_BYTES) throw new Error("Each photo must be between 1 byte and 10 MB.");
+ const {data:batch,error:be}=await s.from("batches").select("id").eq("id",input.batchId).eq("project_id",input.projectId).eq("owner_id",uid).maybeSingle();
+ if(be) throw new Error(be.message); if(!batch) throw new Error("Upload batch not found.");
+ const filename=safePhotoFilename(input.filename);
+ const path=projectObjectPath(uid,input.projectId,filename);
+ const {data:reserved,error:re}=await s.rpc("reserve_photo_batch_bytes",{p_batch_id:input.batchId,p_project_id:input.projectId,p_size:input.size});
+ if(re) throw new Error(re.message); if(!reserved) throw new Error("Photo batch exceeds the 500 MB aggregate limit or is no longer uploading.");
+ const {data,error}=await s.storage.from(PHOTO_BUCKET).createSignedUploadUrl(path,{upsert:false});
+ if(error) { await s.rpc("release_photo_batch_bytes",{p_batch_id:input.batchId,p_project_id:input.projectId,p_size:input.size}); throw new Error(error.message); }
+ return {path,token:data.token};
+}
+export async function registerStudentPhoto(input:{projectId:string;batchId:string;storagePath:string;originalFilename:string}) {
+ const {s,uid}=await auth(); const project=await getOwnedProject(s,input.projectId,uid);
+ if(!input.storagePath.startsWith(uid+"/"+input.projectId+"/")||input.storagePath.includes("..")) throw new Error("Invalid project storage path.");
+ const {data:batch,error:be}=await s.from("batches").select("id").eq("id",input.batchId).eq("project_id",input.projectId).eq("owner_id",uid).maybeSingle();
+ if(be) throw new Error(be.message); if(!batch) throw new Error("Upload batch not found.");
+ const {data:prior,error:pe}=await s.from("student_photos").select("id,match_status,content_sha256,student_id,serial_number,normalized_serial_number,original_serial_number,original_filename,storage_path,project_id,owner_id,batch_id,mime_type,width_px,height_px,file_size_bytes,matching_method,validation_errors,duplicate_of_id,approved_at,approved_by,created_at,updated_at").eq("project_id",input.projectId).eq("storage_path",input.storagePath).maybeSingle();
+ if(pe) throw new Error(pe.message); if(prior) return {photoId:prior.id,status:prior.match_status,idempotent:true};
+ const {data:blob,error:de}=await s.storage.from(PHOTO_BUCKET).download(input.storagePath);
+ if(de||!blob) throw new Error("Uploaded object could not be verified in private storage.");
+ if(blob.size<1||blob.size>PHOTO_MAX_BYTES) { await s.storage.from(PHOTO_BUCKET).remove([input.storagePath]); throw new Error("Photo exceeds the server-side file-size limit."); }
+ const bytes=Buffer.from(await blob.arrayBuffer());
+ const inspected=await inspectPhotoBuffer(bytes);
+ const mime=inspected.mime;
+ const width=inspected.width,height=inspected.height;
+ const validationErrors=inspected.errors;
+ const hash=inspected.sha256;
+ if(validationErrors.length) {
+  await s.storage.from(PHOTO_BUCKET).remove([input.storagePath]);await s.rpc("release_photo_batch_bytes",{p_batch_id:input.batchId,p_project_id:input.projectId,p_size:bytes.length});
+  const {data:invalid,error:ie}=await s.from("student_photos").insert({owner_id:uid,project_id:input.projectId,batch_id:input.batchId,student_id:null,serial_number:null,original_filename:displayPhotoFilename(input.originalFilename),original_serial_number:null,normalized_serial_number:null,storage_path:input.storagePath,mime_type:mime??"application/octet-stream",width_px:width,height_px:height,file_size_bytes:bytes.length,content_sha256:hash,matching_method:null,match_status:"INVALID_FILE",validation_errors:validationErrors,crop_settings:{}}).select("id,match_status").single();
+  if(ie) throw new Error(ie.message); return {photoId:invalid.id,status:invalid.match_status,idempotent:false};
+ }
+ const {data:dupes,error:he}=await s.from("student_photos").select("id,match_status").eq("project_id",input.projectId).eq("content_sha256",hash).limit(10);
+ if(he) throw new Error(he.message);
+ const duplicateRows=(dupes??[]).filter(d=>!["INVALID_FILE","UPLOAD_FAILED"].includes(d.match_status));
+ const filenameMatch=parsePhotoFilename(input.originalFilename,project.photo_serial_prefix);
+ const students: {id:string;serial_number:number}[]=[];
+ for(let from=0;from<15000;from+=1000){const {data,error}=await s.from("students").select("id,serial_number").eq("project_id",input.projectId).eq("owner_id",uid).range(from,from+999);if(error)throw new Error(error.message);students.push(...(data??[]));if((data??[]).length<1000)break;}
+ const proposal=proposePhotoMatch(filenameMatch,students,duplicateRows.length>0);
+ let status=proposal.status,studentId=proposal.studentId;
+ const errors=proposal.reason?[proposal.reason]:[];
+ if(status==="MATCHED"&&studentId){
+  const {data:existing,error}=await s.from("student_photos").select("id,match_status").eq("project_id",input.projectId).eq("student_id",studentId).in("match_status",["MATCHED","APPROVED"]).limit(5);
+  if(error) throw new Error(error.message);
+  if((existing??[]).length){status="NEEDS_REVIEW";errors.push("Another photo is already proposed or approved for this student; choose the correct photo manually.");}
+ }
+ const {data:photo,error:ie}=await s.from("student_photos").insert({owner_id:uid,project_id:input.projectId,batch_id:input.batchId,student_id:studentId,serial_number:proposal.serialNumber,original_filename:displayPhotoFilename(input.originalFilename),original_serial_number:filenameMatch.status==="EXACT"?filenameMatch.originalSerial:filenameMatch.originalSerial,normalized_serial_number:proposal.normalizedSerial,storage_path:input.storagePath,mime_type:mime!,width_px:width,height_px:height,file_size_bytes:bytes.length,content_sha256:hash,matching_method:proposal.matchingMethod,match_status:status,validation_errors:errors,crop_settings:{},duplicate_of_id:duplicateRows[0]?.id??null}).select("id,match_status").single();
+ if(ie) throw new Error(ie.message);
+ const {data:hashRows,error:hre}=await s.from("student_photos").select("id,match_status,created_at").eq("project_id",input.projectId).eq("content_sha256",hash).order("created_at",{ascending:true}).order("id",{ascending:true}).limit(20);
+ if(hre) throw new Error(hre.message);
+ const validHashRows=(hashRows??[]).filter(r=>!["INVALID_FILE","UPLOAD_FAILED"].includes(r.match_status));
+ if(validHashRows.length>1){const canonical=validHashRows[0];for(const duplicate of validHashRows.slice(1)){const {error:du}=await s.from("student_photos").update({student_id:null,serial_number:null,match_status:"DUPLICATE",duplicate_of_id:canonical.id,approved_at:null,approved_by:null,matching_method:"sha256",validation_errors:["Exact file content duplicates another uploaded photo."],updated_at:new Date().toISOString()}).eq("id",duplicate.id).eq("project_id",input.projectId);if(du)throw new Error(du.message);}}
+ const {data:finalPhoto}=await s.from("student_photos").select("id,match_status").eq("id",photo.id).maybeSingle();
+ return {photoId:photo.id,status:finalPhoto?.match_status??photo.match_status,idempotent:false};
+}
+export async function recordPhotoUploadFailure(input:{projectId:string;batchId:string;storagePath:string;filename:string;message:string;size:number}) {
+ const {s,uid}=await auth(); await getOwnedProject(s,input.projectId,uid);
+ if(!input.storagePath.startsWith(uid+"/"+input.projectId+"/")||input.storagePath.includes("..")) throw new Error("Invalid project storage path.");
+ const {data:batch,error:be}=await s.from("batches").select("id").eq("id",input.batchId).eq("project_id",input.projectId).eq("owner_id",uid).maybeSingle();if(be)throw new Error(be.message);if(!batch)throw new Error("Upload batch not found.");
+ const {data:existing}=await s.from("student_photos").select("id").eq("project_id",input.projectId).eq("storage_path",input.storagePath).maybeSingle();if(existing)return {photoId:existing.id};
+ await s.storage.from(PHOTO_BUCKET).remove([input.storagePath]);await s.rpc("release_photo_batch_bytes",{p_batch_id:input.batchId,p_project_id:input.projectId,p_size:input.size});
+ const {data,error}=await s.from("student_photos").insert({owner_id:uid,project_id:input.projectId,batch_id:input.batchId,student_id:null,serial_number:null,original_filename:safePhotoFilename(input.filename),storage_path:input.storagePath,mime_type:"application/octet-stream",match_status:"UPLOAD_FAILED",validation_errors:[input.message.slice(0,180)],crop_settings:{}}).select("id").single();
+ if(error) throw new Error(error.message); return {photoId:data.id};
+}
+export async function finishPhotoBatch(input:{projectId:string;batchId:string;failedCount:number}) {
+ const {s,uid}=await auth(); await getOwnedProject(s,input.projectId,uid);
+ const {data:batch,error:be}=await s.from("batches").select("id,total_count").eq("id",input.batchId).eq("project_id",input.projectId).eq("owner_id",uid).maybeSingle();if(be)throw new Error(be.message);if(!batch)throw new Error("Upload batch not found.");
+ const {data:photos,error}=await s.from("student_photos").select("id,match_status").eq("batch_id",input.batchId).eq("project_id",input.projectId);if(error)throw new Error(error.message);
+ const list=photos??[],failed=list.filter(p=>p.match_status==="UPLOAD_FAILED"||p.match_status==="INVALID_FILE").length+Math.max(0,Math.min(input.failedCount,PHOTO_MAX_FILES)-list.filter(p=>p.match_status==="UPLOAD_FAILED").length);
+ const review=list.filter(p=>["MATCHED","NEEDS_REVIEW","UNMATCHED","DUPLICATE","INVALID_FILE","UPLOAD_FAILED"].includes(p.match_status)).length;
+ const status=failed?"completed_with_errors":"completed";
+ const {error:ue}=await s.from("batches").update({status,completed_count:list.length,failed_count:failed,review_count:review,completed_at:new Date().toISOString()}).eq("id",input.batchId).eq("owner_id",uid);if(ue)throw new Error(ue.message);
+ return {total:batch.total_count,registered:list.length,failed,review,status};
+}
+export async function loadPhotoWorkspace(projectId:string) {
+ const {s,uid}=await auth();await getOwnedProject(s,projectId,uid);
+ const students: {id:string;serial_number:number;data:Record<string,unknown>}[]=[];
+ for(let from=0;from<15000;from+=1000){const {data,error}=await s.from("students").select("id,serial_number,data").eq("project_id",projectId).eq("owner_id",uid).order("serial_number").range(from,from+999);if(error)throw new Error(error.message);students.push(...((data??[]) as typeof students));if((data??[]).length<1000)break;}
+ const {data:photos,error:pe}=await s.from("student_photos").select("id,student_id,serial_number,original_filename,original_serial_number,normalized_serial_number,storage_path,mime_type,width_px,height_px,file_size_bytes,content_sha256,matching_method,match_status,validation_errors,duplicate_of_id,batch_id,approved_at,created_at").eq("project_id",projectId).eq("owner_id",uid).order("created_at",{ascending:false}).limit(1000);if(pe)throw new Error(pe.message);
+ const rows=photos??[];
+ const paths=rows.filter(p=>!["INVALID_FILE","UPLOAD_FAILED"].includes(p.match_status)).map(p=>p.storage_path);
+ const urls=new Map<string,string>();
+ for(let i=0;i<paths.length;i+=50){const chunk=paths.slice(i,i+50);const {data,error}=await s.storage.from(PHOTO_BUCKET).createSignedUrls(chunk,600);if(!error)for(const item of data??[])if(item.path&&item.signedUrl)urls.set(item.path,item.signedUrl);}
+ const {data:batches,error:be}=await s.from("batches").select("id,name,status,total_count,completed_count,failed_count,review_count,created_at,completed_at").eq("project_id",projectId).eq("owner_id",uid).order("created_at",{ascending:false}).limit(10);if(be)throw new Error(be.message);
+ const approved=new Set(rows.filter(p=>p.match_status==="APPROVED"&&p.student_id).map(p=>p.student_id));
+ return {students,photos:rows.map(p=>({...p,previewUrl:urls.get(p.storage_path)??null})),batches:batches??[],summary:{totalStudents:students.length,approvedPhotos:approved.size,missingPhotos:Math.max(0,students.length-approved.size),unmatched:rows.filter(p=>p.match_status==="UNMATCHED").length,needsReview:rows.filter(p=>p.match_status==="NEEDS_REVIEW"||p.match_status==="MATCHED").length,duplicates:rows.filter(p=>p.match_status==="DUPLICATE").length,serialConflicts:(()=>{const g=new Map<string,Set<string>>();for(const p of rows)if(p.normalized_serial_number&&p.content_sha256){if(!g.has(p.normalized_serial_number))g.set(p.normalized_serial_number,new Set());g.get(p.normalized_serial_number)!.add(p.content_sha256);}return [...g.values()].filter(v=>v.size>1).length;})(),failed:rows.filter(p=>p.match_status==="UPLOAD_FAILED"||p.match_status==="INVALID_FILE").length}};
+}
+export async function setPhotoSerialPrefix(input:{projectId:string;prefix:string|null}) {
+ const {s,uid}=await auth();await getOwnedProject(s,input.projectId,uid);
+ const prefix=input.prefix?.trim().toUpperCase()||null;
+ if(prefix&&!/^[A-Z][A-Z0-9_-]{0,15}$/.test(prefix))throw new Error("Prefix must start with a letter and contain only letters, digits, _ or - (maximum 16 characters).");
+ const {error}=await s.from("school_projects").update({photo_serial_prefix:prefix,updated_at:new Date().toISOString()}).eq("id",input.projectId).eq("owner_id",uid);if(error)throw new Error(error.message);return {prefix};
+}
+export async function assignStudentPhoto(input:{projectId:string;photoId:string;studentId:string|null;replaceApproved?:boolean}) {
+ const {s,uid}=await auth();await getOwnedProject(s,input.projectId,uid);
+ const {data:photo,error:pe}=await s.from("student_photos").select("id,project_id,student_id,match_status,storage_path").eq("id",input.photoId).eq("project_id",input.projectId).eq("owner_id",uid).maybeSingle();if(pe)throw new Error(pe.message);if(!photo)throw new Error("Photo not found.");
+ if(input.studentId===null){const {error}=await s.from("student_photos").update({student_id:null,serial_number:null,match_status:"UNMATCHED",approved_at:null,approved_by:null,matching_method:"manual_clear",updated_at:new Date().toISOString()}).eq("id",photo.id).eq("project_id",input.projectId);if(error)throw new Error(error.message);return {status:"UNMATCHED"};}
+ const {data:student,error:se}=await s.from("students").select("id,project_id,serial_number").eq("id",input.studentId).eq("project_id",input.projectId).eq("owner_id",uid).maybeSingle();if(se)throw new Error(se.message);if(!student)throw new Error("Student does not belong to this school project.");assertPhotoAssignmentProject(input.projectId,photo.project_id,student.project_id);
+ const {data:approved,error:ae}=await s.from("student_photos").select("id").eq("project_id",input.projectId).eq("student_id",student.id).eq("match_status","APPROVED").neq("id",photo.id).limit(1);if(ae)throw new Error(ae.message);
+ if((approved??[]).length&&!input.replaceApproved)throw new Error("This student already has an approved photo. Confirm replacement to continue.");
+ if((approved??[]).length&&input.replaceApproved){const {error}=await s.from("student_photos").update({student_id:null,serial_number:null,match_status:"NEEDS_REVIEW",approved_at:null,approved_by:null,validation_errors:["Previously approved photo replaced by user confirmation."],updated_at:new Date().toISOString()}).eq("id",approved![0].id).eq("project_id",input.projectId);if(error)throw new Error(error.message);}
+ const status=input.replaceApproved?"APPROVED":"MATCHED";
+ const {error}=await s.from("student_photos").update({student_id:student.id,serial_number:student.serial_number,normalized_serial_number:String(student.serial_number),match_status:status,matching_method:"manual",approved_at:status==="APPROVED"?new Date().toISOString():null,approved_by:status==="APPROVED"?uid:null,updated_at:new Date().toISOString()}).eq("id",photo.id).eq("project_id",input.projectId);if(error)throw new Error(error.message);return {status};
+}
+export async function approveStudentPhoto(input:{projectId:string;photoId:string;replaceApproved?:boolean}) {
+ const {s,uid}=await auth();await getOwnedProject(s,input.projectId,uid);
+ const {data:photo,error:pe}=await s.from("student_photos").select("id,student_id,match_status,storage_path").eq("id",input.photoId).eq("project_id",input.projectId).eq("owner_id",uid).maybeSingle();if(pe)throw new Error(pe.message);if(!photo)throw new Error("Photo not found.");if(!photo.student_id)throw new Error("Assign this photo to a student before approving it.");if(["INVALID_FILE","UPLOAD_FAILED"].includes(photo.match_status))throw new Error("Invalid or failed uploads cannot be approved.");
+ const {data:student,error:se}=await s.from("students").select("id").eq("id",photo.student_id).eq("project_id",input.projectId).eq("owner_id",uid).maybeSingle();if(se)throw new Error(se.message);if(!student)throw new Error("The assigned student no longer exists in this project.");
+ const {data:other,error:oe}=await s.from("student_photos").select("id").eq("project_id",input.projectId).eq("student_id",photo.student_id).eq("match_status","APPROVED").neq("id",photo.id).limit(1);if(oe)throw new Error(oe.message);
+ if((other??[]).length&&!input.replaceApproved)throw new Error("Another photo is already approved for this student. Confirm replacement to continue.");
+ if((other??[]).length&&input.replaceApproved){const {error}=await s.from("student_photos").update({student_id:null,serial_number:null,match_status:"NEEDS_REVIEW",approved_at:null,approved_by:null,validation_errors:["Previously approved photo replaced by user confirmation."],updated_at:new Date().toISOString()}).eq("id",other![0].id).eq("project_id",input.projectId);if(error)throw new Error(error.message);}
+ const {error}=await s.from("student_photos").update({match_status:"APPROVED",approved_at:new Date().toISOString(),approved_by:uid,updated_at:new Date().toISOString()}).eq("id",photo.id).eq("project_id",input.projectId);if(error)throw new Error(error.message);return {status:"APPROVED"};
+}
+
+export async function processPhotoMatches(projectId:string) {
+ const {s,uid}=await auth();const project=await getOwnedProject(s,projectId,uid);
+ const students:{id:string;serial_number:number}[]=[];
+ for(let from=0;from<15000;from+=1000){const {data,error}=await s.from("students").select("id,serial_number").eq("project_id",projectId).eq("owner_id",uid).range(from,from+999);if(error)throw new Error(error.message);students.push(...(data??[]));if((data??[]).length<1000)break;}
+ const {data:photos,error:pe}=await s.from("student_photos").select("id,student_id,serial_number,original_filename,normalized_serial_number,content_sha256,matching_method,match_status").eq("project_id",projectId).eq("owner_id",uid).in("match_status",["UPLOADED","NEEDS_REVIEW","UNMATCHED"]).order("created_at",{ascending:true}).limit(PHOTO_MAX_FILES);
+ if(pe)throw new Error(pe.message);
+ const {data:assigned,error:ae}=await s.from("student_photos").select("id,student_id,content_sha256,match_status").eq("project_id",projectId).eq("owner_id",uid).in("match_status",["MATCHED","APPROVED"]).limit(PHOTO_MAX_FILES);
+ if(ae)throw new Error(ae.message);
+ const eligible=(photos??[]).filter(p=>p.matching_method!=="manual");
+ let matched=0,review=0,unmatched=0,duplicates=0,processed=0;
+ const updates=eligible.map(p=>{
+  const fm=parsePhotoFilename(p.original_filename,project.photo_serial_prefix);
+  const duplicate=(assigned??[]).some(other=>other.id!==p.id&&p.content_sha256&&other.content_sha256===p.content_sha256);
+  const proposal=proposePhotoMatch(fm,students,duplicate);
+  let status=proposal.status,studentId=proposal.studentId;const errors=proposal.reason?[proposal.reason]:[];
+  if(status==="MATCHED"&&studentId&&(assigned??[]).some(other=>other.id!==p.id&&other.student_id===studentId&&["MATCHED","APPROVED"].includes(other.match_status))){status="NEEDS_REVIEW";errors.push("Another photo is already proposed or approved for this student; choose the correct photo manually.");}
+  if(status==="MATCHED")matched++;else if(status==="NEEDS_REVIEW")review++;else if(status==="UNMATCHED")unmatched++;else if(status==="DUPLICATE")duplicates++;
+  return {id:p.id,student_id:studentId,serial_number:proposal.serialNumber,normalized_serial_number:proposal.normalizedSerial,matching_method:proposal.matchingMethod,match_status:status,validation_errors:errors};
+ });
+ for(let i=0;i<updates.length;i+=10){const results=await Promise.all(updates.slice(i,i+10).map(async u=>{const {error}=await s.from("student_photos").update({...u,updated_at:new Date().toISOString()}).eq("id",u.id).eq("project_id",projectId).eq("owner_id",uid);if(error)throw new Error(error.message);return 1;}));processed+=results.length;}
+ return {processed,matched,needsReview:review,unmatched,duplicates};
+}

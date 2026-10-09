@@ -68,6 +68,7 @@ export type Database = {
           review_count: number
           started_at: string | null
           status: string
+          total_bytes: number
           total_count: number
         }
         Insert: {
@@ -82,6 +83,7 @@ export type Database = {
           review_count?: number
           started_at?: string | null
           status?: string
+          total_bytes?: number
           total_count?: number
         }
         Update: {
@@ -96,6 +98,7 @@ export type Database = {
           review_count?: number
           started_at?: string | null
           status?: string
+          total_bytes?: number
           total_count?: number
         }
         Relationships: [
@@ -315,6 +318,7 @@ export type Database = {
           id: string
           name: string
           owner_id: string
+          photo_serial_prefix: string | null
           school_address: string | null
           school_name: string
           status: string
@@ -326,6 +330,7 @@ export type Database = {
           id?: string
           name: string
           owner_id: string
+          photo_serial_prefix?: string | null
           school_address?: string | null
           school_name: string
           status?: string
@@ -337,6 +342,7 @@ export type Database = {
           id?: string
           name?: string
           owner_id?: string
+          photo_serial_prefix?: string | null
           school_address?: string | null
           school_name?: string
           status?: string
@@ -346,57 +352,104 @@ export type Database = {
       }
       student_photos: {
         Row: {
+          approved_at: string | null
+          approved_by: string | null
+          batch_id: string | null
+          content_sha256: string | null
           created_at: string
           crop_settings: Json
+          duplicate_of_id: string | null
+          file_size_bytes: number | null
           height_px: number | null
           id: string
+          image_version: number
           match_confidence: number | null
           match_status: string
+          matching_method: string | null
           mime_type: string
+          normalized_serial_number: string | null
           original_filename: string
+          original_serial_number: string | null
           owner_id: string
           project_id: string
-          serial_number: number
+          serial_number: number | null
           storage_path: string
           student_id: string | null
           updated_at: string
+          validation_errors: Json
           width_px: number | null
         }
         Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          batch_id?: string | null
+          content_sha256?: string | null
           created_at?: string
           crop_settings?: Json
+          duplicate_of_id?: string | null
+          file_size_bytes?: number | null
           height_px?: number | null
           id?: string
+          image_version?: number
           match_confidence?: number | null
           match_status?: string
+          matching_method?: string | null
           mime_type: string
+          normalized_serial_number?: string | null
           original_filename: string
+          original_serial_number?: string | null
           owner_id: string
           project_id: string
-          serial_number: number
+          serial_number?: number | null
           storage_path: string
           student_id?: string | null
           updated_at?: string
+          validation_errors?: Json
           width_px?: number | null
         }
         Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          batch_id?: string | null
+          content_sha256?: string | null
           created_at?: string
           crop_settings?: Json
+          duplicate_of_id?: string | null
+          file_size_bytes?: number | null
           height_px?: number | null
           id?: string
+          image_version?: number
           match_confidence?: number | null
           match_status?: string
+          matching_method?: string | null
           mime_type?: string
+          normalized_serial_number?: string | null
           original_filename?: string
+          original_serial_number?: string | null
           owner_id?: string
           project_id?: string
-          serial_number?: number
+          serial_number?: number | null
           storage_path?: string
           student_id?: string | null
           updated_at?: string
+          validation_errors?: Json
           width_px?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "student_photos_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_photos_duplicate_of_id_fkey"
+            columns: ["duplicate_of_id"]
+            isOneToOne: false
+            referencedRelation: "student_photos"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "student_photos_project_id_fkey"
             columns: ["project_id"]
@@ -405,11 +458,25 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "student_photos_project_owner_fkey"
+            columns: ["project_id", "owner_id"]
+            isOneToOne: false
+            referencedRelation: "school_projects"
+            referencedColumns: ["id", "owner_id"]
+          },
+          {
             foreignKeyName: "student_photos_student_id_fkey"
             columns: ["student_id"]
             isOneToOne: false
             referencedRelation: "students"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_photos_student_project_fkey"
+            columns: ["student_id", "project_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "project_id"]
           },
         ]
       }
@@ -633,6 +700,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      release_photo_batch_bytes: {
+        Args: { p_batch_id: string; p_project_id: string; p_size: number }
+        Returns: boolean
+      }
+      reserve_photo_batch_bytes: {
+        Args: { p_batch_id: string; p_project_id: string; p_size: number }
+        Returns: boolean
+      }
       set_active_template_version: {
         Args: { p_project_id: string; p_template_id: string }
         Returns: undefined
