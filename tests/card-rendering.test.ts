@@ -1,0 +1,13 @@
+import {describe,expect,it} from "vitest";
+import sharp from "sharp";
+import {renderCard,validateBindings,validatePhysicalSize,type RenderField} from "@/lib/rendering/engine";
+const field=(overrides:Partial<RenderField>={}):RenderField=>({id:"f1",key:"student_name",label:"Student name",field_type:"text",required:true,x:20,y:20,width:260,height:50,font_family:"Arial",font_size:24,font_weight:"bold",color:"#112233",alignment:"left",fit_mode:null,source_column:"student_name",...overrides});
+async function template(){return sharp({create:{width:300,height:400,channels:4,background:{r:245,g:245,b:245,alpha:1}}}).png().toBuffer()}
+describe("card rendering",()=>{
+ it("converts physical dimensions to DPI pixels with safety bounds",()=>{expect(validatePhysicalSize(54,72,300)).toEqual({outputWidth:638,outputHeight:850});expect(()=>validatePhysicalSize(54,72,20)).toThrow(/DPI/);expect(()=>validatePhysicalSize(500,500,1200)).toThrow(/40-megapixel/);});
+ it("blocks missing required data and allows optional missing values",()=>{expect(validateBindings([field()],{},"School",true)).toHaveLength(1);expect(validateBindings([field({required:false})],{},"School",true)).toEqual([]);});
+ it("binds school name as a configured project value",()=>{expect(validateBindings([field({key:"school_name",source_column:null})],{},"Example School",true)).toEqual([]);});
+ it("renders PNG at exact requested dimensions and deterministic bytes",async()=>{const t=await template();const input={template:t,templateWidth:300,templateHeight:400,outputWidth:300,outputHeight:400,dpi:300,format:"png" as const,fields:[field()],student:{student_name:"Aarav Sharma"},schoolName:"Example School"};const a=await renderCard(input),b=await renderCard(input);expect(a.errors).toEqual([]);expect(a.buffer.equals(b.buffer)).toBe(true);const meta=await sharp(a.buffer).metadata();expect(meta.width).toBe(300);expect(meta.height).toBe(400);expect(meta.format).toBe("png");});
+ it("flags non-Latin content for sample visual review",async()=>{const t=await template();const r=await renderCard({template:t,templateWidth:300,templateHeight:400,outputWidth:300,outputHeight:400,dpi:300,format:"png",fields:[field()],student:{student_name:"आरव शर्मा"},schoolName:"विद्यालय"});expect(r.warnings.some(w=>w.code==="GLYPH_REVIEW")).toBe(true);});
+ it("rejects aspect-ratio mismatch instead of stretching a card",async()=>{const t=await template();await expect(renderCard({template:t,templateWidth:300,templateHeight:400,outputWidth:400,outputHeight:400,dpi:300,format:"png",fields:[field()],student:{student_name:"Aarav"},schoolName:"School"})).rejects.toThrow(/aspect ratio/);});
+});
