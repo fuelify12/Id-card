@@ -104,7 +104,7 @@ async function preflight(db: any, project: any, uid: string, batchId: string) {
   const eligibleChecks=checks.filter(x=>x.reasons.length===0);const formats = ["original"];
   if (eligibleChecks.length && eligibleChecks.every(x => ["png","jpeg"].includes(extOf(x.card.output_format)))) formats.push("png","jpeg");
   if (eligibleChecks.length && eligibleChecks.every(x => extOf(x.card.output_format)==="pdf")) formats.push("pdf");
-  return { batch:d.batch, counts, cards:checks.map(x=>({id:x.card.id,studentId:x.card.student_id,serialNumber:x.card.serial_number,studentName:nameOf(x.student),side:sideOf(x.card),format:extOf(x.card.output_format),eligible:x.reasons.length===0,reasons:x.reasons,approvalStatus:x.card.approval_status,validationStatus:x.card.validation_status})), eligibleStudentIds, eligibleStudentCount:eligibleStudents.length, formats, missingItems:missing.map((i:any)=>({serialNumber:i.serial_number,status:i.status,reason:i.error_summary??"No completed generated output exists."})), _private:{...d,checks} };
+  return { batch:d.batch, counts, cards:checks.map(x=>({id:x.card.id,studentId:x.card.student_id,serialNumber:x.card.serial_number,studentName:nameOf(x.student),side:sideOf(x.card),format:extOf(x.card.output_format),eligible:x.reasons.length===0,reasons:x.reasons,approvalStatus:x.card.approval_status,validationStatus:x.card.validation_status})), eligibleStudentIds:eligibleStudents, eligibleStudentCount:eligibleStudents.length, formats, missingItems:missing.map((i:any)=>({serialNumber:i.serial_number,status:i.status,reason:i.error_summary??"No completed generated output exists."})), _private:{...d,checks} };
 }
 async function insertAudit(db:any, uid:string, projectId:string, action:string, exportId:string, metadata:Record<string,unknown>={}) {
   const { error } = await db.from("audit_logs").insert({ owner_id:uid, project_id:projectId, action, entity_type:"export", entity_id:exportId, metadata });
@@ -261,8 +261,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{id:
     if(!processed)throw new Error("No cards remained eligible when packaging began. Run preflight and create a new export.");
     if(job.options?.includeManifest!==false){
       const manifests=buildManifests(actualManifest,exportId,new Date().toISOString());
-      const jsonObj=JSON.parse(manifests.json);jsonObj.excluded_items=allExcluded;jsonObj.failed_item_count=failed;
-      const manifestFiles=[["manifest.csv",manifests.csv],["manifest.json",JSON.stringify(jsonObj,null,2)+"\n"],["exclusions.csv",["serial_number,side,reason",...finalExcluded.map((x:any)=>[csvCell(x.serialNumber??""),csvCell(x.side??""),csvCell(x.reason??x.error_summary??"")].join(","))].join("\r\n")+"\\r\\n"]];
+      const finalExcluded=[...allExcluded,...runtimeExcluded];const jsonObj=JSON.parse(manifests.json);jsonObj.excluded_items=finalExcluded;jsonObj.failed_item_count=failed;
+      const manifestFiles=[["manifest.csv",manifests.csv],["manifest.json",JSON.stringify(jsonObj,null,2)+"\n"],["exclusions.csv",["serial_number,side,reason",...finalExcluded.map((x:any)=>[csvCell(x.serialNumber??""),csvCell(x.side??""),csvCell(x.reason??x.error_summary??"")].join(","))].join("\r\n")+"\r\n"]];
       for(const [name,content] of manifestFiles){const full=root?root+"/"+name:name;const uniqueName=uniqueArchiveName(full,used);const entry=new ZipPassThrough(uniqueName);zip.add(entry);entry.push(Buffer.from(content,"utf8"),true);expectedNames.push(uniqueName);}
     }
     zip.end();await zipFinished;
