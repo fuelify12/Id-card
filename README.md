@@ -30,3 +30,15 @@ Supabase now contains the production project/template/student/batch/processing/c
 - Photos remain in the private `printforge-student-photos` bucket, with existing owner-folder storage policies. Server routes verify the authenticated owner and project before reading/writing images.
 - Batch processing uses three concurrent per-photo requests so failures remain isolated and refreshes can resume from persisted statuses.
 - Run `npm test`, `npm run typecheck`, `npm run lint`, and `npm run build` before release.
+
+
+## Phase 8 — deterministic ID-card rendering
+
+- `lib/rendering/engine.ts` renders individual raster cards with Sharp, using the original uploaded PNG/JPEG as the fixed background and configured template fields as deterministic overlays.
+- Field positions are authored in source-template pixel coordinates and converted through the source-to-output transform. Supports mapped student values, the project school name, configured static text, font family/size/weight/color, alignment, line wrapping, bounded font shrink, rotation, visibility, vertical alignment, and overflow warnings/blocking.
+- Student photo placement accepts only a Phase 7 processed image associated with the same student and project and marked both match-approved and crop-approved. The default image fit is `contain` to avoid a second crop; `cover` is an explicit template choice.
+- Physical dimensions are explicit in millimeters and output DPI is validated. Output pixel dimensions are capped at 40 megapixels, aspect-ratio mismatch is blocked, and PNG/JPEG output is decoded and dimension-checked before private storage.
+- Per-card results are persisted in `generated_cards`, tied to the student, project, template version, renderer version, input hash, output hash, output dimensions, DPI, warnings, and status. Stable input hashes allow successful outputs to be reused; failures remain isolated to the card.
+- The project workspace now includes a preflight report and sample-card rendering preview. The sample uses the same server rendering engine as a normal individual card.
+- Raster template support is intentionally limited to PNG/JPEG because that is what the existing upload workflow validates. PDF/SVG template import, vector-preserving PDF overlays, a full two-sided template association workflow, and print-sheet imposition are not represented as completed features. Non-Latin text is rendered through the installed SVG/font stack but is flagged for human sample review because server-side glyph availability varies.
+- Migration: `phase8_card_rendering` adds field layout settings and render metadata without dropping existing data or weakening existing RLS policies.
