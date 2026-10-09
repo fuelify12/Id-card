@@ -18,7 +18,7 @@ export default async function ProjectPage({params}:{params:Promise<{id:string}>}
  const {data:templates,error:te}=await s.from("templates").select("id,name,source_path,source_type,width_px,height_px,analysis_status,version_number,is_active,created_at").eq("project_id",id).eq("owner_id",uid).order("version_number",{ascending:false});
  if(te)throw new Error(te.message);
  const active=templates?.find(t=>t.is_active)??templates?.[0];let fields:any[]=[];
- if(active){const {data,error:fe}=await s.from("template_fields").select("id,key,label,field_type,required,x,y,width,height,font_family,font_size,font_weight,color,alignment,fit_mode,source_column,confidence").eq("template_id",active.id).eq("owner_id",uid).order("sort_order");if(fe)throw new Error(fe.message);fields=data??[]}
+ if(active){const {data,error:fe}=await (s as any).from("template_fields").select("id,key,label,field_type,required,x,y,width,height,font_family,font_size,font_weight,color,alignment,fit_mode,source_column,confidence,static_value,max_lines,overflow_policy,auto_shrink,min_font_size,line_height,vertical_alignment,rotation,visible,field_format").eq("template_id",active.id).eq("owner_id",uid).order("sort_order");if(fe)throw new Error(fe.message);fields=data??[]}
  const {data:studentRows,error:studentsError}=await s.from("students").select("id,serial_number,data").eq("project_id",id).eq("owner_id",uid).order("serial_number").limit(1000);
  if(studentsError)throw new Error(studentsError.message);
  const sampleStudents=(studentRows??[]).map(st=>({id:st.id,serial_number:st.serial_number,data:(st.data??{}) as Record<string,unknown>}));
