@@ -9,7 +9,7 @@ import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
 import { createClient } from "@/lib/supabase/server";
 import { STORAGE_BUCKETS } from "@/lib/supabase/storage";
-import { buildManifests, chooseCardSides, exportEligibilityReasons, safeFilenamePart, sha256, sourceFormatSupports, uniqueArchiveName, verifyZipDirectory } from "@/lib/exports/archive";
+import { buildManifests, chooseCardSides, csvCell, exportEligibilityReasons, safeFilenamePart, sha256, sourceFormatSupports, uniqueArchiveName, verifyZipDirectory } from "@/lib/exports/archive";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -262,7 +262,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{id:
     if(job.options?.includeManifest!==false){
       const manifests=buildManifests(actualManifest,exportId,new Date().toISOString());
       const jsonObj=JSON.parse(manifests.json);jsonObj.excluded_items=allExcluded;jsonObj.failed_item_count=failed;
-      const manifestFiles=[["manifest.csv",manifests.csv],["manifest.json",JSON.stringify(jsonObj,null,2)+"\n"],["exclusions.csv",["serial_number,side,reason",...finalExcluded.map((x:any)=>[`"${String(x.serialNumber??"").replace(/"/g,'""')}"`,`"${String(x.side??"").replace(/"/g,'""')}"`,`"${String(x.reason??x.error_summary??"").replace(/"/g,'""')}"`].join(","))].join("\r\n")+"\r\n"]];
+      const manifestFiles=[["manifest.csv",manifests.csv],["manifest.json",JSON.stringify(jsonObj,null,2)+"\n"],["exclusions.csv",["serial_number,side,reason",...finalExcluded.map((x:any)=>[csvCell(x.serialNumber??""),csvCell(x.side??""),csvCell(x.reason??x.error_summary??"")].join(","))].join("\r\n")+"\\r\\n"]];
       for(const [name,content] of manifestFiles){const full=root?root+"/"+name:name;const uniqueName=uniqueArchiveName(full,used);const entry=new ZipPassThrough(uniqueName);zip.add(entry);entry.push(Buffer.from(content,"utf8"),true);expectedNames.push(uniqueName);}
     }
     zip.end();await zipFinished;

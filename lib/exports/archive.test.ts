@@ -22,6 +22,7 @@ describe("Phase 11 ZIP export helpers", () => {
     const m = buildManifests([{ serial_number:"001", filename:'front/A,"B.png', side:"front", format:"png" }], "export-id", "2026-10-09T00:00:00Z");
     expect(m.csv).toContain('"front/A,""B.png');
     expect(JSON.parse(m.json).item_count).toBe(1);
+    expect(buildManifests([{ filename:"=HYPERLINK(\"https://bad\")" }],"id","now").csv).toContain("\"'=HYPERLINK");
   });
   it("excludes unapproved, failed, and critically flagged cards", () => {
     const card = {id:"c",student_id:"s",serial_number:1,status:"generated",validation_status:"passed",approval_status:"approved",storage_path:"u/p/c.png",output_sha256:"abc"};

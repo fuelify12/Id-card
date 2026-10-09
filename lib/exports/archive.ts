@@ -24,7 +24,8 @@ export function uniqueArchiveName(candidate: string, used: Set<string>): string 
   return name;
 }
 export function csvCell(value: unknown): string {
-  const text = String(value ?? "");
+  const raw = String(value ?? "");
+  const text = /^\s*[-=+@]/.test(raw) ? "'" + raw : raw;
   return '"' + text.replace(/"/g, '""') + '"';
 }
 export function buildManifests(items: Array<Record<string, unknown>>, exportId: string, createdAt: string) {
