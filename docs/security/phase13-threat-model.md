@@ -43,15 +43,19 @@ The platform handles children's personal data and photographs. Owner/legal revie
 ## Remaining risks / owner actions
 
 - **HIGH:** No isolated two-tenant integration test has been run yet; provision two synthetic accounts in a staging project and verify tenant denial across DB, storage, signed URLs, API endpoints, and background workers.
-- **HIGH:** Dependency vulnerability audit and secret-history scan results are not yet available. Run them in CI and address all exploitable critical/high findings; rotate any real credential if the history scan identifies one.
-- **MEDIUM:** Review all API route handlers for raw exception messages, request-size limits, rate limits, CSRF protections, and resource ceilings; verify actual Vercel deployment headers and authentication settings.
+- **HIGH (development toolchain):** The full npm audit report has 0 critical, 5 high, and 3 moderate advisories. The high findings are in the eslint-config-next / @next/eslint-plugin-next / fast-glob / micromatch / braces development chain; npm's suggested fix downgrades eslint-config-next to 14.2.35, a major downgrade from Next.js 16, so it was not applied. Upgrade this chain when compatible patched releases are available.
+- **MEDIUM (runtime dependency):** The full audit reports 3 moderate advisories involving @tensorflow/tfjs, argparse, and sprintf-js. npm's suggested fix downgrades TensorFlow.js to 2.1.0, a major downgrade, so it was not applied. Review exploitability and update the model dependency chain safely.
+- **MEDIUM:** A committed package-lock.json is still absent. CI generated one and published it with the full audit JSON as a short-lived artifact; commit a reviewed lockfile to make dependency resolution reproducible.
+- **PASS (history scan):** Gitleaks full-history scanning and the tracked-file secret hygiene check passed with no leaks reported in the scanned history/tree. This is not a guarantee that external Vercel/Supabase settings contain no secrets.
+- **MEDIUM:** Per-account database-backed limits now cover project/template/student/photo upload, photo processing, batch create/retry, and ZIP export. They do not provide IP-level or Storage API-wide quotas. Review direct Storage upload volume, remaining raw exception paths, request-size ceilings, and CSRF/origin protections.
+- **MEDIUM:** Vercel project inspection showed Node 24.x, an existing deployment marked READY for the production target, but the project was not marked live. SSO protection is enabled for deployment URLs except custom domains; password protection is disabled. Only NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY were listed, shared across development, preview, and production. Use separate Supabase projects/keys per environment and verify deployment protection before launch.
 - **MEDIUM:** No production restore drill, export expiry cleanup schedule check, or real mobile/browser security test was performed.
-- **LOW:** CSP is initially report-only to avoid breaking Next.js hydration, Supabase auth, private image previews, and camera workflows. Review browser reports and move to enforced CSP with a nonce-based Next.js setup when validated.
+- **MEDIUM:** CSP is initially report-only to avoid breaking Next.js hydration, Supabase auth, private image previews, and camera workflows. Review browser reports and move to enforced CSP with a nonce-based Next.js setup when validated.
 - **LOW:** Keep the separate `printforge-private` bucket unused by end-user flows until its intended role is documented and policies are designed.
 
 ## Verification
 
-Run the read-only database catalog assertions with an isolated test database after applying the migrations:
+Run the read-only database catalog assertions with an isolated test database after applying the migrations. The same catalog assertions have been executed against the connected project and passed; the two-tenant CRUD integration script is separate and has not been run because no isolated branch/test accounts were provisioned:
 
 ```sh
 psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/phase13_security.sql
