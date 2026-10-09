@@ -12,6 +12,16 @@ describe("shared database rate limiter", () => {
     });
   });
 
+  it("uses the dedicated quota for CPU-intensive photo processing", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    await expect(consumeRateLimit({ rpc }, "photo_processing", 10, 60)).resolves.toEqual({ allowed: true });
+    expect(rpc).toHaveBeenCalledWith("consume_security_rate_limit", {
+      p_action: "photo_processing",
+      p_limit: 10,
+      p_window_seconds: 60,
+    });
+  });
+
   it("returns a denied decision when the quota is exhausted", async () => {
     const rpc = vi.fn().mockResolvedValue({ data: false, error: null });
     await expect(consumeRateLimit({ rpc }, "zip_export", 3)).resolves.toEqual({
