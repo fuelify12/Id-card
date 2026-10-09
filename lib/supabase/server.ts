@@ -1,1 +1,22 @@
-import{createServerClient}from"@supabase/ssr";import{cookies}from"next/headers";export async function createClient(){const c=await cookies();return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,{cookies:{getAll(){return c.getAll()},setAll(v){try{v.forEach(({name,value,options})=>c.set(name,value,options))}catch{}}}})}
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+import { getSupabasePublicEnv } from "@/lib/env";
+
+export async function createClient() {
+  const env = getSupabasePublicEnv();
+  const cookieStore = await cookies();
+  return createServerClient(env.url, env.publishableKey, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
+      },
+      setAll(values) {
+        try {
+          values.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
+        } catch {
+          // Server Components cannot always mutate cookies; proxy refreshes sessions.
+        }
+      },
+    },
+  });
+}
