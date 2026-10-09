@@ -48,6 +48,24 @@ begin
     raise exception 'Tenant integrity assertion failed: expected at least 10 composite constraints, found %', v_constraints;
   end if;
 
+  if not exists (select 1 from pg_class where oid = 'public.security_rate_limits'::regclass and relrowsecurity) then
+    raise exception 'Rate-limit table assertion failed: RLS is not enabled';
+  end if;
+  if has_table_privilege('authenticated', 'public.security_rate_limits', 'SELECT')
+     or has_table_privilege('authenticated', 'public.security_rate_limits', 'INSERT')
+     or has_table_privilege('authenticated', 'public.security_rate_limits', 'UPDATE')
+     or has_table_privilege('authenticated', 'public.security_rate_limits', 'DELETE') then
+    raise exception 'Rate-limit table assertion failed: client table privileges remain';
+  end if;
+  if not exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = 'consume_security_rate_limit'
+      and p.prosecdef
+      and array_to_string(p.proconfig, ',') like '%search_path=pg_catalog, public%'
+  ) then
+    raise exception 'Rate-limit function assertion failed: SECURITY DEFINER or safe search_path is missing';
+  end if;
+
   select count(*) into v_public_buckets from storage.buckets
    where name in ('printforge-templates','printforge-student-photos','printforge-generated-cards','printforge-exports')
      and public = true;
