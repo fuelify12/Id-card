@@ -38,7 +38,7 @@
 - Avoid logging student names, photos, spreadsheet contents, raw signed URLs, or tokens. Return generic errors to clients and keep diagnostic detail in redacted server-side logs.
 - Temporary export retention is implemented by the existing export workflow; verify cleanup scheduling and backup restore in the actual Vercel/Supabase environment before launch.
 - Do not enable public storage URLs for child photos, crops, templates, generated cards, or ZIPs. Use short-lived signed URLs after a fresh ownership check.
-- A Vercel production-target deployment was created automatically by pushes to `main` and was observed in `READY` state for commit `2b2358895043859581657f3b95ef30f76bf2d585`. I did not manually deploy, change aliases, roll back, or run a production smoke test; project metadata indicated the project was not marked live, so a public traffic change was not confirmed. Further pushes to `main` should be reviewed because Vercel auto-deploys this branch.
+- Vercel's latest observed deployment is marked `READY` for commit `2b2358895043859581657f3b95ef30f76bf2d585`, timestamped 05:30 UTC—before Phase 13 migrations began around 09:54 UTC. The project reports `live: false`. No deployment of a Phase 13 commit was observed, and no production smoke test or alias change was performed. Main-branch pushes may trigger Vercel deployments, so further main pushes should be reviewed.
 
 ## Indian privacy/legal review required
 
