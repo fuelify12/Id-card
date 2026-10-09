@@ -184,7 +184,7 @@ export async function POST(request: Request, { params }: { params: Promise<{id:s
 }
 export async function PUT(request: Request, { params }: { params: Promise<{id:string}> }) {
   const {id}=await params;const auth=await authorize(id);if("error"in auth)return fail(auth.error,auth.status);
-  const {db,uid,project}=auth;let body:any;try{body=await request.json()}catch{return fail("Request body must be valid JSON.");}
+  const {db,uid}=auth;let body:any;try{body=await request.json()}catch{return fail("Request body must be valid JSON.");}
   const exportId=String(body.exportId??"");if(!exportId)return fail("Export ID is required.");
   const {data:job,error}=await db.from("exports").select("*").eq("id",exportId).eq("project_id",id).eq("owner_id",uid).maybeSingle();
   if(error||!job)return fail("Export not found or access denied.",404);
@@ -204,7 +204,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{id:st
 }
 export async function PATCH(request: Request, { params }: { params: Promise<{id:string}> }) {
   const {id}=await params;const auth=await authorize(id);if("error"in auth)return fail(auth.error,auth.status);
-  const {db,uid,project}=auth;let body:any;try{body=await request.json()}catch{return fail("Request body must be valid JSON.");}
+  const {db,uid}=auth;let body:any;try{body=await request.json()}catch{return fail("Request body must be valid JSON.");}
   const exportId=String(body.exportId??"");const {data:job,error}=await db.from("exports").select("*").eq("id",exportId).eq("project_id",id).eq("owner_id",uid).maybeSingle();
   if(error||!job)return fail("Export not found or access denied.",404);
   if(String(job.status).toLowerCase()==="completed"&&job.expires_at&&Date.parse(job.expires_at)<=Date.now()){await db.from("exports").update({status:"expired",storage_path:null,updated_at:new Date().toISOString()}).eq("id",exportId);if(job.storage_path)await db.storage.from(STORAGE_BUCKETS.exports).remove([job.storage_path]);return fail("This archive has expired and was removed.",410);}
