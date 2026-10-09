@@ -185,7 +185,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     }
     return reply("Unsupported action.");
   } catch (error) {
-    console.error("[id-card-batch]", { action, projectId, message: String((error as Error).message ?? "unknown").slice(0, 300) });
+    console.error("[id-card-batch]", { action, projectId, code: typeof (error as { code?: unknown })?.code === "string" ? (error as { code: string }).code.slice(0, 40) : "BATCH_OPERATION_FAILED" });
     return reply("Batch operation failed. Check the batch status and retry safely.", 500);
   }
 }
