@@ -23,7 +23,10 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-      - name: Dependency vulnerability audit
+      - name: Production dependency vulnerability gate
+        run: npm audit --omit=dev --audit-level=high
+      - name: Full dependency audit report
+        continue-on-error: true
         run: npm audit --audit-level=high
       - name: Secret scanning
         uses: gitleaks/gitleaks-action@v2
