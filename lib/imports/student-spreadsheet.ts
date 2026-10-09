@@ -77,7 +77,7 @@ export function parseWorkbook(buffer: ArrayBuffer, fileName: string): Spreadshee
 export function validateStudentRows(rows: ParsedStudentRow[], serialColumn: string | null) {
   const seen = new Set<string>();
   return rows.filter(r=>!r.blank).map(r=>{
-    const issues = r.issues.filter(i=>i!=="Serial-number column not detected; choose a column before importing.");
+    const issues = r.issues.filter(i=>!["Serial-number column not detected; choose a column before importing.","Missing serial number","Duplicate serial number"].includes(i));
     const raw = serialColumn ? r.values[serialColumn] : null;
     const serial = raw === null || raw === undefined ? "" : String(raw).trim();
     if (!serial) issues.push("Missing serial number");
