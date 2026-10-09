@@ -33,6 +33,7 @@ begin
     when 'template_upload' then v_limit := 10; v_window_seconds := 3600;
     when 'student_import' then v_limit := 20; v_window_seconds := 3600;
     when 'photo_upload_ticket' then v_limit := 300; v_window_seconds := 60;
+    when 'photo_processing' then v_limit := 10; v_window_seconds := 60;
     when 'batch_generate' then v_limit := 5; v_window_seconds := 60;
     when 'zip_export' then v_limit := 3; v_window_seconds := 60;
     else return false;
