@@ -6,6 +6,16 @@ create unique index if not exists school_projects_id_owner_id_security_uidx
   on public.school_projects (id, owner_id);
 create unique index if not exists students_id_project_security_uidx
   on public.students (id, project_id);
+create unique index if not exists templates_id_owner_security_uidx
+  on public.templates (id, owner_id);
+create unique index if not exists templates_id_project_owner_security_uidx
+  on public.templates (id, project_id, owner_id);
+create unique index if not exists batches_id_project_owner_security_uidx
+  on public.batches (id, project_id, owner_id);
+create unique index if not exists generated_cards_id_owner_security_uidx
+  on public.generated_cards (id, owner_id);
+create unique index if not exists generated_cards_id_project_owner_security_uidx
+  on public.generated_cards (id, project_id, owner_id);
 
 do $$
 begin
@@ -21,6 +31,10 @@ begin
     alter table public.batches add constraint batches_project_owner_security_fkey
       foreign key (project_id, owner_id) references public.school_projects(id, owner_id) on delete cascade not valid;
   end if;
+  if not exists (select 1 from pg_constraint where conname = 'batches_template_project_owner_security_fkey' and conrelid = 'public.batches'::regclass) then
+    alter table public.batches add constraint batches_template_project_owner_security_fkey
+      foreign key (template_id, project_id, owner_id) references public.templates(id, project_id, owner_id) not valid;
+  end if;
   if not exists (select 1 from pg_constraint where conname = 'processing_jobs_project_owner_security_fkey' and conrelid = 'public.processing_jobs'::regclass) then
     alter table public.processing_jobs add constraint processing_jobs_project_owner_security_fkey
       foreign key (project_id, owner_id) references public.school_projects(id, owner_id) on delete cascade not valid;
@@ -28,6 +42,26 @@ begin
   if not exists (select 1 from pg_constraint where conname = 'generated_cards_project_owner_security_fkey' and conrelid = 'public.generated_cards'::regclass) then
     alter table public.generated_cards add constraint generated_cards_project_owner_security_fkey
       foreign key (project_id, owner_id) references public.school_projects(id, owner_id) on delete cascade not valid;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'generated_cards_student_project_security_fkey' and conrelid = 'public.generated_cards'::regclass) then
+    alter table public.generated_cards add constraint generated_cards_student_project_security_fkey
+      foreign key (student_id, project_id) references public.students(id, project_id) not valid;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'generated_cards_template_project_owner_security_fkey' and conrelid = 'public.generated_cards'::regclass) then
+    alter table public.generated_cards add constraint generated_cards_template_project_owner_security_fkey
+      foreign key (template_id, project_id, owner_id) references public.templates(id, project_id, owner_id) not valid;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'validation_results_card_owner_security_fkey' and conrelid = 'public.validation_results'::regclass) then
+    alter table public.validation_results add constraint validation_results_card_owner_security_fkey
+      foreign key (generated_card_id, owner_id) references public.generated_cards(id, owner_id) not valid;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'card_validation_findings_project_owner_security_fkey' and conrelid = 'public.card_validation_findings'::regclass) then
+    alter table public.card_validation_findings add constraint card_validation_findings_project_owner_security_fkey
+      foreign key (project_id, owner_id) references public.school_projects(id, owner_id) not valid;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'batch_items_student_project_security_fkey' and conrelid = 'public.batch_generation_items'::regclass) then
+    alter table public.batch_generation_items add constraint batch_items_student_project_security_fkey
+      foreign key (student_id, project_id) references public.students(id, project_id) not valid;
   end if;
   if not exists (select 1 from pg_constraint where conname = 'batch_items_batch_project_owner_security_fkey' and conrelid = 'public.batch_generation_items'::regclass) then
     alter table public.batch_generation_items add constraint batch_items_batch_project_owner_security_fkey
