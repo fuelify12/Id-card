@@ -33,10 +33,10 @@ export async function buildSyntheticAcceptanceFixture(directory: string) {
     let expected: ExpectedOutcome = "EXPECTED_IMPORT";
     let reason = "Unique serial and non-empty student name.";
 
-    if (i === 43) {
-      serial = "42";
+    if (i === 42 || i === 43) {
+      serial = i === 42 ? "042" : "42";
       expected = "EXPECTED_REJECT";
-      reason = "Duplicate canonical serial with source row for 042; must not silently import as a distinct student.";
+      reason = "Duplicate canonical serial pair (042 / 42); neither row should be silently treated as a unique student.";
     } else if (i === 100) {
       serial = "";
       expected = "EXPECTED_REJECT";
