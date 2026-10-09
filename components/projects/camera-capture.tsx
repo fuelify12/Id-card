@@ -19,9 +19,11 @@ export function CameraCapture({ disabled = false, onCapture }: Props) {
   const [cameraUnavailable, setCameraUnavailable] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const cameraRequestRef = useRef(0);
   const fallbackRef = useRef<HTMLInputElement>(null);
 
   const stopCamera = useCallback(() => {
+    cameraRequestRef.current += 1;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
@@ -46,18 +48,25 @@ export function CameraCapture({ disabled = false, onCapture }: Props) {
       setError(supportMessage);
       return;
     }
+    const requestId = ++cameraRequestRef.current;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
         video: { facingMode: { ideal: mode }, width: { ideal: 1920 }, height: { ideal: 1080 } },
       });
+      if (requestId !== cameraRequestRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
       }
-      setStreaming(true);
+      if (requestId === cameraRequestRef.current) setStreaming(true);
     } catch (e) {
+      if (requestId !== cameraRequestRef.current) return;
+      stopCamera();
       setCameraUnavailable(true);
       setError(cameraErrorMessage(e));
     }
