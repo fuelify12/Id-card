@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
+import { validateStudents, validateTemplateConfiguration } from "@/lib/validation/engine";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -15,7 +16,7 @@ async function authProject(projectId: string) {
   const uid = data?.claims?.sub as string | undefined;
   if (!uid) return { error: "Unauthorized", status: 401 as const };
   const db = supabase as any;
-  const { data: project, error } = await db.from("school_projects").select("id,owner_id,school_name,name").eq("id", projectId).eq("owner_id", uid).maybeSingle();
+  const { data: project, error } = await db.from("school_projects").select("id,owner_id,school_name,name,validation_settings").eq("id", projectId).eq("owner_id", uid).maybeSingle();
   if (error) return { error: "Could not verify project access.", status: 500 as const };
   if (!project) return { error: "Project not found or access denied.", status: 404 as const };
   return { db, uid, project };
@@ -55,9 +56,9 @@ async function refreshCounts(db: any, batchId: string, projectId: string) {
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id: projectId } = await context.params;
-  if (!/^[0-9a-f-]{36}$/i.test(projectId)) return reply("Invalid project ID.");
+  if (typeof projectId !== "string" || !/^[0-9a-f-]{36}$/i.test(projectId)) return reply("Invalid project ID.");
   const auth = await authProject(projectId);
-  if ("error" in auth) return reply(auth.error, auth.status);
+  if ("error" in auth) return reply(String(auth.error ?? "Project access denied."), Number(auth.status ?? 500));
   const { db, uid, project } = auth;
   let body: any;
   try { body = await request.json(); } catch { return reply("Request body must be valid JSON."); }
@@ -70,7 +71,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       if (templateError) throw new Error(templateError.message);
       const template = templates?.[0];
       if (!template) return NextResponse.json({ ok: false, configIssues: ["Upload and activate an ID card template first."], totalStudents: 0, eligible: 0, blocked: 0 }, { status: 422 });
-      const { data: fields, error: fieldError } = await db.from("template_fields").select("key,label,field_type,required,source_column").eq("template_id", template.id).order("sort_order");
+      const { data: fields, error: fieldError } = await db.from("template_fields").select("id,key,label,field_type,required,source_column,static_value,visible,x,y,width,height,font_size,color,render_options").eq("template_id", template.id).order("sort_order");
       if (fieldError) throw new Error(fieldError.message);
       const students: any[] = [];
       for (let from = 0; from < 15000; from += 1000) {
@@ -79,21 +80,28 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         students.push(...(data ?? [])); if ((data ?? []).length < 1000) break;
       }
       if (students.length > MAX_BATCH) return reply("A batch is limited to 500 students. Split this project into smaller batches.", 413);
-      const { data: photos, error: photoError } = await db.from("student_photos").select("student_id").eq("project_id", projectId).eq("owner_id", uid).eq("match_status", "APPROVED").eq("processing_status", "APPROVED").not("processed_storage_path", "is", null);
+      const { data: photos, error: photoError } = await db.from("student_photos").select("student_id").eq("project_id", projectId).eq("owner_id", uid).eq("match_status", "APPROVED").eq("processing_status", "APPROVED").not("processed_storage_path", "is", null).not("crop_approved_at", "is", null);
       if (photoError) throw new Error(photoError.message);
       const approvedPhotos = new Set((photos ?? []).map((p: any) => p.student_id));
       const needsPhoto = (fields ?? []).some((f: any) => f.required && (["photo","image","student_photo","student-photo"].includes(String(f.field_type).toLowerCase()) || f.key === "student_photo"));
       const config = template.render_config ?? {};
       const configIssues: string[] = [];
+      const templateFindings = validateTemplateConfiguration(template, fields ?? []);
+      configIssues.push(...templateFindings.filter(f => f.severity === "CRITICAL" || f.severity === "ERROR").map(f => f.message));
+      const settings = project.validation_settings ?? {};
+      const mappedRequired = (fields ?? []).filter((f: any) => f.required && !["photo","image","student_photo","student-photo"].includes(String(f.field_type).toLowerCase()) && String(f.source_column ?? "").trim()).map((f: any) => String(f.source_column));
+      const configuredRequired = Array.isArray(settings.required_fields) ? settings.required_fields.filter((x: any) => typeof x === "string" && x.trim()).map((x: string) => x.trim()) : [];
+      const studentFindings = validateStudents(students, Array.from(new Set([...configuredRequired, ...mappedRequired])), { admissionNumberUnique: settings.admission_number_unique !== false });
       if (!(Number(config.widthMm) > 0 && Number(config.heightMm) > 0)) configIssues.push("Save card width and height in the rendering settings.");
       if (!(Number.isInteger(Number(config.dpi)) && Number(config.dpi) >= 72 && Number(config.dpi) <= 1200)) configIssues.push("Save a valid output DPI.");
       const rows = students.map((student: any) => {
         const data = student.data && typeof student.data === "object" ? student.data : {};
         const missing = (fields ?? []).filter((f: any) => f.required && !(String(data[f.source_column || f.key] ?? "").trim()) && !(["photo","image","student_photo","student-photo"].includes(String(f.field_type).toLowerCase()) || f.key === "student_photo")).map((f: any) => f.label || f.key);
         const photoMissing = needsPhoto && !approvedPhotos.has(student.id);
-        return { studentId: student.id, serialNumber: student.serial_number, studentName: String(data.name ?? data.student_name ?? ""), eligible: !missing.length && !photoMissing && !configIssues.length, missingFields: missing, photoMissing };
+        const identityIssues = studentFindings.filter(f => f.studentId === student.id && (f.severity === "CRITICAL" || f.severity === "ERROR"));
+        return { studentId: student.id, serialNumber: student.serial_number, studentName: String(data.name ?? data.student_name ?? data.full_name ?? ""), eligible: !missing.length && !photoMissing && !identityIssues.length && !configIssues.length, missingFields: missing, photoMissing, identityIssues: identityIssues.map(f => f.message) };
       });
-      const report = { ok: configIssues.length === 0, project: { id: project.id, name: project.name }, template: { id: template.id, name: template.name, version: template.version_number, format: config.format ?? "png", widthMm: config.widthMm, heightMm: config.heightMm, dpi: config.dpi }, configIssues, totalStudents: rows.length, eligible: rows.filter(r => r.eligible).length, blocked: rows.filter(r => !r.eligible).length, students: rows.map(r => ({ ...r, reason: [...r.missingFields, ...(r.photoMissing ? ["Missing approved processed photo"] : []), ...configIssues] })) };
+      const report = { ok: configIssues.length === 0, configWarnings: templateFindings.filter(f => f.severity === "WARNING" || f.severity === "INFO").map(f => f.message), project: { id: project.id, name: project.name }, template: { id: template.id, name: template.name, version: template.version_number, format: config.format ?? "png", widthMm: config.widthMm, heightMm: config.heightMm, dpi: config.dpi }, configIssues, totalStudents: rows.length, eligible: rows.filter(r => r.eligible).length, blocked: rows.filter(r => !r.eligible).length, students: rows.map(r => ({ ...r, reason: [...r.missingFields, ...(r.photoMissing ? ["Missing approved processed photo"] : []), ...(r.identityIssues ?? []), ...configIssues] })) };
       if (action === "preflight") return NextResponse.json(report);
       if (configIssues.length) return NextResponse.json({ error: "Resolve critical template/render configuration errors before starting production.", preflight: report }, { status: 422 });
       if (!report.eligible) return NextResponse.json({ error: "No eligible students are available for this batch.", preflight: report }, { status: 422 });
@@ -139,15 +147,23 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       const cookie = request.headers.get("cookie") ?? "";
       await Promise.all((claimed ?? []).map(async (item: any) => {
         try {
-          const renderResponse = await fetch(new URL("/api/projects/" + projectId + "/render", request.url), { method: "POST", headers: { "content-type": "application/json", cookie }, body: JSON.stringify({ action: "render", studentId: item.student_id, templateId: batch.template_id, templateVersion: batch.template_version }) });
+          const renderResponse = await fetch(new URL("/api/projects/" + projectId + "/render", request.url), { method: "POST", headers: { "content-type": "application/json", cookie }, body: JSON.stringify({ action: "render", studentId: item.student_id, batchId, templateId: batch.template_id, templateVersion: batch.template_version }) });
           const result = await renderResponse.json().catch(() => ({}));
           if (!renderResponse.ok || !result.ok || !result.cardId || !result.previewUrl) {
             const permanent = renderResponse.status === 400 || renderResponse.status === 403 || renderResponse.status === 404 || renderResponse.status === 422;
             const retry = !permanent && Number(item.attempts) < Number(item.max_attempts);
             await db.from("batch_generation_items").update({ status: retry ? "PENDING" : permanent ? "NEEDS_REVIEW" : "FAILED", available_at: new Date(Date.now() + Math.min(60000, 1000 * 2 ** Number(item.attempts))).toISOString(), error_category: permanent ? "validation" : renderResponse.status === 413 ? "resource_limit" : "rendering", error_summary: String(result.error ?? "Card renderer returned an invalid result.").slice(0, 500), claimed_by: null, claimed_at: null, heartbeat_at: new Date().toISOString(), ...(retry ? {} : { completed_at: new Date().toISOString() }) }).eq("id", item.id).eq("status", "PROCESSING");
           } else {
-            const { data: card } = await db.from("generated_cards").select("storage_path,render_input_hash").eq("id", result.cardId).eq("project_id", projectId).eq("student_id", item.student_id).maybeSingle();
-            if (!card?.storage_path || !card.render_input_hash) throw new Error("Renderer output record failed persisted-output validation.");
+            const { data: card } = await db.from("generated_cards").select("storage_path,render_input_hash,status,validation_status,output_sha256,output_width_px,output_height_px,template_id,template_version,photo_id,photo_version").eq("id", result.cardId).eq("project_id", projectId).eq("student_id", item.student_id).maybeSingle();
+            if (!card?.storage_path || !card.render_input_hash || !card.output_sha256 || card.status !== "generated" || card.template_id !== batch.template_id || Number(card.template_version) !== Number(batch.template_version)) throw new Error("Renderer output record failed persisted-output validation.");
+            if (card.validation_status === "failed") {
+              await db.from("batch_generation_items").update({ status: "FAILED", output_card_id: result.cardId, output_storage_path: card.storage_path, input_fingerprint: card.render_input_hash, error_category: "validation", error_summary: "Critical or error-level validation findings block production.", completed_at: new Date().toISOString(), claimed_by: null, claimed_at: null, heartbeat_at: new Date().toISOString() }).eq("id", item.id).eq("status", "PROCESSING");
+              return;
+            }
+            if (card.validation_status === "warning" || card.validation_status === "pending") {
+              await db.from("batch_generation_items").update({ status: "NEEDS_REVIEW", output_card_id: result.cardId, output_storage_path: card.storage_path, input_fingerprint: card.render_input_hash, error_category: "validation", error_summary: "Rendered card has unresolved validation warnings or checks.", completed_at: new Date().toISOString(), claimed_by: null, claimed_at: null, heartbeat_at: new Date().toISOString() }).eq("id", item.id).eq("status", "PROCESSING");
+              return;
+            }
             await db.from("batch_generation_items").update({ status: "SUCCEEDED", output_card_id: result.cardId, output_storage_path: card.storage_path, input_fingerprint: card.render_input_hash, error_category: null, error_summary: null, completed_at: new Date().toISOString(), claimed_by: null, heartbeat_at: new Date().toISOString() }).eq("id", item.id).eq("status", "PROCESSING");
           }
         } catch (error) {
