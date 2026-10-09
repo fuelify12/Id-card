@@ -2,13 +2,15 @@
 -- Atomic per-account fixed windows work across serverless instances; no client table access.
 create table if not exists public.security_rate_limits (
   owner_id uuid not null references auth.users(id) on delete cascade,
-  action text not null check (action in ('project_create','template_upload','student_import','photo_upload_ticket','batch_generate','zip_export')),
+  action text not null check (action in ('project_create','template_upload','student_import','photo_upload_ticket','photo_processing','batch_generate','zip_export')),
   window_started_at timestamptz not null default now(),
   request_count integer not null default 0 check (request_count >= 0),
   primary key (owner_id, action)
 );
 alter table public.security_rate_limits enable row level security;
 revoke all on public.security_rate_limits from public, anon, authenticated;
+drop policy if exists security_rate_limits_deny_client on public.security_rate_limits;
+create policy security_rate_limits_deny_client on public.security_rate_limits for all to anon, authenticated using (false) with check (false);
 
 create or replace function public.consume_security_rate_limit(
   p_action text,
