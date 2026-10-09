@@ -124,7 +124,7 @@ export async function GET(request: Request, { params }: { params: Promise<{id:st
     const report = await preflight(db, project, uid, batchId);
     const { _private, ...publicReport } = report;
     return NextResponse.json(publicReport);
-  } catch(e:any) { return fail(e?.message??"Could not prepare export eligibility.", e?.status??500); }
+  } catch(e:any) { const status=[400,401,403,404,409,413,422,429].includes(Number(e?.status))?Number(e.status):500; return fail("Could not prepare export eligibility. Check the selected batch and retry.",status); }
 }
 export async function POST(request: Request, { params }: { params: Promise<{id:string}> }) {
   const { id } = await params; const auth = await authorize(id); if ("error" in auth) return fail(auth.error, auth.status);
@@ -181,7 +181,7 @@ export async function POST(request: Request, { params }: { params: Promise<{id:s
     if (error || !created) throw new Error("Could not create the persistent export job.");
     await insertAudit(db,uid,id,"export_created",exportId,{batchId,selectedCount:requestedStudents.length,eligibleCount:chosen.length,excludedCount:report.counts.excluded+excluded.length,format,side});
     return NextResponse.json({export:created,excluded:[...excluded,...report.cards.filter((c:any)=>!c.eligible).map((c:any)=>({serialNumber:c.serialNumber,side:c.side,reason:c.reasons.join(" ")})),...report.missingItems]}, {status:201});
-  } catch(e:any) { return fail(e?.message??"Could not create export job.",e?.status??500); }
+  } catch(e:any) { const status=[400,401,403,404,409,413,422,429].includes(Number(e?.status))?Number(e.status):500; return fail("Could not create export job. Check the selected batch and retry.",status); }
 }
 export async function PUT(request: Request, { params }: { params: Promise<{id:string}> }) {
   const {id}=await params;const auth=await authorize(id);if("error"in auth)return fail(auth.error,auth.status);
