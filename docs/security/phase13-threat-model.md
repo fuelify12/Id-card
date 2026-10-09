@@ -6,7 +6,7 @@
 - Supabase project: `Id-card` (`xdoenkusrakuyyxnnkff`), Postgres 17, region `ap-south-1`.
 - Existing database contained 14 public application tables; the initial catalog query found RLS enabled on all 14. No application rows were present during this inspection.
 - Existing private buckets: `printforge-templates`, `printforge-student-photos`, `printforge-generated-cards`, `printforge-exports`; a separate `printforge-private` bucket has no application storage policy in the inspected policy list. The four named asset buckets were configured private.
-- The repository contains `.env.example` with variable names and empty values; `.gitignore` excludes `.env* except `.env.example`.
+- The repository contains `.env.example` with variable names and empty values; `.gitignore` excludes `.env* except `.env.example`. A committed `package-lock.json` is still absent.
 - The existing GitHub Actions workflow runs tests, TypeScript, lint, and production build. The repo did not contain a `package-lock.json` when inspected, so installs were not reproducible via `npm ci`.
 
 ## Findings and remediation
@@ -15,7 +15,7 @@
 |---|---|---|
 | HIGH | Database grants gave both `anon` and `authenticated` unnecessary `TRUNCATE`, `TRIGGER`, and `REFERENCES` privileges across 14 public application tables. RLS does not constrain TRUNCATE. | Revoked all public-table grants from `anon`; revoked high-risk table privileges from `authenticated`; set safer default table privileges. |
 | HIGH | Public application functions had inherited `PUBLIC EXECUTE` ACLs, and some RPCs also explicitly granted execution to `anon`. | Revoked function execution from `PUBLIC` and `anon` for public-schema functions; preserved explicit authenticated/service-role grants. |
-| MEDIUM | Tenant policies on several child tables primarily checked `owner_id`; they did not consistently prove that linked project/template/student/batch/card rows belonged to the same owner. | Replaced policies with project- and parent-qualified checks for students, templates, template fields, batches, jobs, generated cards, batch items, validation results/findings, and exports. |
+| MEDIUM | Tenant policies on several child tables primarily checked `owner_id`; they did not consistently prove that linked project/template/student/batch/card rows belonged to the same owner. | Replaced policies with project- and parent-qualified checks for students, templates, template fields, batches, jobs, generated cards, batch items, validation results/findings, and exports; added composite foreign keys and validated all 12 security constraints. |
 | MEDIUM | Application users could update or delete their own audit rows because the original audit policy used `FOR ALL`. | Replaced it with SELECT and INSERT policies only, and restricted inserts to the actor's own project. |
 | MEDIUM | Storage policies had an unqualified `name` reference inside a query that also referenced `school_projects.name`, so the predicate could bind to the project name instead of the object path. Other bucket policies did not consistently verify that the second path segment was an owned project. | Replaced application bucket policies with explicit `objects.name` path parsing and project-owner checks for SELECT/INSERT/UPDATE/DELETE. |
 | LOW | CI did not run a dependency audit or secret scan. The repository lacked a lockfile. | Security CI checks and lockfile follow-up are documented; do not treat a scanner that was not run as a clean result. |
@@ -25,7 +25,7 @@
 - Privilege finding: query `information_schema.role_table_grants` for `anon` / `authenticated` and the `TRUNCATE`, `TRIGGER`, and `REFERENCES` privileges. Before remediation, each role had those grants across the 14 public application tables.
 - Audit finding: inspect `pg_policies` for `public.audit_logs`; the prior `audit own rows` policy was `ALL` with both `USING` and `WITH CHECK`.
 - Storage finding: inspect `pg_policies` on `storage.objects`; the old predicates included `storage.foldername(p.name)` and did not reliably qualify the object path.
-- The project had no student/project records during inspection, and no second test account was provisioned. Cross-tenant runtime denial was **not** claimed as tested; use two synthetic test accounts in a non-production Supabase project to verify SELECT/INSERT/UPDATE/DELETE and signed URL behavior.
+- The initial project inspection found no student/project records, and no second test account was provisioned. Cross-tenant runtime denial was **not** claimed as tested; use two synthetic test accounts in a non-production Supabase project to verify SELECT/INSERT/UPDATE/DELETE, Storage CRUD, and signed URL expiry.
 
 ## Operational controls
 
