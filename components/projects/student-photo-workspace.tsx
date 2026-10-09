@@ -25,7 +25,7 @@ async function extractZip(zip:File):Promise<File[]>{
   count++;if(count>MAX_FILES){aborted=true;rejectAll(new Error("ZIP contains more than 500 photos."));return;}
   let size=0;const chunks:Uint8Array[]=[];
   const task=new Promise<File>((resolve,reject)=>{
-   entry.ondata=(err,chunk,final)=>{if(err){aborted=true;reject(err);return;}size+=chunk.length;total+=chunk.length;if(size>MAX_FILE_BYTES||total>MAX_BATCH_BYTES){aborted=true;const e=new Error("ZIP expanded beyond configured photo limits.");reject(e);rejectAll(e);return;}chunks.push(chunk);if(final){const filename=name.split("/").pop()||"photo";resolve(new File(chunks,filename,{type:""}));}};
+   entry.ondata=(err,chunk,final)=>{if(err){aborted=true;reject(err);return;}size+=chunk.length;total+=chunk.length;if(size>MAX_FILE_BYTES||total>MAX_BATCH_BYTES){aborted=true;const e=new Error("ZIP expanded beyond configured photo limits.");reject(e);rejectAll(e);return;}chunks.push(chunk);if(final){const filename=name.split("/").pop()||"photo";resolve(new File(chunks.map(chunk=>new Uint8Array(chunk).buffer as ArrayBuffer),filename,{type:""}));}};
   });
   promises.push(task);entry.start();
  });
