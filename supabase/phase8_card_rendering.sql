@@ -28,3 +28,5 @@ alter table public.generated_cards
 create index if not exists generated_cards_render_lookup_idx on public.generated_cards(project_id, student_id, template_id, created_at desc);
 create index if not exists generated_cards_render_status_idx on public.generated_cards(project_id, status, validation_status);
 create unique index if not exists generated_cards_idempotency_idx on public.generated_cards(project_id, student_id, template_id, input_hash, output_format) where student_id is not null and template_id is not null and input_hash is not null and output_format is not null;
+
+create index if not exists idx_generated_cards_template_id on public.generated_cards(template_id) where template_id is not null;
