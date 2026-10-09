@@ -15,10 +15,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
       - name: Install dependencies
@@ -27,7 +27,7 @@ jobs:
         run: npm audit --json > npm-audit-report.json || true
       - name: Publish generated lockfile and full audit report for review
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: dependency-review-${{ github.run_id }}
           path: |
@@ -38,9 +38,15 @@ jobs:
       - name: Production dependency vulnerability gate
         run: npm audit --omit=dev --audit-level=high
       - name: Secret scanning
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Full Git history secret scan
+        shell: bash
+        run: |
+          GITLEAKS_BIN="$(command -v gitleaks || find /tmp -type f -name gitleaks -perm -111 -print -quit)"
+          test -n "$GITLEAKS_BIN"
+          "$GITLEAKS_BIN" detect --source . --log-opts="--all" --redact --exit-code=2
       - name: Repository secret hygiene
         run: node scripts/security-check.mjs
       - name: Unit tests
