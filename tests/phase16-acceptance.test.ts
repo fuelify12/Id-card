@@ -88,6 +88,7 @@ describe("Phase 16 synthetic final-acceptance fixtures", () => {
     const b = record({ sourceRowId: "row-2", studentId: "student-2", sourceSerial: "002", normalizedSerial: "2" });
     const manifest: IntegrityManifestEntry[] = [
       { studentId: "student-1", serialNumber: "001", filename: "front/shared.png", sha256: "card-hash" },
+      { studentId: "student-1", serialNumber: "001", filename: "front/shared.png", sha256: "other-hash" },
       { studentId: "student-2", serialNumber: "002", filename: "front/shared.png", sha256: "card-hash" },
       { studentId: "ghost", serialNumber: "999", filename: "front/ghost.png", sha256: "ghost-hash" },
     ];
