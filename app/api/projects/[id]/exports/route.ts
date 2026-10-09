@@ -50,9 +50,9 @@ async function currentCards(db: any, projectId: string, uid: string, batchId: st
     db.from("templates").select("id,version_number").eq("project_id", projectId).eq("owner_id", uid),
     db.from("student_photos").select("id,project_id,owner_id,student_id,image_version,match_status,processing_status,crop_approved_at,processed_storage_path").eq("project_id", projectId).eq("owner_id", uid).limit(10000)
   ]);
-  if (ce || ie || se || fe || te || pe) throw new Error("Could not load complete export eligibility data.");const pagedFindings=await readOpenFindings(db,projectId,uid);findings.splice(0,findings.length,...pagedFindings);
+  if (ce || ie || se || fe || te || pe) throw new Error("Could not load complete export eligibility data.");const pagedFindings=await readOpenFindings(db,projectId,uid);
   if ((cards ?? []).length > MAX_CARDS || (items ?? []).length > MAX_CARDS) throw Object.assign(new Error("This batch exceeds the 1,000-card-output export limit. Split it into smaller batches."), { status: 413 });
-  return { batch, cards: cards ?? [], items: items ?? [], students: students ?? [], findings: findings ?? [], templates: templates ?? [], photos: photos ?? [] };
+  return { batch, cards: cards ?? [], items: items ?? [], students: students ?? [], findings: pagedFindings, templates: templates ?? [], photos: photos ?? [] };
 }
 async function checkCard(db: any, card: any, d: any, project: any, verifyBytes = true, keepBytes = false) {
   let sourceBytes: Buffer | null = null;
