@@ -1,4 +1,5 @@
 "use client";
+/* eslint react-hooks/set-state-in-effect: off -- clear the active export after persisted status reaches a terminal state. */
 import { useCallback, useEffect, useMemo, useState } from "react";
 type Batch={id:string;name:string;status:string;total_count:number;completed_count:number;failed_count:number;created_at:string};
 type ExportJob={id:string;batch_id:string;filename:string;status:string;created_at:string;updated_at?:string;selected_count:number;eligible_count:number;excluded_count:number;packaged_file_count:number;failed_item_count:number;archive_bytes:number|null;expires_at:string|null;error_summary:string|null;retry_count?:number;retryable?:boolean;options?:any};
