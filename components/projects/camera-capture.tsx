@@ -73,7 +73,8 @@ export function CameraCapture({ disabled = false, onCapture }: Props) {
 
   useEffect(() => {
     if (open && !captured && !cameraUnavailable && !streaming) {
-      void startCamera(facing);
+      const timer = window.setTimeout(() => void startCamera(facing), 0);
+      return () => window.clearTimeout(timer);
     }
   }, [open, captured, cameraUnavailable, streaming, facing, startCamera]);
 
