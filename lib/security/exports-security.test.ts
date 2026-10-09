@@ -22,6 +22,8 @@ describe("security regression cases for student exports", () => {
       "cards/approved.png": strToU8("synthetic"),
       "../../outside.txt": strToU8("synthetic"),
     });
-    expect(() => verifyZipDirectory(zip, ["cards/approved.png"])).toThrow();
+    const result = verifyZipDirectory(zip, ["cards/approved.png"]);
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBeTruthy();
   });
 });
