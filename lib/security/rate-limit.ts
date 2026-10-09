@@ -3,6 +3,7 @@ export type RateLimitAction =
   | "template_upload"
   | "student_import"
   | "photo_upload_ticket"
+  | "photo_processing"
   | "batch_generate"
   | "zip_export";
 
