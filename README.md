@@ -16,5 +16,5 @@ Supabase now contains the production project/template/student/batch/processing/c
 - Unsupported, ambiguous, missing, duplicate, and conflicting matches are never automatically approved. Matching is proposed only from exact supported filename serials. The user must approve each selected photo.
 - ZIP paths are checked for absolute paths and traversal before extraction. Archive entries are streamed with per-file and aggregate expansion limits.
 - Photos are validated server-side from file signatures and decoded with Sharp. SHA-256 duplicate detection preserves the duplicate record and links it to the original record.
-- Database changes are recorded in `supabase/phase6_student_photo_matching.sql`. The production Supabase migration history contains `phase6_student_photo_matching`, `phase6_storage_policy_hardening`, `phase6_photo_batch_byte_limits`, and `phase6_photo_fk_indexes`.
+- Database changes are recorded in `supabase/phase6_student_photo_matching.sql`. The production Supabase migration history contains `phase6_student_photo_matching`, `phase6_storage_policy_hardening`, `phase6_photo_batch_byte_limits`, and `phase6_photo_fk_indexes`, and `phase6_photo_path_reservations`.
 - Photo readiness counts only approved photos. Unresolved duplicate/review states keep the project from being considered ready for the next phase.
