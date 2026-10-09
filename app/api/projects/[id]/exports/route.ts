@@ -35,6 +35,7 @@ function nameOf(student: any) {
 function sideOf(card: any) { return String(card.card_side ?? "front").toLowerCase() === "back" ? "back" : "front"; }
 function extOf(format: unknown) { const f = String(format ?? "").toLowerCase(); return f === "jpg" ? "jpeg" : f; }
 async function boundedMap<T,R>(items:T[], concurrency:number, worker:(item:T,index:number)=>Promise<R>):Promise<R[]>{const results=new Array<R>(items.length);let next=0;await Promise.all(Array.from({length:Math.min(concurrency,items.length)},async()=>{while(true){const i=next++;if(i>=items.length)return;results[i]=await worker(items[i],i)}}));return results;}
+async function readOpenFindings(db:any,projectId:string,uid:string){const rows:any[]=[];for(let from=0;from<50000;from+=500){const{data,error}=await db.from("card_validation_findings").select("id,student_id,generated_card_id,severity,status,rule_id,message").eq("project_id",projectId).eq("owner_id",uid).in("status",["OPEN","IN_REVIEW"]).order("id",{ascending:true}).range(from,from+499);if(error)throw new Error("Could not refresh validation findings for export.");rows.push(...(data??[]));if((data??[]).length<500)return rows;}throw new Error("Too many unresolved validation findings to verify safely; resolve or split the batch.");}
 async function currentCards(db: any, projectId: string, uid: string, batchId: string) {
   const { data: batch, error: be } = await db.from("batches").select("id,name,status,project_id,owner_id,template_id,template_version,created_at,total_count,completed_count,failed_count,review_count").eq("id", batchId).eq("project_id", projectId).eq("owner_id", uid).maybeSingle();
   if (be) throw new Error("Could not load generation batch.");
@@ -45,11 +46,11 @@ async function currentCards(db: any, projectId: string, uid: string, batchId: st
     db.from("generated_cards").select("id,project_id,owner_id,batch_id,student_id,serial_number,storage_path,filename,status,validation_status,approval_status,template_id,template_version,photo_id,photo_version,output_sha256,output_format,output_width_px,output_height_px,output_dpi,render_input_hash,render_config_snapshot,card_side,generated_at,created_at").eq("project_id", projectId).eq("owner_id", uid).eq("batch_id", batchId).order("serial_number").limit(MAX_CARDS + 1),
     db.from("batch_generation_items").select("id,student_id,serial_number,status,output_card_id,output_storage_path,input_fingerprint,error_summary").eq("project_id", projectId).eq("owner_id", uid).eq("batch_id", batchId).order("serial_number").limit(MAX_CARDS + 1),
     db.from("students").select("id,project_id,owner_id,serial_number,data,updated_at").eq("project_id", projectId).eq("owner_id", uid).limit(MAX_CARDS + 1),
-    db.from("card_validation_findings").select("id,student_id,generated_card_id,severity,status,rule_id,message").eq("project_id", projectId).eq("owner_id", uid).in("status", ["OPEN","IN_REVIEW"]).limit(10000),
+    db.from("card_validation_findings").select("id,student_id,generated_card_id,severity,status,rule_id,message").eq("project_id", projectId).eq("owner_id", uid).in("status", ["OPEN","IN_REVIEW"]).limit(1),
     db.from("templates").select("id,version_number").eq("project_id", projectId).eq("owner_id", uid),
     db.from("student_photos").select("id,project_id,owner_id,student_id,image_version,match_status,processing_status,crop_approved_at,processed_storage_path").eq("project_id", projectId).eq("owner_id", uid).limit(10000)
   ]);
-  if (ce || ie || se || fe || te || pe) throw new Error("Could not load complete export eligibility data.");
+  if (ce || ie || se || fe || te || pe) throw new Error("Could not load complete export eligibility data.");const pagedFindings=await readOpenFindings(db,projectId,uid);findings.splice(0,findings.length,...pagedFindings);
   if ((cards ?? []).length > MAX_CARDS || (items ?? []).length > MAX_CARDS) throw Object.assign(new Error("This batch exceeds the 1,000-card-output export limit. Split it into smaller batches."), { status: 413 });
   return { batch, cards: cards ?? [], items: items ?? [], students: students ?? [], findings: findings ?? [], templates: templates ?? [], photos: photos ?? [] };
 }
@@ -189,6 +190,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{id:st
   const {data:job,error}=await db.from("exports").select("*").eq("id",exportId).eq("project_id",id).eq("owner_id",uid).maybeSingle();
   if(error||!job)return fail("Export not found or access denied.",404);
   if(body.action==="delete"){
+    if(["queued","running","verifying"].includes(String(job.status).toLowerCase()))return fail("Cannot delete an export while it is being processed.",409);
     if(job.storage_path)await db.storage.from(STORAGE_BUCKETS.exports).remove([job.storage_path]);
     const {error:de}=await db.from("exports").delete().eq("id",exportId).eq("project_id",id).eq("owner_id",uid);if(de)return fail("Could not delete export history.",500);
     await insertAudit(db,uid,id,"export_deleted",exportId,{status:job.status});return NextResponse.json({ok:true});
@@ -216,9 +218,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{id:
     const fresh=await currentCards(db,id,uid,job.batch_id);
     const snap=Array.isArray(job.item_snapshot)?job.item_snapshot:[];
     if(!snap.length)throw new Error("Export job has no persisted item snapshot.");
-    const {data:findings,error:fe}=await db.from("card_validation_findings").select("id,student_id,generated_card_id,severity,status").eq("project_id",id).eq("owner_id",uid).in("status",["OPEN","IN_REVIEW"]).limit(10000);
-    if(fe)throw new Error("Could not refresh validation findings before packaging.");
-    fresh.findings=findings??[];
+    fresh.findings=await readOpenFindings(db,id,uid);
     const {data:students,error:se}=await db.from("students").select("id,project_id,owner_id,serial_number,data,updated_at").eq("project_id",id).eq("owner_id",uid).limit(MAX_CARDS+1);
     if(se)throw new Error("Could not refresh student records before packaging.");
     fresh.students=students??[];
