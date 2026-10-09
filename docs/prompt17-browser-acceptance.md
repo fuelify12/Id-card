@@ -5,6 +5,7 @@
 **Repository:** `fuelify12/Id-card`  
 **Baseline branch / commit:** `main` / `3fe4df7798c6cffc7047e8896a463a18c4b6ce50`  
 **Working branch:** `prompt-17-browser-acceptance`  
+**Last code/test change before this report update:** `4f30d1f8f988bffd3d7419c892f545bcc5e6eddc`  
 **Scope:** Read-only browser reconnaissance, Playwright suite implementation, and safe-environment assessment. No production data or traffic was changed.
 
 ## Executive result
@@ -23,6 +24,7 @@ This is a safety block, not evidence that the application workflow failed or pas
 | Existing unit test runner | Vitest |
 | Browser test runner added | Playwright Test, Chromium project |
 | Package lockfile | No committed `package-lock.json`; CI currently uses `npm install` |
+| Local working tree | Not available for inspection: the execution container could not resolve `github.com`, so no local clone was created |
 | Vercel project | `printforge-id-card-studio`, Next.js, Node.js `24.x` |
 | Inspected preview deployment | `dpl_2JDyX9Ts77GSC2ranX9crA3fh4Xu` |
 | Preview URL | `https://printforge-id-card-studio-304vhak1z-yash-6966.vercel.app` |
@@ -59,6 +61,8 @@ Interpretation: Vercel's access gate behaved as configured for an anonymous visi
 - `.github/workflows/browser-smoke.yml`: manual, read-only smoke workflow; no production deploy or promotion step.
 - `package.json`: Playwright dependency and E2E scripts.
 - `vitest.config.ts`: limits Vitest discovery to `*.test.ts(x)`, so Playwright `*.spec.ts` files are not accidentally run by Vitest.
+- `.gitignore`: ignores Playwright reports, traces, videos, screenshots and cache output.
+- `.github/workflows/phase8-rendering-checks.yml`: corrected its invalid Supabase publishable-key placeholder after the first PR run failed the production build with `Supabase publishable key has an unsupported format`.
 
 The full persisted 300-card batch, crop approval, validation correction, ZIP download, two-tenant authorization, session expiry, camera permission behavior and final archive hashes are **not yet implemented as completed browser assertions**. They remain explicitly outside the currently executable test journey rather than being represented as passing.
 
@@ -69,7 +73,10 @@ The full persisted 300-card batch, crop approval, validation correction, ZIP dow
 | Live anonymous preview visit | **PASSED — limited** | Real browser loaded the Vercel SSO page; no app access or mutation |
 | Vercel SSO redirect for anonymous browser | **PASSED — limited** | Final URL and visible login heading observed |
 | PrintForge login and authenticated session | **BLOCKED** | No saved signed-in profile; app never reached behind SSO |
-| Playwright suite execution | **BLOCKED** | Local clone attempt failed because the execution environment could not resolve `github.com`; no Playwright browser run or CI result has been claimed |
+| Playwright suite execution | **BLOCKED** | Local clone attempt failed because the execution environment could not resolve `github.com`; no Playwright browser run or HTML report has been claimed |
+| Repository CI on code head `4f30d1f8f988bffd3d7419c892f545bcc5e6eddc` | **PASSED** | [Run 37927199069](https://github.com/fuelify12/Id-card/actions/runs/37927199069): 9 Vitest files / 59 tests passed, TypeScript, ESLint, production build, dependency gate, repository secret hygiene and client-bundle check passed |
+| Existing Phase 8 rendering CI | **PASSED after fix** | [Run 37927199105](https://github.com/fuelify12/Id-card/actions/runs/37927199105): the workflow's invalid dummy publishable key was corrected; build validation then passed |
+| Earlier CI attempts | **TRANSIENT FAILURES, RE-RUN PASSED** | [Run 37926862925](https://github.com/fuelify12/Id-card/actions/runs/37926862925) failed because its old workflow placeholder was invalid; [run 37927138271](https://github.com/fuelify12/Id-card/actions/runs/37927138271) encountered a Gitleaks action error (`stderr is not empty`) before the later run passed |
 | Project creation and persistence | **BLOCKED** | Requires authenticated test account and isolated Supabase |
 | Template upload / private storage | **BLOCKED** | Current preview targets production Supabase |
 | 300-row import and row reconciliation in browser | **BLOCKED** | Fixture and test implemented; not submitted |
@@ -111,3 +118,14 @@ The live browser action was performed through the connected browser automation s
 ## Final decision
 
 **BROWSER ACCEPTANCE BLOCKED.** The Playwright suite and reproducible synthetic fixture have been added, and one live read-only browser reconnaissance run was completed. The actual application workflow could not safely be exercised because the preview uses the production Supabase project and the application is behind an SSO gate with no signed-in test profile available. No data-mutating acceptance test was run, no preview was promoted, and production was not changed.
+
+
+## CI quality-gate results
+
+The final code head before this report-only update, `4f30d1f8f988bffd3d7419c892f545bcc5e6eddc`, passed the main GitHub Actions CI run [37927199069](https://github.com/fuelify12/Id-card/actions/runs/37927199069). The log confirms **9 Vitest files and 59 tests passed**, TypeScript passed, ESLint passed, the optimized production build compiled successfully, the production dependency vulnerability gate passed, repository secret hygiene passed, and the client-bundle security check passed. The full dependency report still listed **3 moderate severity vulnerabilities**.
+
+The existing Phase 8 rendering workflow initially failed because its CI-only environment value `ci-placeholder-not-a-secret` did not match the application's supported Supabase publishable-key format. The placeholder was changed to the same syntactically valid CI-only value used by the main workflow. The subsequent Phase 8 run [37927199105](https://github.com/fuelify12/Id-card/actions/runs/37927199105) passed. No live key was changed.
+
+An earlier main CI attempt at code commit `29edb2fe34386b51e2d64ce05eef350e34881cf3` failed in the Gitleaks action with `failed to scan Git repository: stderr is not empty`. A subsequent run on the later code head passed all security steps. This is recorded rather than hidden.
+
+The report-only commit will trigger its own CI run; no claim is made that that new run has finished. Passing repository CI is not a substitute for executing the Playwright browser suite against an isolated preview.
