@@ -42,7 +42,7 @@ async function currentCards(db: any, projectId: string, uid: string, batchId: st
   if (!batch) throw Object.assign(new Error("Batch not found in this project."), { status: 404 });
   const status = String(batch.status).toLowerCase();
   if (!["completed","completed_with_errors"].includes(status)) throw Object.assign(new Error("Export is available only after the source batch has finished."), { status: 422 });
-  const [{ data: cards, error: ce }, { data: items, error: ie }, { data: students, error: se }, { data: findings, error: fe }, { data: templates, error: te }, { data: photos, error: pe }] = await Promise.all([
+  const [{ data: cards, error: ce }, { data: items, error: ie }, { data: students, error: se }, { error: fe }, { data: templates, error: te }, { data: photos, error: pe }] = await Promise.all([
     db.from("generated_cards").select("id,project_id,owner_id,batch_id,student_id,serial_number,storage_path,filename,status,validation_status,approval_status,template_id,template_version,photo_id,photo_version,output_sha256,output_format,output_width_px,output_height_px,output_dpi,render_input_hash,render_config_snapshot,card_side,generated_at,created_at").eq("project_id", projectId).eq("owner_id", uid).eq("batch_id", batchId).order("serial_number").limit(MAX_CARDS + 1),
     db.from("batch_generation_items").select("id,student_id,serial_number,status,output_card_id,output_storage_path,input_fingerprint,error_summary").eq("project_id", projectId).eq("owner_id", uid).eq("batch_id", batchId).order("serial_number").limit(MAX_CARDS + 1),
     db.from("students").select("id,project_id,owner_id,serial_number,data,updated_at").eq("project_id", projectId).eq("owner_id", uid).limit(MAX_CARDS + 1),
