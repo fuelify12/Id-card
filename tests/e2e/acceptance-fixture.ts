@@ -84,7 +84,7 @@ export async function buildSyntheticAcceptanceFixture(directory: string) {
   // Same bytes under a second filename; the duplicate must not become an approved photo.
   await writeFile(path.join(photosDirectory, "001_duplicate.jpg"), await import("node:fs/promises").then(fs => fs.readFile(photos[0])));
   await writeFile(path.join(photosDirectory, "photo.jpg"), Buffer.from("not an image"));
-  await sharp(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#fff"/></svg>')).png().toFile(path.join(photosDirectory, "004_low.png"));
+  await sharp(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#fff"/></svg>')).png().toFile(path.join(photosDirectory, "low_resolution.png"));
 
   const manifest = {
     schemaVersion: 1,
@@ -96,7 +96,7 @@ export async function buildSyntheticAcceptanceFixture(directory: string) {
       { filename: "017_Synthetic_Student.jpg", expected: "MISSING_PHOTO", reason: "Intentionally omitted." },
       { filename: "001_duplicate.jpg", expected: "DUPLICATE_PHOTO", reason: "Byte-identical to 001_Synthetic_Student.jpg." },
       { filename: "photo.jpg", expected: "INVALID_IMAGE", reason: "Intentionally corrupt bytes." },
-      { filename: "004_low.png", expected: "NEEDS_REVIEW", reason: "16×16 low-resolution image." },
+      { filename: "low_resolution.png", expected: "NEEDS_REVIEW", reason: "16×16 low-resolution image." },
     ],
   };
   const manifestPath = path.join(directory, "manifest.json");
