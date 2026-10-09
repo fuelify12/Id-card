@@ -80,6 +80,10 @@ drop policy if exists "printforge storage delete own folder" on storage.objects;
 drop policy if exists "printforge storage insert own folder" on storage.objects;
 drop policy if exists "printforge storage select own folder" on storage.objects;
 drop policy if exists "printforge storage update own folder" on storage.objects;
+drop policy if exists "printforge tenant object select" on storage.objects;
+drop policy if exists "printforge tenant object insert" on storage.objects;
+drop policy if exists "printforge tenant object update" on storage.objects;
+drop policy if exists "printforge tenant object delete" on storage.objects;
 
 create policy "printforge tenant object select" on storage.objects
   for select to authenticated
@@ -142,6 +146,8 @@ drop policy if exists audit_logs_owner_select on public.audit_logs;
 drop policy if exists audit_logs_owner_insert on public.audit_logs;
 drop policy if exists audit_logs_owner_update on public.audit_logs;
 drop policy if exists audit_logs_owner_delete on public.audit_logs;
+drop policy if exists "audit tenant insert" on public.audit_logs;
+drop policy if exists "audit tenant select" on public.audit_logs;
 create policy audit_logs_owner_select on public.audit_logs
   for select to authenticated using (owner_id = (select auth.uid()));
 
