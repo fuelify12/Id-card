@@ -15,3 +15,26 @@ export async function createTemplatePreview(input:{bucket:StorageBucket;path:str
 export async function uploadProjectFile(input:{projectId:string;bucket:StorageBucket;file:File}){const{s,uid}=await auth();if(!Object.values(STORAGE_BUCKETS).includes(input.bucket))throw new Error("Invalid storage bucket");if(!input.file.size||input.file.size>LIMITS[input.bucket])throw new Error("File exceeds the allowed size");if(!TYPES[input.bucket].includes(input.file.type))throw new Error("File type is not allowed");const{data:project,error:pe}=await s.from("school_projects").select("id").eq("id",input.projectId).maybeSingle();if(pe)throw new Error(pe.message);if(!project)throw new Error("Project not found");const path=projectObjectPath(uid,input.projectId,input.file.name);const{error}=await s.storage.from(input.bucket).upload(path,input.file,{contentType:input.file.type,upsert:false});if(error)throw new Error(error.message);return{bucket:input.bucket,path}}
 export async function createProjectDownload(input:{bucket:StorageBucket;path:string;expiresIn?:number}){const{s}=await auth();if(!Object.values(STORAGE_BUCKETS).includes(input.bucket))throw new Error("Invalid storage bucket");const{data,error}=await s.storage.from(input.bucket).createSignedUrl(input.path,Math.min(Math.max(input.expiresIn??300,30),3600));if(error)throw new Error(error.message);return data.signedUrl}
 export async function saveTemplateFields(input:{projectId:string;templateId:string;fields:Array<{id?:string;key:string;label:string;field_type:string;required:boolean;x:number;y:number;width:number;height:number;font_family:string|null;font_size:number|null;font_weight:string|null;color:string|null;alignment:string|null;fit_mode:string|null;source_column:string|null;confidence:number|null}>}){const{s,uid}=await auth();const{data:t}=await s.from("templates").select("id").eq("id",input.templateId).eq("project_id",input.projectId).maybeSingle();if(!t)throw new Error("Template not found.");const fields=input.fields.slice(0,100).map((f,i)=>({...f,id:undefined,template_id:input.templateId,owner_id:uid,sort_order:i,x:Math.max(0,f.x),y:Math.max(0,f.y),width:Math.max(1,f.width),height:Math.max(1,f.height),confidence:f.confidence==null?1:Math.min(1,Math.max(0,f.confidence))}));const{error:de}=await s.from("template_fields").delete().eq("template_id",input.templateId);if(de)throw new Error(de.message);if(fields.length){const{error:ie}=await s.from("template_fields").insert(fields);if(ie)throw new Error(ie.message)}return{saved:fields.length}}
+export async function importStudentRows(input:{projectId:string;rows:Array<{sourceRow:number;serialNumber:string;values:Record<string,string|number|boolean|null>}>;replaceExisting?:boolean}) {
+ const {s,uid}=await auth();
+ if(!input.rows.length) throw new Error("There are no valid student rows to import.");
+ if(input.rows.length>15000) throw new Error("Import is limited to 15,000 rows per batch.");
+ const {data:project,error:pe}=await s.from("school_projects").select("id").eq("id",input.projectId).maybeSingle();
+ if(pe) throw new Error(pe.message); if(!project) throw new Error("Project not found.");
+ const normalized=input.rows.map(r=>({source_row:r.sourceRow,serial_number:Number(r.serialNumber),data:r.values,owner_id:uid,project_id:input.projectId}));
+ if(normalized.some(r=>!Number.isSafeInteger(r.serial_number)||r.serial_number<0||r.serial_number>2147483647)) throw new Error("Serial numbers must be whole numbers from 0 to 2,147,483,647. Fix invalid rows before importing.");
+ const seen=new Set<number>(); for(const r of normalized){if(seen.has(r.serial_number)) throw new Error("Duplicate serial numbers are not allowed. Fix duplicates before importing.");seen.add(r.serial_number);}
+ const {data:existing,error:ee}=await s.from("students").select("serial_number").eq("project_id",input.projectId).in("serial_number",normalized.map(r=>r.serial_number).slice(0,1000));
+ if(ee) throw new Error(ee.message);
+ if(existing?.length && !input.replaceExisting) throw new Error(`${existing.length} serial number(s) already exist in this project. Remove them from the import or explicitly choose replace existing records.`);
+ if(input.replaceExisting) {
+   for(let i=0;i<normalized.length;i+=500) {
+     const chunk=normalized.slice(i,i+500);
+     for(const r of chunk) { const {error}=await s.from("students").upsert(r,{onConflict:"project_id,serial_number"}); if(error) throw new Error(error.message); }
+   }
+ } else {
+   for(let i=0;i<normalized.length;i+=500) { const {error}=await s.from("students").insert(normalized.slice(i,i+500)); if(error) throw new Error(error.message); }
+ }
+ await s.from("audit_logs").insert({owner_id:uid,project_id:input.projectId,action:"student_spreadsheet_imported",entity_type:"students",metadata:{count:normalized.length,source:"spreadsheet",replaced:!!input.replaceExisting}});
+ return {imported:normalized.length};
+}
