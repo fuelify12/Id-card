@@ -321,6 +321,7 @@ export type Database = {
           id: string
           name: string
           owner_id: string
+          photo_processing_settings: Json
           photo_serial_prefix: string | null
           school_address: string | null
           school_name: string
@@ -333,6 +334,7 @@ export type Database = {
           id?: string
           name: string
           owner_id: string
+          photo_processing_settings?: Json
           photo_serial_prefix?: string | null
           school_address?: string | null
           school_name: string
@@ -345,6 +347,7 @@ export type Database = {
           id?: string
           name?: string
           owner_id?: string
+          photo_processing_settings?: Json
           photo_serial_prefix?: string | null
           school_address?: string | null
           school_name?: string
@@ -360,8 +363,13 @@ export type Database = {
           batch_id: string | null
           content_sha256: string | null
           created_at: string
+          crop_approved_at: string | null
+          crop_approved_by: string | null
+          crop_coordinates: Json
           crop_settings: Json
+          detection_confidence: number | null
           duplicate_of_id: string | null
+          face_count: number | null
           file_size_bytes: number | null
           height_px: number | null
           id: string
@@ -372,8 +380,21 @@ export type Database = {
           mime_type: string
           normalized_serial_number: string | null
           original_filename: string
+          original_height_px: number | null
+          original_orientation: number | null
           original_serial_number: string | null
+          original_width_px: number | null
+          output_aspect_ratio: number | null
+          output_height_px: number | null
+          output_width_px: number | null
           owner_id: string
+          processed_at: string | null
+          processed_storage_path: string | null
+          processing_attempts: number
+          processing_error_code: string | null
+          processing_status: string
+          processing_version: number
+          processing_warnings: Json
           project_id: string
           serial_number: number | null
           storage_path: string
@@ -388,8 +409,13 @@ export type Database = {
           batch_id?: string | null
           content_sha256?: string | null
           created_at?: string
+          crop_approved_at?: string | null
+          crop_approved_by?: string | null
+          crop_coordinates?: Json
           crop_settings?: Json
+          detection_confidence?: number | null
           duplicate_of_id?: string | null
+          face_count?: number | null
           file_size_bytes?: number | null
           height_px?: number | null
           id?: string
@@ -400,8 +426,21 @@ export type Database = {
           mime_type: string
           normalized_serial_number?: string | null
           original_filename: string
+          original_height_px?: number | null
+          original_orientation?: number | null
           original_serial_number?: string | null
+          original_width_px?: number | null
+          output_aspect_ratio?: number | null
+          output_height_px?: number | null
+          output_width_px?: number | null
           owner_id: string
+          processed_at?: string | null
+          processed_storage_path?: string | null
+          processing_attempts?: number
+          processing_error_code?: string | null
+          processing_status?: string
+          processing_version?: number
+          processing_warnings?: Json
           project_id: string
           serial_number?: number | null
           storage_path: string
@@ -416,8 +455,13 @@ export type Database = {
           batch_id?: string | null
           content_sha256?: string | null
           created_at?: string
+          crop_approved_at?: string | null
+          crop_approved_by?: string | null
+          crop_coordinates?: Json
           crop_settings?: Json
+          detection_confidence?: number | null
           duplicate_of_id?: string | null
+          face_count?: number | null
           file_size_bytes?: number | null
           height_px?: number | null
           id?: string
@@ -428,8 +472,21 @@ export type Database = {
           mime_type?: string
           normalized_serial_number?: string | null
           original_filename?: string
+          original_height_px?: number | null
+          original_orientation?: number | null
           original_serial_number?: string | null
+          original_width_px?: number | null
+          output_aspect_ratio?: number | null
+          output_height_px?: number | null
+          output_width_px?: number | null
           owner_id?: string
+          processed_at?: string | null
+          processed_storage_path?: string | null
+          processing_attempts?: number
+          processing_error_code?: string | null
+          processing_status?: string
+          processing_version?: number
+          processing_warnings?: Json
           project_id?: string
           serial_number?: number | null
           storage_path?: string
