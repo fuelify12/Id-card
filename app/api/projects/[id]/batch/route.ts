@@ -23,7 +23,7 @@ async function authProject(projectId: string) {
 async function refreshCounts(db: any, batchId: string, projectId: string) {
   const { data: items, error } = await db.from("batch_generation_items").select("status").eq("batch_id", batchId).eq("project_id", projectId);
   if (error) throw new Error(error.message);
-  const counts = { total_count: items.length, eligible_count: items.length, completed_count: 0, failed_count: 0, review_count: 0, skipped_count: 0, processing_count: 0 };
+  const counts = { total_count: items.length, eligible_count: 0, completed_count: 0, failed_count: 0, review_count: 0, skipped_count: 0, processing_count: 0 };
   for (const item of items) {
     if (item.status === "SUCCEEDED") counts.completed_count++;
     else if (item.status === "FAILED") counts.failed_count++;
