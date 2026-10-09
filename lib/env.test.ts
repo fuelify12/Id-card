@@ -29,7 +29,7 @@ describe("Supabase environment validation", () => {
 
   it("rejects service-role JWTs even though legacy anonymous JWT keys are supported", () => {
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
-    const payload = btoa(JSON.stringify({ role: "service_role" })).replace(/=/g, "").replace(/\\+/g, "-").replace(/\\//g, "_");
+    const payload = btoa(JSON.stringify({ role: "service_role" })).replaceAll("=", "").replaceAll("+", "-").replaceAll("/", "_");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", `eyJhbGciOiJIUzI1NiJ9.${payload}.synthetic-signature`);
     expect(() => getSupabasePublicEnv()).toThrow(/unsupported format/);
   });
