@@ -139,7 +139,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       const cookie = request.headers.get("cookie") ?? "";
       await Promise.all((claimed ?? []).map(async (item: any) => {
         try {
-          const renderResponse = await fetch(new URL("/api/projects/" + projectId + "/render", request.url), { method: "POST", headers: { "content-type": "application/json", cookie }, body: JSON.stringify({ action: "render", studentId: item.student_id }) });
+          const renderResponse = await fetch(new URL("/api/projects/" + projectId + "/render", request.url), { method: "POST", headers: { "content-type": "application/json", cookie }, body: JSON.stringify({ action: "render", studentId: item.student_id, templateId: batch.template_id, templateVersion: batch.template_version }) });
           const result = await renderResponse.json().catch(() => ({}));
           if (!renderResponse.ok || !result.ok || !result.cardId || !result.previewUrl) {
             const permanent = renderResponse.status === 400 || renderResponse.status === 403 || renderResponse.status === 404 || renderResponse.status === 422;
