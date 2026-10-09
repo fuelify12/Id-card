@@ -74,7 +74,8 @@ test("isolated school-order UI smoke: authenticate, persist a project, upload te
     await page.reload();
     await expect(page.getByRole("heading", { name: projectName })).toBeVisible();
     await expect(page.getByRole("heading", { name: /Student photos & serial matching/i })).toBeVisible();
-    await expect(page.getByText("300", { exact: true }).first()).toBeVisible();
+    const studentMetric = page.locator("#student-photos").getByText("Students", { exact: true }).locator("xpath=..");
+    await expect.poll(async () => (await studentMetric.innerText()).replace(/[^0-9]/g, "")).toContain(String(expectedAccepted));
 
     // Upload only a bounded representative photo subset in this smoke journey.
     // The 300-photo/full persisted-worker run is a separate, explicitly gated acceptance test.
