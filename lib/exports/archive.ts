@@ -9,7 +9,7 @@ export type ExportCardLike = {
 };
 export function safeFilenamePart(input: unknown, fallback = "card", maxLength = 80): string {
   const raw = String(input ?? "").normalize("NFKC").replace(/[\\/\u0000-\u001f\u007f]/g, "-");
-  const safe = raw.replace(/[^\p{L}\p{N}._ -]/gu, "").replace(/\s+/g, "_").replace(/\.{2,}/g, ".").replace(/^\.+|\.+$/g, "").replace(/[-_]{2,}/g, "_").slice(0, maxLength);
+  const safe = raw.replace(/[^\p{L}\p{M}\p{N}._ -]/gu, "").replace(/\s+/g, "_").replace(/\.{2,}/g, ".").replace(/^\.+|\.+$/g, "").replace(/[-_]{2,}/g, "_").slice(0, maxLength);
   return safe && safe !== "." && safe !== ".." ? safe : fallback;
 }
 export function uniqueArchiveName(candidate: string, used: Set<string>): string {

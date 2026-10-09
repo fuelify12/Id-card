@@ -256,7 +256,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{id:
       actualManifest.push({item_number:processed,serial_number:item.serialNumber,student_ref:item.studentRef,filename:archiveName,side:item.side,format:outFormat,validation_status:card.validation_status,template_version:card.template_version,batch_id:job.batch_id,exported_at:new Date().toISOString()});
       const {error:peu}=await db.from("exports").update({packaged_file_count:processed,failed_item_count:failed,status:"running",updated_at:new Date().toISOString()}).eq("id",exportId).eq("owner_id",uid);
       if(peu)throw new Error("Could not persist export progress.");
-      if(processed%10===0){const size=(await stat(zipPath).catch(()=>({size:0} as any))).size;if(size>MAX_ARCHIVE_BYTES)throw Object.assign(new Error("Archive exceeded the 90 MB storage safety limit."),{code:"ARCHIVE_LIMIT"});}
+      {const size=(await stat(zipPath).catch(()=>({size:0} as any))).size;if(size>MAX_ARCHIVE_BYTES)throw Object.assign(new Error("Archive exceeded the 90 MB storage safety limit."),{code:"ARCHIVE_LIMIT"});}
     }
     if(!processed)throw new Error("No cards remained eligible when packaging began. Run preflight and create a new export.");
     if(job.options?.includeManifest!==false){
