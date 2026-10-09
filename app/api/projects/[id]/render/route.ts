@@ -38,9 +38,10 @@ export async function POST(req:Request,{params}:{params:Promise<{id:string}>}) {
   const fields=await loadFields(s,templateId,uid);
   if(!fields.length)return NextResponse.json({error:"Define at least one template field before rendering."},{status:422});
   if(fields.some(f=>f.required&&!photoField(f)&&!f.source_column&&!f.static_value&&f.key.toLowerCase()!=="school_name"))return NextResponse.json({error:"A required template field has no data mapping or static value.",fields:fields.filter(f=>f.required&&!photoField(f)&&!f.source_column&&!f.static_value&&f.key.toLowerCase()!=="school_name").map(f=>f.label)},{status:422});
+  if(body.format!==undefined&&!["png","jpeg"].includes(body.format))return NextResponse.json({error:"Output format must be PNG or JPEG."},{status:400});
   if(body.action==="preflight") {
    const widthMm=Number(body.widthMm),heightMm=Number(body.heightMm),dpi=Number(body.dpi);let dims:any=null,sizeError:string|null=null;
-   try{dims=validatePhysicalSize(widthMm,heightMm,dpi);if(template.width_px&&template.height_px&&Math.abs((template.width_px/template.height_px)/(dims.outputWidth/dims.outputHeight)-1)>.015)sizeError="Physical dimensions do not match template aspect ratio."}catch(e){sizeError=e instanceof Error?e.message:"Invalid physical dimensions"}
+   try{dims=validatePhysicalSize(widthMm,heightMm,dpi);if(template.width_px&&template.height_px&&Math.abs((template.width_px/template.height_px)/(dims.outputWidth/dims.outputHeight)-1)>.005)sizeError="Physical dimensions do not match template aspect ratio."}catch(e){sizeError=e instanceof Error?e.message:"Invalid physical dimensions"}
    const students:any[]=[];for(let from=0;from<15000;from+=1000){const {data,error}=await s.from("students").select("id,serial_number,data").eq("project_id",projectId).eq("owner_id",uid).order("serial_number").range(from,from+999);if(error)throw new Error(error.message);students.push(...(data??[]));if((data??[]).length<1000)break}
    const {data:photos,error:pe}=await s.from("student_photos").select("student_id,match_status,processing_status,crop_approved_at").eq("project_id",projectId).eq("owner_id",uid).not("student_id","is",null);
    if(pe)throw new Error(pe.message);
@@ -52,6 +53,7 @@ export async function POST(req:Request,{params}:{params:Promise<{id:string}>}) {
   if(body.action!=="render")return NextResponse.json({error:"Unsupported action."},{status:400});
   const studentId=typeof body.studentId==="string"?body.studentId:"";
   const widthMm=Number(body.widthMm),heightMm=Number(body.heightMm),dpi=Number(body.dpi);
+  if(body.format!==undefined&&!["png","jpeg"].includes(body.format))return NextResponse.json({error:"Output format must be PNG or JPEG."},{status:400});
   const format:OutputFormat=body.format==="jpeg"?"jpeg":"png";
   const {outputWidth,outputHeight}=validatePhysicalSize(widthMm,heightMm,dpi);
   const {data:student,error:se}=await s.from("students").select("id,serial_number,data").eq("id",studentId).eq("project_id",projectId).eq("owner_id",uid).maybeSingle();
