@@ -46,6 +46,17 @@ node scripts/client-bundle-security-check.mjs
 
 The workflow's full dependency audit JSON and generated package lock are published as a short-lived CI artifact for review. A reviewed `package-lock.json` is not committed yet, so dependency installation is not yet fully reproducible from a committed lockfile. Do not replace `npm install` with `npm ci` until the lockfile has been generated, reviewed and committed.
 
+## Actual CI verification (2026-10-09)
+
+Latest successful workflow on the Phase 14 changes: https://github.com/fuelify12/Id-card/actions/runs/37922278963 (commit `680422a3f7f54eb4d869d052ec16bdbd1ec11e1e`).
+
+- **PASSED:** 15 test files, 107 tests; no skipped tests reported by Vitest.
+- **PASSED:** `npm run typecheck`, `npm run lint`, production `npm run build`, production dependency gate `npm audit --omit=dev --audit-level=high`, Gitleaks, full-history secret scan, tracked-file secret hygiene, and generated-client-bundle secret check (18 static files scanned).
+- **PASSED, synthetic workload only:** 300 actual card renders with concurrency capped at 3, archive creation, expected-entry verification and missing-entry rejection; renderer loop measured approximately 3.0–3.2 seconds on the GitHub-hosted CI runner. This is not the persistent serverless batch worker benchmark.
+- **FOUND, non-blocking for the configured production gate:** full-tree `npm audit` reports 3 moderate advisories in the TensorFlow.js → argparse → sprintf-js dependency chain. The suggested automatic fix is a breaking TensorFlow.js downgrade and was not applied.
+- **NOT TESTED:** live browser E2E, real Supabase two-tenant/Storage integration, persisted 300-card worker recovery, physical mobile/camera, backup restore, and production deployment. These remain release blockers as stated above.
+- The CI job uses `npm install` because the repository still has no committed lockfile; a generated lockfile and audit JSON are retained only as a short-lived artifact.
+
 ## Environment-dependent gates still required
 
 1. Provision a **disposable Supabase test project/branch** with synthetic users for at least two tenants. Apply all migrations in order and run `supabase/tests/phase13_security.sql`, `supabase/tests/phase13_security_assertions.sql`, and `supabase/tests/phase13_tenant_isolation.integration.sql` only against that isolated test database. Verify SELECT/INSERT/UPDATE/DELETE and Storage CRUD from both identities. Do not run destructive fixtures against production.
