@@ -33,7 +33,6 @@ describe("GET /api/health", () => {
   it("fails closed when required configuration is missing", async () => {
     delete process.env.NEXT_PUBLIC_SUPABASE_URL;
     delete process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-    process.env.NODE_ENV = "production";
     vi.resetModules();
     const { GET } = await import("../app/api/health/route");
     const response = await GET();
