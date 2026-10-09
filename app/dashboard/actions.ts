@@ -24,14 +24,13 @@ export async function importStudentRows(input:{projectId:string;rows:Array<{sour
  const normalized=input.rows.map(r=>({source_row:r.sourceRow,serial_number:Number(r.serialNumber),data:r.values,owner_id:uid,project_id:input.projectId}));
  if(normalized.some(r=>!Number.isSafeInteger(r.serial_number)||r.serial_number<0||r.serial_number>2147483647)) throw new Error("Serial numbers must be whole numbers from 0 to 2,147,483,647. Fix invalid rows before importing.");
  const seen=new Set<number>(); for(const r of normalized){if(seen.has(r.serial_number)) throw new Error("Duplicate serial numbers are not allowed. Fix duplicates before importing.");seen.add(r.serial_number);}
- const {data:existing,error:ee}=await s.from("students").select("serial_number").eq("project_id",input.projectId).in("serial_number",normalized.map(r=>r.serial_number).slice(0,1000));
+ const {data:existing,error:ee}=await s.from("students").select("serial_number").eq("project_id",input.projectId);
  if(ee) throw new Error(ee.message);
- if(existing?.length && !input.replaceExisting) throw new Error(`${existing.length} serial number(s) already exist in this project. Remove them from the import or explicitly choose replace existing records.`);
+ const incoming=new Set(normalized.map(r=>r.serial_number));
+ const collisions=(existing??[]).filter(r=>incoming.has(r.serial_number));
+ if(collisions.length && !input.replaceExisting) throw new Error(`${collisions.length} serial number(s) already exist in this project. Remove them from the import or explicitly choose replace existing records.`);
  if(input.replaceExisting) {
-   for(let i=0;i<normalized.length;i+=500) {
-     const chunk=normalized.slice(i,i+500);
-     for(const r of chunk) { const {error}=await s.from("students").upsert(r,{onConflict:"project_id,serial_number"}); if(error) throw new Error(error.message); }
-   }
+   for(let i=0;i<normalized.length;i+=500) { const {error}=await s.from("students").upsert(normalized.slice(i,i+500),{onConflict:"project_id,serial_number"}); if(error) throw new Error(error.message); }
  } else {
    for(let i=0;i<normalized.length;i+=500) { const {error}=await s.from("students").insert(normalized.slice(i,i+500)); if(error) throw new Error(error.message); }
  }
