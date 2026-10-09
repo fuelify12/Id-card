@@ -24,8 +24,20 @@ export function getSupabasePublicEnv(): SupabasePublicEnv {
     throw new Error("Supabase must use HTTPS outside local development.");
   }
 
-  // Modern publishable keys are preferred; allow legacy anon JWTs for backwards compatibility.
-  if (!publishableKey.startsWith("sb_publishable_") && !publishableKey.startsWith("eyJ")) {
+  // Modern publishable keys are preferred. For legacy JWT anon keys, inspect the role
+  // claim rather than accepting any JWT (which could accidentally be a service-role key).
+  const isLegacyAnonKey = (() => {
+    const parts = publishableKey.split(".");
+    if (parts.length !== 3 || !parts[0].startsWith("eyJ")) return false;
+    try {
+      let payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+      payload += "=".repeat((4 - (payload.length % 4)) % 4);
+      return JSON.parse(atob(payload)).role === "anon";
+    } catch {
+      return false;
+    }
+  })();
+  if (!publishableKey.startsWith("sb_publishable_") && !isLegacyAnonKey) {
     throw new Error("Supabase publishable key has an unsupported format.");
   }
 
