@@ -1,5 +1,5 @@
 import type { NextConfig } from "next";
-import { getSecurityHeaders } from "@/lib/security/headers";
+import { getSecurityHeaders } from "./lib/security/headers";
 
 const securityHeaders = [
   ...getSecurityHeaders(process.env.NODE_ENV === "production").map(({ key, value }) => ({
