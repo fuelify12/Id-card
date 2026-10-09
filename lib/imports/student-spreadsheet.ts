@@ -24,6 +24,13 @@ function cellText(v: unknown): CellValue {
   return String(v);
 }
 function rowBlank(row: unknown[]) { return row.every(v => v === null || v === undefined || String(v).trim() === ""); }
+function serialDuplicateKey(value: string): string {
+  const normalized = value.normalize("NFKC").trim();
+  if (/^\d+$/.test(normalized)) {
+    try { return BigInt(normalized).toString(); } catch { /* fall through to stable text key */ }
+  }
+  return normalized;
+}
 export function parseWorkbook(buffer: ArrayBuffer, fileName: string): SpreadsheetPreview {
   if (buffer.byteLength > 25 * 1024 * 1024) throw new Error("Spreadsheet exceeds 25 MB.");
   const ext = fileName.toLowerCase().split(".").pop();
@@ -69,8 +76,8 @@ export function parseWorkbook(buffer: ArrayBuffer, fileName: string): Spreadshee
     rows.push({sourceRow:r+1,values,serialNumber,issues,blank:false});
   }
   const counts = new Map<string,number>();
-  rows.forEach(r=>{ if(r.serialNumber) counts.set(r.serialNumber,(counts.get(r.serialNumber)??0)+1); });
-  rows.forEach(r=>{ if(r.serialNumber && (counts.get(r.serialNumber)??0)>1) r.issues.push("Duplicate serial number"); });
+  rows.forEach(r=>{ if(r.serialNumber) { const key=serialDuplicateKey(r.serialNumber); counts.set(key,(counts.get(key)??0)+1); } });
+  rows.forEach(r=>{ if(r.serialNumber && (counts.get(serialDuplicateKey(r.serialNumber))??0)>1) r.issues.push("Duplicate serial number"); });
   const dataRows = rows.filter(r=>!r.blank);
   return {sheetName:chosen.name,headers,normalizedHeaders,headerRow:chosen.headerIndex+1,serialColumn,rows,summary:{total:dataRows.length,blank:rows.filter(r=>r.blank).length,missingSerial:dataRows.filter(r=>!r.serialNumber).length,duplicates:dataRows.filter(r=>r.issues.includes("Duplicate serial number")).length,invalid:dataRows.filter(r=>r.issues.length>0).length}};
 }
@@ -81,9 +88,10 @@ export function validateStudentRows(rows: ParsedStudentRow[], serialColumn: stri
     const raw = serialColumn ? r.values[serialColumn] : null;
     const serial = raw === null || raw === undefined ? "" : String(raw).trim();
     if (!serial) issues.push("Missing serial number");
-    else if (!/^\\d+$/.test(serial)) issues.push("Serial number must be a whole number");
-    if (serial && seen.has(serial)) issues.push("Duplicate serial number");
-    if (serial) seen.add(serial);
+    else if (!/^\d+$/.test(serial)) issues.push("Serial number must be a whole number");
+    const serialKey = serial ? serialDuplicateKey(serial) : "";
+    if (serialKey && seen.has(serialKey)) issues.push("Duplicate serial number");
+    if (serialKey) seen.add(serialKey);
     if (!Object.values(r.values).some(v=>v!==null && String(v).trim()!=="")) issues.push("Row contains no values");
     return {...r,serialNumber:serial||null,issues};
   });
