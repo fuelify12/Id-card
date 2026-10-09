@@ -82,3 +82,18 @@ The previous Phase 14 CI run documented 15 test files / 107 tests, plus the 300-
 No production traffic, production data, live secrets or backups were changed by this phase.
 
 **Launch decision: NOT READY FOR LAUNCH.** The current automated and synthetic coverage is useful but does not establish real-world tenant isolation, persisted batch recovery, secure download behavior, final visual correctness or operational recovery.
+
+
+## Read-only live Supabase verification
+
+The connected Supabase project named `Id-card` (ref `xdoenkusrakuyyxnnkff`) was confirmed `ACTIVE_HEALTHY` in `ap-south-1`. These were read-only checks; no production DDL or data changes were made.
+
+- Migration history contains Phase 1 foundation, Phase 6 photo matching/storage hardening, Phase 7 processing, Phase 8 rendering, Phase 9 batch, Phase 10 validation, Phase 11 export, and Phase 13 security migrations through `phase13_photo_processing_quota`. There are no Phase 14–16 database migrations expected by the currently inspected tree.
+- Catalog query found no `public` tables with row-level security disabled.
+- All five PrintForge buckets inspected are private (`public=false`): templates, student photos, generated cards, exports and the private bucket.
+- `storage.objects` currently contains 0 rows. This confirms there were no stored files to test; it does not prove upload/download authorization.
+- 62 public-schema foreign-key constraints are validated and 2 remain `NOT VALID`: `student_photos_project_owner_fkey` and `student_photos_student_project_fkey`. The read-only count query found 0 `student_photos` rows and 0 mismatches at inspection time. These constraints remain unvalidated in production and should be reconciled/validated under an approved migration procedure before launch; they were not changed in this phase.
+- Security advisor still reports one warning: signed-in users can execute the `SECURITY DEFINER` function `public.consume_security_rate_limit`. The function was observed to deny `anon` execution and allow `authenticated`; code and SQL guardrails are documented in Phase 13, but the advisor warning remains open for explicit security review.
+- Performance advisor reports 28 foreign-key indexes without a covering index. This is a performance follow-up requiring index-by-index review and migration planning; no production indexes were changed in this acceptance phase.
+
+The live checks do not constitute two-tenant behavioral RLS tests because no separate synthetic tenant sessions were used. No student records or personal content were queried.
