@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const envKeys = [
   "NEXT_PUBLIC_SUPABASE_URL",
   "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
-  "NODE_ENV",
 ] as const;
 const original = new Map(envKeys.map((key) => [key, process.env[key]]));
 
@@ -20,7 +19,6 @@ describe("GET /api/health", () => {
   it("returns minimal readiness without disclosing configuration", async () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_test_placeholder";
-    process.env.NODE_ENV = "production";
     vi.resetModules();
     const { GET } = await import("../app/api/health/route");
     const response = await GET();
