@@ -44,9 +44,9 @@ The audit returns a separate `humanReviewRequired` list for successful records. 
 | Rendering metadata and Devanagari font coverage | PARTIAL | Existing synthetic render/unit tests; no golden-image visual comparison or print examination |
 | Dependency audit | PARTIAL | Existing CI production gate passed on previous commit; full audit previously reported 3 moderate TensorFlow.js dependency-chain advisories |
 | Lockfile installation | BLOCKED | No committed lockfile; CI uses npm install |
-| Production build/lint/typecheck on final head | PENDING | Must check the final CI result |
+| Production build/lint/typecheck | PASSED on source commit `e8b9ce96925c35813e606af1e68ddd7c5d2914a6`; docs-only release-head run pending | CI run 37924388911 passed unit tests, typecheck, lint, build, production dependency gate, repository secret hygiene and client-bundle check |
 | Live monitoring/alerts and backup restore | NOT TESTED | Phase 15 runbook is documentation, not proof of configured alerts or a successful restore |
-| Production deployment / smoke test | NOT TESTED | No deployment or traffic change was authorized |
+| Phase 16 production deployment / smoke test | NOT DEPLOYED / NOT TESTED | No deployment matching the Phase 16 release commit exists; no traffic was changed |
 
 ## Commands and evidence
 
@@ -97,3 +97,10 @@ The connected Supabase project named `Id-card` (ref `xdoenkusrakuyyxnnkff`) was 
 - Performance advisor reports 28 foreign-key indexes without a covering index. This is a performance follow-up requiring index-by-index review and migration planning; no production indexes were changed in this acceptance phase.
 
 The live checks do not constitute two-tenant behavioral RLS tests because no separate synthetic tenant sessions were used. No student records or personal content were queried.
+
+
+## Read-only Vercel deployment inventory
+
+The connected Vercel account has a project named `printforge-id-card-studio` configured for Next.js. The latest listed production-target deployment was `READY` on an earlier commit (`2b2358895043859581657f3b95ef30f76bf2d585`, message `fix: correct SVG sanitizer test formatting`), not this Phase 16 release. A deployment lookup for release commit `486eef4742119f21fd473bbef2b87004e58c866d` returned no deployments. Therefore, an earlier production-target deployment exists, but **Phase 16 has not been deployed**. No deployment or rollback action was performed.
+
+Vercel project metadata reports Node.js `24.x`, while CI uses Node.js `22`; runtime parity should be deliberately reviewed before release. The project metadata also reports SSO protection for non-custom domains, while password protection is disabled. This metadata is not a live browser/authentication smoke test. No production environment variable values were retrieved or changed.
