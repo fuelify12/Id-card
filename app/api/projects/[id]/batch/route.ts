@@ -21,19 +21,35 @@ async function authProject(projectId: string) {
   return { db, uid, project };
 }
 async function refreshCounts(db: any, batchId: string, projectId: string) {
-  const { data: items, error } = await db.from("batch_generation_items").select("status").eq("batch_id", batchId).eq("project_id", projectId);
+  const [{ data: items, error }, { data: currentBatch, error: batchError }] = await Promise.all([
+    db.from("batch_generation_items").select("status").eq("batch_id", batchId).eq("project_id", projectId),
+    db.from("batches").select("status,eligible_count,started_at,completed_at").eq("id", batchId).eq("project_id", projectId).maybeSingle(),
+  ]);
   if (error) throw new Error(error.message);
-  const counts = { total_count: items.length, eligible_count: 0, completed_count: 0, failed_count: 0, review_count: 0, skipped_count: 0, processing_count: 0 };
-  for (const item of items) {
+  if (batchError) throw new Error(batchError.message);
+  if (!currentBatch) throw new Error("Batch no longer exists.");
+  const counts = { total_count: (items ?? []).length, eligible_count: 0, completed_count: 0, failed_count: 0, review_count: 0, skipped_count: 0, processing_count: 0 };
+  for (const item of items ?? []) {
     if (item.status === "SUCCEEDED") counts.completed_count++;
     else if (item.status === "FAILED") counts.failed_count++;
     else if (item.status === "NEEDS_REVIEW") counts.review_count++;
     else if (item.status === "SKIPPED") counts.skipped_count++;
     else if (item.status === "PROCESSING") counts.processing_count++;
   }
+  counts.eligible_count = counts.total_count - counts.skipped_count;
   const terminal = counts.completed_count + counts.failed_count + counts.review_count + counts.skipped_count;
-  const state = terminal === counts.total_count ? (counts.failed_count || counts.review_count ? "completed_with_errors" : "completed") : counts.processing_count ? "running" : "queued";
-  await db.from("batches").update({ ...counts, status: state, heartbeat_at: new Date().toISOString(), ...(TERMINAL.has(state) ? { completed_at: new Date().toISOString() } : {}) }).eq("id", batchId).eq("project_id", projectId);
+  const existingState = String(currentBatch.status ?? "").toLowerCase();
+  // Status reads must never undo a user's pause or cancellation.
+  const state = existingState === "cancelled" ? "cancelled"
+    : existingState === "paused" || existingState === "pausing" ? existingState
+    : terminal === counts.total_count
+      ? (counts.failed_count || counts.review_count || counts.skipped_count ? "completed_with_errors" : "completed")
+      : counts.processing_count ? "running" : "queued";
+  const update: Record<string, unknown> = { ...counts, status: state, heartbeat_at: new Date().toISOString() };
+  if (TERMINAL.has(state) && !currentBatch.completed_at) update.completed_at = new Date().toISOString();
+  if (!TERMINAL.has(state)) update.completed_at = null;
+  const { error: updateError } = await db.from("batches").update(update).eq("id", batchId).eq("project_id", projectId);
+  if (updateError) throw new Error(updateError.message);
   return { ...counts, status: state };
 }
 
