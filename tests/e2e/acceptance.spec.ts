@@ -81,12 +81,21 @@ test("isolated school-order UI smoke: authenticate, persist a project, upload te
     const photoFiles = [
       path.join(fixture.photosDirectory, "001_Synthetic_Student.jpg"),
       path.join(fixture.photosDirectory, "002_Synthetic_Student.jpg"),
-      path.join(fixture.photosDirectory, "017_Synthetic_Student.jpg"),
+      path.join(fixture.photosDirectory, "003_Synthetic_Student.jpg"),
     ];
-    // 017 is intentionally absent; assert the fixture's omission rather than fabricate a successful upload.
-    const availablePhotoFiles = photoFiles.filter(async file => file);
     const photoInput = page.locator('input[type="file"][accept*=".zip"]');
     await expect(photoInput).toHaveCount(1);
+    await photoInput.setInputFiles(photoFiles);
+    await page.getByRole("button", { name: "Upload / retry", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: /Batch finished: 3 files recorded/i })).toBeVisible({ timeout: 60_000 });
+    await page.getByRole("button", { name: "Process / Match Photos", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: /Processed 3 photos/i })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("001_Synthetic_Student.jpg", { exact: true })).toBeVisible();
+    await expect(page.getByText("002_Synthetic_Student.jpg", { exact: true })).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByRole("heading", { name: /Student photos & serial matching/i })).toBeVisible();
+    await expect(page.getByText("001_Synthetic_Student.jpg", { exact: true })).toBeVisible();
     await testInfo.attach("synthetic-fixture-manifest.json", {
       path: fixture.manifestPath,
       contentType: "application/json",
@@ -95,7 +104,6 @@ test("isolated school-order UI smoke: authenticate, persist a project, upload te
       path: fixture.templatePath,
       contentType: "image/png",
     });
-    expect(availablePhotoFiles.length).toBe(3);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
