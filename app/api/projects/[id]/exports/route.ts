@@ -10,6 +10,7 @@ import { PDFDocument } from "pdf-lib";
 import { createClient } from "@/lib/supabase/server";
 import { STORAGE_BUCKETS } from "@/lib/supabase/storage";
 import { buildManifests, chooseCardSides, csvCell, exportEligibilityReasons, safeFilenamePart, sha256, sourceFormatSupports, uniqueArchiveName, verifyZipDirectory } from "@/lib/exports/archive";
+import { consumeRateLimit } from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -132,6 +133,13 @@ export async function POST(request: Request, { params }: { params: Promise<{id:s
   const { db, uid, project } = auth; let body:any; try { body=await request.json(); } catch { return fail("Request body must be valid JSON."); }
   if (body?.action !== "create") return fail("Unsupported export action.");
   if (body.confirm !== true) return fail("Confirm the export options before creating the archive.");
+  const rateLimit = await consumeRateLimit(db, "zip_export", 3, 60);
+  if (!rateLimit.allowed) {
+    return fail(
+      rateLimit.unavailable ? "Export service is temporarily unavailable. Try again shortly." : "Too many export requests. Wait before creating another archive.",
+      rateLimit.unavailable ? 503 : 429,
+    );
+  }
   const batchId = String(body.batchId??"");
   const side = body.side === "both" ? "both" : "front";
   const format = ["original","png","jpeg","pdf"].includes(body.format) ? body.format : "original";
