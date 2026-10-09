@@ -9,6 +9,8 @@ declare
   v_triggers integer;
   v_constraints integer;
   v_public_buckets integer;
+  v_unvalidated_constraints integer;
+  v_public_function_exec integer;
 begin
   select count(*), count(*) filter (where c.relrowsecurity)
     into v_tables, v_rls
@@ -64,6 +66,27 @@ begin
       and array_to_string(p.proconfig, ',') like '%search_path=pg_catalog, public%'
   ) then
     raise exception 'Rate-limit function assertion failed: SECURITY DEFINER or safe search_path is missing';
+  end if;
+
+  if position('p_limit is distinct from v_limit' in pg_get_functiondef('public.consume_security_rate_limit(text,integer,integer)'::regprocedure)) = 0
+     or position('p_window_seconds is distinct from v_window_seconds' in pg_get_functiondef('public.consume_security_rate_limit(text,integer,integer)'::regprocedure)) = 0 then
+    raise exception 'Rate-limit function assertion failed: caller-supplied quotas are not pinned to trusted limits';
+  end if;
+
+  select count(*) into v_public_function_exec
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.prokind = 'f'
+     and has_function_privilege('anon', p.oid, 'EXECUTE');
+  if v_public_function_exec <> 0 then
+    raise exception 'Function privilege assertion failed: anonymous role can execute % public functions', v_public_function_exec;
+  end if;
+
+  select count(*) into v_unvalidated_constraints
+    from pg_constraint
+   where connamespace = 'public'::regnamespace
+     and conname like '%security_fkey' and not convalidated;
+  if v_unvalidated_constraints <> 0 then
+    raise exception 'Tenant integrity assertion failed: % constraints remain unvalidated', v_unvalidated_constraints;
   end if;
 
   select count(*) into v_public_buckets from storage.buckets
