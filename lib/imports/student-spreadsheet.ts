@@ -81,6 +81,7 @@ export function validateStudentRows(rows: ParsedStudentRow[], serialColumn: stri
     const raw = serialColumn ? r.values[serialColumn] : null;
     const serial = raw === null || raw === undefined ? "" : String(raw).trim();
     if (!serial) issues.push("Missing serial number");
+    else if (!/^\\d+$/.test(serial)) issues.push("Serial number must be a whole number");
     if (serial && seen.has(serial)) issues.push("Duplicate serial number");
     if (serial) seen.add(serial);
     if (!Object.values(r.values).some(v=>v!==null && String(v).trim()!=="")) issues.push("Row contains no values");
