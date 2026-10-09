@@ -1,27 +1,35 @@
 name: CI
+
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+
 permissions:
   contents: read
+  security-events: write
+
 jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-      - name: Repository secret hygiene
-        run: node scripts/security-check.mjs
-      - name: Production dependency vulnerability gate
-        run: npm audit --omit=dev --audit-level=critical
-      - name: Unit and security tests
+      - name: Dependency vulnerability audit
+        run: npm audit --audit-level=high
+      - name: Secret scanning
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Unit tests
         run: npm test
       - name: TypeScript
         run: npm run typecheck
