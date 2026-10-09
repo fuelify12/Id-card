@@ -25,7 +25,7 @@ describe("Phase 11 ZIP export helpers", () => {
     expect(buildManifests([{ filename:"=HYPERLINK(\"https://bad\")" }],"id","now").csv).toContain("\"'=HYPERLINK");
   });
   it("excludes unapproved, failed, and critically flagged cards", () => {
-    const card = {id:"c",student_id:"s",serial_number:1,status:"generated",validation_status:"passed",approval_status:"approved",storage_path:"u/p/c.png",output_sha256:"abc"};
+    const card = {id:"c",student_id:"s",serial_number:1,status:"generated",validation_status:"passed",approval_status:"approved",output_format:"png",storage_path:"u/p/c.png",output_sha256:"abc"};
     expect(exportEligibilityReasons({...card,approval_status:"pending"})).toContain("Card has not been explicitly approved.");
     expect(exportEligibilityReasons(card,[{severity:"CRITICAL",status:"OPEN"}])).toContain("Unresolved critical/error validation findings exist.");
   });
@@ -47,7 +47,7 @@ describe("Phase 11 ZIP export helpers", () => {
     expect(verifyZipDirectory(bytes,["front/002.png","manifest.json"]).ok).toBe(false);
   });
   it("handles a 300-student synthetic eligibility report without dropping leading-zero serials", () => {
-    const cards = Array.from({length:300},(_,i)=>({id:String(i),student_id:String(i),serial_number:i+1,status:"generated",validation_status:"passed",approval_status:"approved",storage_path:`u/p/${i}.png`,output_sha256:"hash"}));
+    const cards = Array.from({length:300},(_,i)=>({id:String(i),student_id:String(i),serial_number:i+1,status:"generated",validation_status:"passed",approval_status:"approved",output_format:"png",storage_path:`u/p/${i}.png`,output_sha256:"hash"}));
     const eligible = cards.filter(c=>exportEligibilityReasons(c).length===0);
     expect(eligible).toHaveLength(300);
     expect(safeFilenamePart(String(eligible[0].serial_number).padStart(3,"0"))).toBe("001");
