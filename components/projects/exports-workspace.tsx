@@ -18,7 +18,8 @@ export function ExportsWorkspace({projectId}:{projectId:string}){
  const job=useMemo(()=>exports.find(x=>x.id===activeId),[exports,activeId]);
  useEffect(()=>{if(job&&["completed","completed_with_errors","failed","expired","cancelled"].includes(String(job.status).toLowerCase()))setActiveId("")},[job]);
  const allSelected=!!report&&report.eligibleStudentIds.length>0&&report.eligibleStudentIds.every(x=>selected.includes(x));
- async function processJob(exportId:string){setActiveId(exportId);try{const r=await fetch("/api/projects/"+projectId+"/exports",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({exportId})});const j=await r.json();if(!r.ok)throw new Error(j.error||"Export processing failed.");await refresh();setNotice("ZIP archive is ready.")}catch(e){setError(e instanceof Error?e.message:"Export processing failed.");await refresh()}}\n async function createExport(){
+ async function processJob(exportId:string){setActiveId(exportId);try{const r=await fetch("/api/projects/"+projectId+"/exports",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({exportId})});const j=await r.json();if(!r.ok)throw new Error(j.error||"Export processing failed.");await refresh();setNotice("ZIP archive is ready.")}catch(e){setError(e instanceof Error?e.message:"Export processing failed.");await refresh()}}
+ async function createExport(){
   if(!report||!batchId||selected.length===0){setError("Select at least one eligible student.");return}
   if(!window.confirm("Create a ZIP from "+selected.length+" selected students? Only currently approved and validated card outputs will be packaged."))return;
   setBusy(true);setError("");setNotice("");
