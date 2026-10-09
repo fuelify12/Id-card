@@ -1,1 +1,1 @@
-import type{NextConfig}from"next";const nextConfig:NextConfig={poweredByHeader:false,reactStrictMode:true};export default nextConfig;
+import type{NextConfig}from"next";const nextConfig:NextConfig={poweredByHeader:false,reactStrictMode:true,outputFileTracingIncludes:{"/api/projects/*/render":["./node_modules/@fontsource/noto-sans*/files/*.woff2"]}};export default nextConfig;
