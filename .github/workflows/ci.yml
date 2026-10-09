@@ -56,4 +56,7 @@ jobs:
       - name: Lint
         run: npm run lint
       - name: Production build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_only_placeholder
         run: npm run build
