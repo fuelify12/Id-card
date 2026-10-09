@@ -7,3 +7,7 @@ coverage/
 !.env.example
 .vercel/
 *.log
+# Browser automation output (may contain sensitive page content)
+playwright-report/
+test-results/
+playwright/.cache/
