@@ -1,5 +1,7 @@
 export type SecurityHeader = { key: string; value: string };
 
+export const PRIVATE_RESPONSE_CACHE_CONTROL = "private, no-store, max-age=0";
+
 export function getSecurityHeaders(production = process.env.NODE_ENV === "production"): SecurityHeader[] {
   const csp = [
     "default-src 'self'",
@@ -25,7 +27,6 @@ export function getSecurityHeaders(production = process.env.NODE_ENV === "produc
     { key: "Referrer-Policy", value: "no-referrer" },
     { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=(), payment=()" },
     { key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" },
-    { key: "Cache-Control", value: "private, no-store, max-age=0" },
   ];
   if (production) {
     values.push({ key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" });
