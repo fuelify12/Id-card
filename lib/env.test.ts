@@ -27,9 +27,10 @@ describe("Supabase environment validation", () => {
     expect(() => getSupabasePublicEnv()).toThrow(/must use HTTPS/);
   });
 
-  it("rejects service-role-shaped keys instead of passing them to browser clients", () => {
+  it("rejects service-role JWTs even though legacy anonymous JWT keys are supported", () => {
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
-    vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "service_role_secret");
+    const payload = btoa(JSON.stringify({ role: "service_role" })).replace(/=/g, "").replace(/\\+/g, "-").replace(/\\//g, "_");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", `eyJhbGciOiJIUzI1NiJ9.${payload}.synthetic-signature`);
     expect(() => getSupabasePublicEnv()).toThrow(/unsupported format/);
   });
 });
