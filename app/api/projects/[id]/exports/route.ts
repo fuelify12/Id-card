@@ -108,7 +108,7 @@ async function preflight(db: any, project: any, uid: string, batchId: string) {
   if (eligibleChecks.length && eligibleChecks.every(x => extOf(x.card.output_format)==="pdf")) formats.push("pdf");
   return { batch:d.batch, counts, cards:checks.map(x=>({id:x.card.id,studentId:x.card.student_id,serialNumber:x.card.serial_number,studentName:nameOf(x.student),side:sideOf(x.card),format:extOf(x.card.output_format),eligible:x.reasons.length===0,reasons:x.reasons,approvalStatus:x.card.approval_status,validationStatus:x.card.validation_status})), eligibleStudentIds:eligibleStudents, eligibleStudentCount:eligibleStudents.length, formats, missingItems:missing.map((i:any)=>({serialNumber:i.serial_number,status:i.status,reason:i.error_summary??"No completed generated output exists."})), _private:{...d,checks} };
 }
-async async function insertAudit(_db:any, _uid:string, _projectId:string, _action:string, _exportId:string, _metadata:Record<string,unknown>={}) {
+async function insertAudit(_db:any, _uid:string, _projectId:string, _action:string, _exportId:string, _metadata:Record<string,unknown>={}) {
   // Application roles are deliberately denied INSERT on audit_logs. The SECURITY DEFINER
   // database trigger records export row lifecycle events with safe, non-PII metadata.
   // Keep this compatibility shim until older call sites are removed; never bypass the policy.
