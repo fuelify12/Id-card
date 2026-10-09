@@ -48,7 +48,7 @@ The workflow's full dependency audit JSON and generated package lock are publish
 
 ## Actual CI verification (2026-10-09)
 
-Latest successful workflow on the Phase 14 changes: https://github.com/fuelify12/Id-card/actions/runs/37922278963 (commit `680422a3f7f54eb4d869d052ec16bdbd1ec11e1e`).
+Latest successful workflow on the Phase 14 changes: https://github.com/fuelify12/Id-card/actions/runs/37922565154 (commit `2d7f3fce5e3b649c42ebb95c60d6f92199fc90c0`).
 
 - **PASSED:** 15 test files, 107 tests; no skipped tests reported by Vitest.
 - **PASSED:** `npm run typecheck`, `npm run lint`, production `npm run build`, production dependency gate `npm audit --omit=dev --audit-level=high`, Gitleaks, full-history secret scan, tracked-file secret hygiene, and generated-client-bundle secret check (18 static files scanned).
