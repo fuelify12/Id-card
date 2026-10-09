@@ -31,6 +31,15 @@ for (const file of files) {
   for (const [name, pattern] of patterns) {
     if (pattern.test(text)) findings.push({ file: relative(".", file), name });
   }
+  const jwtPattern = /eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}/g;
+  for (const match of text.matchAll(jwtPattern)) {
+    try {
+      const payload = JSON.parse(Buffer.from(match[0].split(".")[1], "base64url").toString("utf8"));
+      if (payload.role === "service_role") findings.push({ file: relative(".", file), name: "Supabase service-role JWT" });
+    } catch {
+      // Not a decodable JWT; continue scanning other tokens.
+    }
+  }
   for (const [key, value] of Object.entries(process.env)) {
     if (!value || value.length < 24 || !/(SERVICE_ROLE|SECRET|PRIVATE_KEY|GEMINI_API_KEY|DATABASE_URL)/i.test(key)) continue;
     if (text.includes(value)) findings.push({ file: relative(".", file), name: `server environment value from ${key}` });
