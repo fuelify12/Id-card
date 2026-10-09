@@ -5,7 +5,7 @@ type Template={id:string;name:string;version_number:number;width_px:number|null;
 type Field={id:string;key:string;label:string;field_type:string;required:boolean;source_column:string|null;static_value?:string|null};
 export function CardRenderingWorkspace({projectId,template,fields,students}:{projectId:string;template:Template|null;fields:Field[];students:Student[]}){
  const [studentId,setStudentId]=useState(students[0]?.id??"");
- const [widthMm,setWidthMm]=useState("");const [heightMm,setHeightMm]=useState("");const [dpi,setDpi]=useState("300");const [format,setFormat]=useState<"png"|"jpeg">("png");
+ const [widthMm,setWidthMm]=useState("");const [heightMm,setHeightMm]=useState("");const [unit,setUnit]=useState<"mm"|"in">("mm");const [dpi,setDpi]=useState("300");const [format,setFormat]=useState<"png"|"jpeg">("png");
  const [busy,setBusy]=useState(false);const [error,setError]=useState("");const [notice,setNotice]=useState("");const [preflight,setPreflight]=useState<any>(null);const [preview,setPreview]=useState<any>(null);
  async function request(action:"preflight"|"render"){
   if(!template){setError("Upload a PNG or JPEG template and define its fields first.");return}
@@ -13,7 +13,7 @@ export function CardRenderingWorkspace({projectId,template,fields,students}:{pro
   if(action==="render"&&!studentId){setError("Import student records before generating a sample.");return}
   setBusy(true);setError("");setNotice("");
   try{
-   const res=await fetch("/api/projects/"+projectId+"/render",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action,templateId:template.id,studentId,widthMm:Number(widthMm),heightMm:Number(heightMm),dpi:Number(dpi),format})});
+   const res=await fetch("/api/projects/"+projectId+"/render",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action,templateId:template.id,studentId,widthMm:Number(widthMm)*(unit==="in"?25.4:1),heightMm:Number(heightMm)*(unit==="in"?25.4:1),dpi:Number(dpi),format})});
    const json=await res.json();if(!res.ok)throw new Error([json.error,...(json.issues??[]),...(json.fields??[])].filter(Boolean).join(" "));
    if(action==="preflight"){setPreflight(json);setNotice("Preflight completed. Resolve critical configuration errors before production.");}
    else{setPreview(json);setNotice(json.reused?"Matching saved card output reused.":"Sample card rendered, validated, and saved to private storage.");}
