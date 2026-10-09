@@ -46,9 +46,10 @@ export async function renderCard(input:RenderInput):Promise<RenderResult>{
  if(!Number.isInteger(dpi)||dpi<72||dpi>1200)throw new Error("DPI must be a whole number from 72 to 1200.");
  const meta=await sharp(template,{limitInputPixels:MAX_PIXELS}).metadata();
  if(!["png","jpeg"].includes(meta.format||""))throw new Error("Only PNG and JPEG raster templates are supported.");
+ if(meta.orientation&&meta.orientation!==1)throw new Error("Template contains EXIF rotation. Re-save it with orientation normalized before mapping fields.");
  if(meta.width!==templateWidth||meta.height!==templateHeight)throw new Error("Template dimensions do not match the uploaded source.");
  const a=templateWidth/templateHeight,b=outputWidth/outputHeight;
- if(Math.abs(a-b)/a>.015)throw new Error("Configured physical card size does not match the template aspect ratio. Confirm dimensions before rendering.");
+ if(Math.abs(a-b)/a>.005)throw new Error("Configured physical card size does not match the template aspect ratio. Confirm dimensions before rendering.");
  const warnings:RenderWarning[]=[],errors=validateBindings(fields,student,schoolName,!!input.photo);
  if(errors.length)return {buffer:Buffer.alloc(0),width:outputWidth,height:outputHeight,format,warnings,errors};
  const overlays:sharp.OverlayOptions[]=[];
@@ -68,13 +69,14 @@ export async function renderCard(input:RenderInput):Promise<RenderResult>{
   const weight=["bold","700"].includes(f.font_weight||"")?"700":f.font_weight==="600"?"600":"400";
   const align=["left","center","right"].includes(f.alignment||"")?f.alignment!:"left",anchor=align==="center"?"middle":align==="right"?"end":"start";
   let lines=wrap(text,Math.max(1,Math.floor(w/(size*.56))));
-  while(f.auto_shrink!==false&&size>min&&(lines.length>maxLines||lines.length*size*lh>h)){size=Math.max(min,size-1);lines=wrap(text,Math.max(1,Math.floor(w/(size*.56))))}
-  if(lines.length>maxLines||lines.length*size*lh>h){warnings.push({code:"TEXT_OVERFLOW",field:f.key,message:"Text does not fit the configured field."});if(f.overflow_policy==="block"){errors.push("Text overflow in required layout field: "+f.label);continue}lines=lines.slice(0,maxLines)}
+  while(f.auto_shrink!==false&&size>min&&(lines.length>maxLines||lines.length*size*lh>h||lines.some(line=>line.length*size*.56>w))){size=Math.max(min,size-1);lines=wrap(text,Math.max(1,Math.floor(w/(size*.56))))}
+  if(lines.length>maxLines||lines.length*size*lh>h||lines.some(line=>line.length*size*.56>w)){warnings.push({code:"TEXT_OVERFLOW",field:f.key,message:"Text does not fit the configured field."});if(f.overflow_policy==="block"){errors.push("Text overflow in required layout field: "+f.label);continue}lines=lines.slice(0,maxLines)}
   if(/[^\u0000-\u024f]/u.test(text))warnings.push({code:"GLYPH_REVIEW",field:f.key,message:"Verify non-Latin shaping and glyph coverage in the sample card."});
   const gap=size*lh,total=lines.length*gap,va=f.vertical_alignment||"middle",first=va==="top"?size:va==="bottom"?h-total+size:(h-total)/2+size,tx=align==="left"?0:align==="center"?w/2:w;
   const spans=lines.map((line,i)=>'<tspan x="'+tx+'" y="'+round(first+i*gap)+'">'+esc(line)+'</tspan>').join("");
   const rot=Number.isFinite(f.rotation)?Number(f.rotation):0,transform=rot?' transform="rotate('+round(rot)+' '+round(w/2)+' '+round(h/2)+')"':"";
-  const svg=Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'"><text'+transform+' font-family="'+esc(family)+'" font-size="'+round(size)+'" font-weight="'+weight+'" fill="'+esc(f.color||"#111111")+'" text-anchor="'+anchor+'">'+spans+'</text></svg>');
+  const color=/^#[0-9a-f]{3,8}$/i.test(f.color||"")?f.color!:"#111111";
+  const svg=Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'"><text'+transform+' font-family="'+esc(family)+'" font-size="'+round(size)+'" font-weight="'+weight+'" fill="'+color+'" text-anchor="'+anchor+'">'+spans+'</text></svg>');
   overlays.push({input:svg,left:x,top:y});
  }
  if(errors.length)return {buffer:Buffer.alloc(0),width:outputWidth,height:outputHeight,format,warnings,errors};
