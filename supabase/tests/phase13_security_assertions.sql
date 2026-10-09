@@ -23,7 +23,7 @@ begin
     from pg_policies
    where schemaname = 'storage' and tablename = 'objects'
      and policyname like 'printforge tenant object %'
-     and (coalesce(qual, '') || coalesce(with_check, '')) not like '%storage.objects.name%';
+     and (coalesce(qual, '') || coalesce(with_check, '')) not like '%storage.foldername(objects.name)%';
   if v_bad_storage <> 0 then
     raise exception 'Storage path assertion failed: % tenant policies do not qualify the object path', v_bad_storage;
   end if;
