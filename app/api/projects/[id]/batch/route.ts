@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { validateStudents, validateTemplateConfiguration } from "@/lib/validation/engine";
+import { consumeRateLimit } from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -64,6 +65,15 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   try { body = await request.json(); } catch { return reply("Request body must be valid JSON."); }
   const action = String(body?.action ?? "");
   if (!["preflight", "create", "status", "pause", "resume", "cancel", "retry", "process"].includes(action)) return reply("Unsupported batch action.");
+  if (action === "create" || action === "retry") {
+    const decision = await consumeRateLimit(db, "batch_generate", 5, 60);
+    if (!decision.allowed) {
+      return reply(
+        decision.unavailable ? "Batch processing is temporarily unavailable. Try again shortly." : "Too many batch requests. Wait before retrying.",
+        decision.unavailable ? 503 : 429,
+      );
+    }
+  }
 
   try {
     if (action === "preflight" || action === "create") {
