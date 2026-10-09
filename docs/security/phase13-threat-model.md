@@ -4,10 +4,10 @@
 
 - Repository: `fuelify12/Id-card`, default branch `main`, Next.js 16 / React 19 / TypeScript / Vitest.
 - Supabase project: `Id-card` (`xdoenkusrakuyyxnnkff`), Postgres 17, region `ap-south-1`.
-- Existing database contained 14 public application tables; the initial catalog query found RLS enabled on all 14. No application rows were present during this inspection.
+- The initial database inspection found 14 public application tables with RLS; Phase 13 adds `security_rate_limits`, bringing the total to 15 public tables, all with RLS. No application rows were present during the initial inspection.
 - Existing private buckets: `printforge-templates`, `printforge-student-photos`, `printforge-generated-cards`, `printforge-exports`; a separate `printforge-private` bucket has no application storage policy in the inspected policy list. The four named asset buckets were configured private.
 - The repository contains `.env.example` with variable names and empty values; `.gitignore` excludes `.env* except `.env.example`. A committed `package-lock.json` is still absent.
-- The existing GitHub Actions workflow runs tests, TypeScript, lint, and production build. The repo did not contain a `package-lock.json` when inspected, so installs were not reproducible via `npm ci`.
+- GitHub Actions now runs a production-only high-severity dependency gate, a full audit report artifact, Gitleaks full-history scanning, tracked-file secret hygiene, unit tests, TypeScript, lint, production build, and client-bundle secret checks. A committed `package-lock.json` remains absent.
 
 ## Findings and remediation
 
@@ -16,9 +16,12 @@
 | HIGH | Database grants gave both `anon` and `authenticated` unnecessary `TRUNCATE`, `TRIGGER`, and `REFERENCES` privileges across 14 public application tables. RLS does not constrain TRUNCATE. | Revoked all public-table grants from `anon`; revoked high-risk table privileges from `authenticated`; set safer default table privileges. |
 | HIGH | Public application functions had inherited `PUBLIC EXECUTE` ACLs, and some RPCs also explicitly granted execution to `anon`. | Revoked function execution from `PUBLIC` and `anon` for public-schema functions; preserved explicit authenticated/service-role grants. |
 | MEDIUM | Tenant policies on several child tables primarily checked `owner_id`; they did not consistently prove that linked project/template/student/batch/card rows belonged to the same owner. | Replaced policies with project- and parent-qualified checks for students, templates, template fields, batches, jobs, generated cards, batch items, validation results/findings, and exports; added composite foreign keys and validated all 12 security constraints. |
-| MEDIUM | Application users could update or delete their own audit rows because the original audit policy used `FOR ALL`. | Replaced it with SELECT and INSERT policies only, and restricted inserts to the actor's own project. |
+| MEDIUM | Application users could update or delete their own audit rows because the original audit policy used `FOR ALL`. | Replaced it with SELECT-only access for authenticated clients; database triggers record lifecycle metadata and direct client mutations are denied. |
 | MEDIUM | Storage policies had an unqualified `name` reference inside a query that also referenced `school_projects.name`, so the predicate could bind to the project name instead of the object path. Other bucket policies did not consistently verify that the second path segment was an owned project. | Replaced application bucket policies with explicit `objects.name` path parsing and project-owner checks for SELECT/INSERT/UPDATE/DELETE. |
-| LOW | CI did not run a dependency audit or secret scan. The repository lacked a lockfile. | Security CI checks and lockfile follow-up are documented; do not treat a scanner that was not run as a clean result. |
+| HIGH | Public application tables/functions had excessive privileges, including TRUNCATE/TRIGGER/REFERENCES and PUBLIC/anonymous function execution. | RLS does not constrain TRUNCATE; catalog grants confirmed the privileges. | Revoked anon table access, removed high-risk table grants, revoked PUBLIC/anon function execution, and set safer defaults. | Live catalog assertions pass; no anonymous public-function execution remains. |
+| HIGH | The initial shared rate-limit RPC accepted client-supplied quota/window values. | The SECURITY DEFINER RPC accepted `p_limit` and `p_window_seconds` from the caller. | Server-side quotas are fixed per action; mismatched values are rejected; CPU-intensive photo processing is limited to 10/minute. | Live function-definition assertion and rate-limit unit tests pass. |
+| MEDIUM | Full dependency audit still reports transitive advisories. | Full audit reported 0 critical, 5 high in the ESLint/Next development toolchain, and 3 moderate involving TensorFlow.js/argparse/sprintf-js; npm's suggested forced fixes were breaking downgrades. | Block high-severity production advisories; publish the full audit report artifact and track compatible transitive upgrades. | Latest CI production-only audit gate passes; full audit findings remain open. |
+| LOW | Dependency installs are not fully reproducible. | `package-lock.json` is absent from the default branch; CI publishes a generated lockfile artifact for review. | Commit a reviewed lockfile. | Owner follow-up. |
 
 ### Safe reproduction notes
 
@@ -31,10 +34,11 @@
 
 - All four production asset buckets remain private. The `printforge-private` bucket remains without application user policies; do not use it for direct client uploads until a specific access contract is added.
 - The app uses Supabase SSR cookies and `auth.getClaims()` in the proxy and project APIs; each resource endpoint must still authorize its project/resource server-side. RLS is defense in depth, not a substitute for API checks.
+- The rate-limit SECURITY DEFINER RPC has a single intentional Supabase advisor warning; it validates `auth.uid()`, pins a safe search_path, restricts actions/quotas, and does not grant access to the private rate-limit table.
 - Avoid logging student names, photos, spreadsheet contents, raw signed URLs, or tokens. Return generic errors to clients and keep diagnostic detail in redacted server-side logs.
 - Temporary export retention is implemented by the existing export workflow; verify cleanup scheduling and backup restore in the actual Vercel/Supabase environment before launch.
 - Do not enable public storage URLs for child photos, crops, templates, generated cards, or ZIPs. Use short-lived signed URLs after a fresh ownership check.
-- No production deployment, credential rotation, database reset, or destructive cleanup was performed by this phase.
+- A Vercel production-target deployment was created automatically by pushes to `main` and was observed in `READY` state for commit `2b2358895043859581657f3b95ef30f76bf2d585`. I did not manually deploy, change aliases, roll back, or run a production smoke test; project metadata indicated the project was not marked live, so a public traffic change was not confirmed. Further pushes to `main` should be reviewed because Vercel auto-deploys this branch.
 
 ## Indian privacy/legal review required
 
