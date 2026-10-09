@@ -4,8 +4,6 @@
 -- Enforce tenant consistency at the database boundary, not only in client-supplied owner_id fields.
 create unique index if not exists school_projects_id_owner_id_security_uidx
   on public.school_projects (id, owner_id);
-create unique index if not exists templates_id_project_owner_security_uidx
-  on public.templates (id, project_id, owner_id);
 create unique index if not exists students_id_project_security_uidx
   on public.students (id, project_id);
 
@@ -30,10 +28,6 @@ begin
   if not exists (select 1 from pg_constraint where conname = 'generated_cards_project_owner_security_fkey' and conrelid = 'public.generated_cards'::regclass) then
     alter table public.generated_cards add constraint generated_cards_project_owner_security_fkey
       foreign key (project_id, owner_id) references public.school_projects(id, owner_id) on delete cascade not valid;
-  end if;
-  if not exists (select 1 from pg_constraint where conname = 'template_fields_template_owner_security_fkey' and conrelid = 'public.template_fields'::regclass) then
-    alter table public.template_fields add constraint template_fields_template_owner_security_fkey
-      foreign key (template_id, owner_id) references public.templates(id, owner_id) on delete cascade not valid;
   end if;
   if not exists (select 1 from pg_constraint where conname = 'batch_items_batch_project_owner_security_fkey' and conrelid = 'public.batch_generation_items'::regclass) then
     alter table public.batch_generation_items add constraint batch_items_batch_project_owner_security_fkey
