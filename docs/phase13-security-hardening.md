@@ -21,11 +21,12 @@ No finding is described as an exploited incident. The reproduction steps above a
 
 ## Database migration
 
-supabase/phase13_security_hardening.sql is additive and repeatable. It does not drop application tables or user data. It:
+supabase/phase13_security_hardening.sql is additive and repeatable. supabase/phase13_storage_path_policy_fix.sql follows it to explicitly qualify the outer storage.objects.name reference (PostgreSQL policy deparsing canonicalizes this to objects.name). supabase/phase13_rate_limits.sql adds shared account-level request quotas. None of these migrations drop application tables or user data. Together they:
 - Adds unique supporting indexes and NOT VALID composite foreign keys for project/owner consistency.
 - Replaces the overlapping PrintForge Storage policies with explicit SELECT/INSERT/UPDATE/DELETE checks for the user's UUID and an owned project UUID in the object path.
 - Makes audit logs read-only to authenticated clients and adds database-trigger lifecycle events with actor ID, operation, entity type/reference and source only. Student fields, photos, signed URLs, and raw row contents are not logged.
 - Leaves the printforge-private bucket outside the user-facing policy set.
+- Adds a shared, atomic database-backed per-account rate limiter for project creation, template uploads, student imports, photo upload tickets, batch creation/retry, and ZIP exports. Limits fail closed if the RPC is unavailable.
 
 The NOT VALID foreign keys enforce new writes immediately but do not certify old rows. Check for violations and validate constraints during a separately monitored maintenance step.
 
@@ -35,13 +36,15 @@ The NOT VALID foreign keys enforce new writes immediately but do not certify old
 - Existing export helpers already escape spreadsheet formula prefixes in CSV cells, sanitize archive names, and verify ZIP directory contents. Existing upload actions apply size/MIME checks, image signatures/dimensions, SVG sanitization, and single-page PDF validation; photo processing uses Sharp and bounded batch logic.
 - Existing photo and export storage buckets are private with configured size/MIME limits. The migration tightens project binding; it does not publish files or create long-lived signed URLs.
 - No service-role key is declared in .env.example; the application uses the publishable key with user sessions. The repository secret scanner is a guardrail, not a substitute for Git-history scanning or Vercel secret review.
-- The current code still needs a dedicated, tested rate limiter for expensive generation/export routes. In-memory limits alone are not sufficient on serverless deployments; configure a shared rate-limit service or Vercel WAF limits before exposing production traffic.
+- Account-level rate limits are now backed by a shared Postgres RPC for expensive operations. They do not limit by IP and do not prevent distributed abuse across multiple accounts; configure Vercel WAF/shared edge limits as a further layer before exposing production traffic.
 - ZIP entry checks and expansion limits exist in the export/photo workflow, but adversarial fuzzing of malformed PDFs/SVGs/images and a dedicated sandbox for hostile documents were not run as part of this change.
 - No automated test using two authenticated tenant accounts was run against the live project. Do not use real student data for this. Provision two synthetic test users in an isolated Supabase branch/project and run CRUD and storage denial tests before production release.
 
 ## Security tests and CI
 
-- lib/security/headers.test.ts covers the CSP, framing, content-type, permissions, cache, HSTS, and Supabase realtime directives.
+- lib/security/headers.test.ts covers the CSP, framing, content-type, permissions, HSTS, and Supabase realtime directives.
+- lib/security/rate-limit.test.ts covers allow, exhausted quota, and fail-closed RPC failure behavior; lib/env.test.ts covers missing/invalid Supabase environment configuration.
+- lib/security/exports-security.test.ts covers formula prefixes, path traversal names, and unexpected ZIP entries.
 - Existing lib/exports/archive.test.ts covers CSV formula escaping, path sanitization, and ZIP directory validation.
 - scripts/security-check.mjs scans tracked files for common secret formats and accidentally tracked environment files. It explicitly does not scan Git history.
 - .github/workflows/ci.yml runs the repository secret-hygiene check, a production dependency audit gate for critical advisories, Vitest, TypeScript, ESLint, and the production build.
@@ -57,7 +60,7 @@ The NOT VALID foreign keys enforce new writes immediately but do not certify old
 
 ## Rollout checklist
 
-1. Review the SQL migration diff and apply it to a Supabase branch first.
+1. Review all three SQL migrations in order and apply them to a Supabase branch first.
 2. Run schema/policy assertions and synthetic two-user RLS + Storage CRUD tests on that isolated branch.
 3. Review full dependency audit output and commit a lockfile.
 4. Configure shared rate limits, backups and retention/deletion jobs; verify restore from a backup.
