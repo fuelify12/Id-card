@@ -69,10 +69,10 @@ export async function createPhotoUploadTicket(input:{projectId:string;batchId:st
  if(be) throw new Error(be.message); if(!batch) throw new Error("Upload batch not found.");
  const filename=safePhotoFilename(input.filename);
  const path=projectObjectPath(uid,input.projectId,filename);
- const {data:reserved,error:re}=await s.rpc("reserve_photo_batch_bytes",{p_batch_id:input.batchId,p_project_id:input.projectId,p_size:input.size});
+ const {data:reserved,error:re}=await s.rpc("reserve_photo_upload",{p_batch_id:input.batchId,p_project_id:input.projectId,p_path:path,p_size:input.size});
  if(re) throw new Error(re.message); if(!reserved) throw new Error("Photo batch exceeds the 500 MB aggregate limit or is no longer uploading.");
  const {data,error}=await s.storage.from(PHOTO_BUCKET).createSignedUploadUrl(path,{upsert:false});
- if(error) { await s.rpc("release_photo_batch_bytes",{p_batch_id:input.batchId,p_project_id:input.projectId,p_size:input.size}); throw new Error(error.message); }
+ if(error) { await s.rpc("release_photo_upload",{p_batch_id:input.batchId,p_project_id:input.projectId,p_path:path}); throw new Error(error.message); }
  return {path,token:data.token};
 }
 export async function registerStudentPhoto(input:{projectId:string;batchId:string;storagePath:string;originalFilename:string}) {
@@ -86,15 +86,17 @@ export async function registerStudentPhoto(input:{projectId:string;batchId:strin
  if(de||!blob) throw new Error("Uploaded object could not be verified in private storage.");
  if(blob.size<1||blob.size>PHOTO_MAX_BYTES) { await s.storage.from(PHOTO_BUCKET).remove([input.storagePath]); throw new Error("Photo exceeds the server-side file-size limit."); }
  const bytes=Buffer.from(await blob.arrayBuffer());
+ const {data:finalized,error:fe}=await s.rpc("finalize_photo_upload",{p_batch_id:input.batchId,p_project_id:input.projectId,p_path:input.storagePath,p_actual_size:bytes.length});
+ if(fe)throw new Error(fe.message);if(!finalized)throw new Error("Uploaded image size exceeds the reserved per-file or aggregate batch limit.");
  const inspected=await inspectPhotoBuffer(bytes);
  const mime=inspected.mime;
  const width=inspected.width,height=inspected.height;
  const validationErrors=inspected.errors;
  const hash=inspected.sha256;
  if(validationErrors.length) {
-  await s.storage.from(PHOTO_BUCKET).remove([input.storagePath]);await s.rpc("release_photo_batch_bytes",{p_batch_id:input.batchId,p_project_id:input.projectId,p_size:bytes.length});
+  await s.storage.from(PHOTO_BUCKET).remove([input.storagePath]);
   const {data:invalid,error:ie}=await s.from("student_photos").insert({owner_id:uid,project_id:input.projectId,batch_id:input.batchId,student_id:null,serial_number:null,original_filename:displayPhotoFilename(input.originalFilename),original_serial_number:null,normalized_serial_number:null,storage_path:input.storagePath,mime_type:mime??"application/octet-stream",width_px:width,height_px:height,file_size_bytes:bytes.length,content_sha256:hash,matching_method:null,match_status:"INVALID_FILE",validation_errors:validationErrors,crop_settings:{}}).select("id,match_status").single();
-  if(ie) throw new Error(ie.message); return {photoId:invalid.id,status:invalid.match_status,idempotent:false};
+  if(ie) throw new Error(ie.message); await s.rpc("release_photo_batch_bytes",{p_batch_id:input.batchId,p_project_id:input.projectId,p_size:bytes.length}); return {photoId:invalid.id,status:invalid.match_status,idempotent:false};
  }
  const {data:dupes,error:he}=await s.from("student_photos").select("id,match_status").eq("project_id",input.projectId).eq("content_sha256",hash).limit(10);
  if(he) throw new Error(he.message);
@@ -124,7 +126,7 @@ export async function recordPhotoUploadFailure(input:{projectId:string;batchId:s
  if(!input.storagePath.startsWith(uid+"/"+input.projectId+"/")||input.storagePath.includes("..")) throw new Error("Invalid project storage path.");
  const {data:batch,error:be}=await s.from("batches").select("id").eq("id",input.batchId).eq("project_id",input.projectId).eq("owner_id",uid).maybeSingle();if(be)throw new Error(be.message);if(!batch)throw new Error("Upload batch not found.");
  const {data:existing}=await s.from("student_photos").select("id").eq("project_id",input.projectId).eq("storage_path",input.storagePath).maybeSingle();if(existing)return {photoId:existing.id};
- await s.storage.from(PHOTO_BUCKET).remove([input.storagePath]);await s.rpc("release_photo_batch_bytes",{p_batch_id:input.batchId,p_project_id:input.projectId,p_size:input.size});
+ const {data:released}=await s.rpc("release_photo_upload",{p_batch_id:input.batchId,p_project_id:input.projectId,p_path:input.storagePath});if(!released){const {data:stored}=await s.storage.from(PHOTO_BUCKET).download(input.storagePath);await s.rpc("release_photo_batch_bytes",{p_batch_id:input.batchId,p_project_id:input.projectId,p_size:stored?.size??input.size});}await s.storage.from(PHOTO_BUCKET).remove([input.storagePath]);
  const {data,error}=await s.from("student_photos").insert({owner_id:uid,project_id:input.projectId,batch_id:input.batchId,student_id:null,serial_number:null,original_filename:safePhotoFilename(input.filename),storage_path:input.storagePath,mime_type:"application/octet-stream",match_status:"UPLOAD_FAILED",validation_errors:[input.message.slice(0,180)],crop_settings:{}}).select("id").single();
  if(error) throw new Error(error.message); return {photoId:data.id};
 }

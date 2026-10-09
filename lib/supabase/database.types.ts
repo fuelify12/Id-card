@@ -64,6 +64,7 @@ export type Database = {
           id: string
           name: string
           owner_id: string
+          photo_reservations: Json
           project_id: string
           review_count: number
           started_at: string | null
@@ -79,6 +80,7 @@ export type Database = {
           id?: string
           name: string
           owner_id: string
+          photo_reservations?: Json
           project_id: string
           review_count?: number
           started_at?: string | null
@@ -94,6 +96,7 @@ export type Database = {
           id?: string
           name?: string
           owner_id?: string
+          photo_reservations?: Json
           project_id?: string
           review_count?: number
           started_at?: string | null
@@ -700,12 +703,34 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      finalize_photo_upload: {
+        Args: {
+          p_actual_size: number
+          p_batch_id: string
+          p_path: string
+          p_project_id: string
+        }
+        Returns: boolean
+      }
       release_photo_batch_bytes: {
         Args: { p_batch_id: string; p_project_id: string; p_size: number }
         Returns: boolean
       }
+      release_photo_upload: {
+        Args: { p_batch_id: string; p_path: string; p_project_id: string }
+        Returns: boolean
+      }
       reserve_photo_batch_bytes: {
         Args: { p_batch_id: string; p_project_id: string; p_size: number }
+        Returns: boolean
+      }
+      reserve_photo_upload: {
+        Args: {
+          p_batch_id: string
+          p_path: string
+          p_project_id: string
+          p_size: number
+        }
         Returns: boolean
       }
       set_active_template_version: {
