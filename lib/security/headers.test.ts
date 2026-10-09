@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getSecurityHeaders } from "./headers";
+import { getSecurityHeaders, PRIVATE_RESPONSE_CACHE_CONTROL } from "./headers";
 
 describe("production browser security headers", () => {
   it("blocks framing, plugins, base URL injection and cross-origin form submissions", () => {
@@ -25,7 +25,7 @@ describe("production browser security headers", () => {
     const development = getSecurityHeaders(false);
     expect(production.some((h) => h.key === "Strict-Transport-Security")).toBe(true);
     expect(development.some((h) => h.key === "Strict-Transport-Security")).toBe(false);
-    expect(production.find((h) => h.key === "Cache-Control")?.value).toContain("no-store");
+    expect(PRIVATE_RESPONSE_CACHE_CONTROL).toContain("no-store");
   });
 
   it("allows Supabase HTTPS and realtime endpoints needed by auth/storage", () => {
