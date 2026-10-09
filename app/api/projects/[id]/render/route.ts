@@ -66,8 +66,8 @@ export async function POST(req:Request,{params}:{params:Promise<{id:string}>}) {
    const {data:photos,error:pe}=await s.from("student_photos").select("id,student_id,processed_storage_path,match_status,processing_status,crop_approved_at").eq("student_id",student.id).eq("project_id",projectId).eq("owner_id",uid).eq("match_status","APPROVED").eq("processing_status","APPROVED").not("crop_approved_at","is",null).limit(2);
    if(pe)throw new Error(pe.message);
    if((photos??[]).length>1)return NextResponse.json({error:"More than one approved photo is linked to this student. Resolve the duplicate assignment before rendering."},{status:422});
-   const photo=photos?.[0];
-   if(photo?.processed_storage_path){photoPath=photo.processed_storage_path;photoBuffer=await download(s,STORAGE_BUCKETS.studentPhotos,photoPath)}
+   const photo=photos?.[0];const approvedPath=photo?.processed_storage_path;
+   if(approvedPath){photoPath=approvedPath;photoBuffer=await download(s,STORAGE_BUCKETS.studentPhotos,approvedPath)}
    else if(fields.some((f:any)=>photoField(f)&&f.required))return NextResponse.json({error:"This student does not have an approved processed photograph. Approve the photo and crop in Phase 7 first."},{status:422});
   }
   const data=(student.data??{}) as Record<string,unknown>;
