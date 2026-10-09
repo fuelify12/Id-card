@@ -1,17 +1,17 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Item = { id: string; student_id: string; serial_number: number; student_name?: string; status: string; attempts: number; error_summary?: string | null; error_category?: string | null; output_card_id?: string | null };
 type Report = { totalStudents: number; eligible: number; blocked: number; configIssues: string[]; students: Array<{studentId:string;serialNumber:number;studentName:string;eligible:boolean;reason:string[]}>; template?: {name:string;version:number;format:string;widthMm:number;heightMm:number;dpi:number} };
 const states = ["ALL","PENDING","PROCESSING","SUCCEEDED","FAILED","SKIPPED","NEEDS_REVIEW"];
 export function BatchGenerationWorkspace({ projectId }: { projectId: string }) {
   const [report,setReport]=useState<Report|null>(null),[batchId,setBatchId]=useState(""),[batch,setBatch]=useState<any>(null),[items,setItems]=useState<Item[]>([]);
-  const [busy,setBusy]=useState(false),[error,setError]=useState(""),[filter,setFilter]=useState("ALL"),[search,setSearch]=useState("");
+  const [busy,setBusy]=useState(false),[error,setError]=useState(""),[filter,setFilter]=useState("ALL"),[search,setSearch]=useState("");\n  const idempotencyKey = useRef<string | null>(null);
   const request=useCallback(async(action:string,extra:Record<string,unknown>={})=>{const res=await fetch("/api/projects/"+projectId+"/batch",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action,batchId,...extra})});const data=await res.json();if(!res.ok)throw new Error(data.error??"Batch request failed.");return data},[projectId,batchId]);
   const preflight=useCallback(async()=>{setBusy(true);setError("");try{const data=await request("preflight");setReport(data)}catch(e){setError((e as Error).message)}finally{setBusy(false)}},[request]);
   const refresh=useCallback(async()=>{if(!batchId)return;try{const data=await request("status");setBatch(data.batch);setItems(data.items??[])}catch(e){setError((e as Error).message)}},[request,batchId]);
   useEffect(()=>{if(!batchId)return;void refresh();const timer=window.setInterval(()=>void refresh(),2500);return()=>window.clearInterval(timer)},[batchId,refresh]);
-  const start=async()=>{setBusy(true);setError("");try{const key=crypto.randomUUID();const data=await request("create",{idempotencyKey:key});setBatchId(data.batchId);setBatch({status:data.status});setReport(data.preflight??report)}catch(e){setError((e as Error).message)}finally{setBusy(false)}};
+  const start=async()=>{setBusy(true);setError("");try{const key=idempotencyKey.current??(idempotencyKey.current=crypto.randomUUID());const data=await request("create",{idempotencyKey:key});setBatchId(data.batchId);setBatch({status:data.status});setReport(data.preflight??report)}catch(e){setError((e as Error).message)}finally{setBusy(false)}};
   const pump=useCallback(async()=>{if(!batchId||busy||!batch||["completed","completed_with_errors","failed","cancelled","paused"].includes(String(batch.status).toLowerCase()))return;setBusy(true);try{await request("process");await refresh()}catch(e){setError((e as Error).message)}finally{setBusy(false)}},[batchId,busy,batch,request,refresh]);
   useEffect(()=>{if(batchId&&batch&&["queued","running"].includes(String(batch.status).toLowerCase())&&!busy){const timer=window.setTimeout(()=>void pump(),400);return()=>window.clearTimeout(timer)}},[batchId,batch,busy,pump]);
   const visible=useMemo(()=>items.filter(i=>(filter==="ALL"||i.status===filter)&&((i.student_name??"").toLowerCase().includes(search.toLowerCase())||String(i.serial_number).includes(search))),[items,filter,search]);
