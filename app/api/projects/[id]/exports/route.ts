@@ -136,7 +136,7 @@ export async function POST(request: Request, { params }: { params: Promise<{id:s
   const folderLayout = body.folderLayout !== false;
   const includeManifest = body.includeManifest !== false;
   const includeNames = body.includeNames === true;
-  const hasSelection=Array.isArray(body.selectedStudentIds);const selected = hasSelection ? [...new Set(body.selectedStudentIds.filter((x:any)=>typeof x==="string"))] : [];
+  const hasSelection=Array.isArray(body.selectedStudentIds);const selected: string[] = hasSelection ? [...new Set<string>(body.selectedStudentIds.filter((x:unknown):x is string=>typeof x==="string"))] : [];
   if (!batchId) return fail("Choose a completed generation batch.");
   if (selected.length > MAX_CARDS) return fail("Select no more than 1,000 students.",413);
   try {
@@ -145,7 +145,7 @@ export async function POST(request: Request, { params }: { params: Promise<{id:s
     const eligibleByStudent = new Map<string, any[]>();
     for (const c of data.checks) if (c.card.student_id) eligibleByStudent.set(c.card.student_id,[...(eligibleByStudent.get(c.card.student_id)??[]),c]);
     if(hasSelection&&!selected.length)return fail("Select at least one student to export.");
-    const requestedStudents = hasSelection ? selected : report.eligibleStudentIds;
+    const requestedStudents: string[] = hasSelection ? selected : report.eligibleStudentIds;
     const missingSelection = requestedStudents.filter((sid:string)=>!eligibleByStudent.has(sid));
     if (missingSelection.length) return fail("One or more selected students are not in this batch.",422);
     const chosen:any[] = []; const excluded:any[] = [];
