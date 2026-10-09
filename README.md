@@ -18,3 +18,15 @@ Supabase now contains the production project/template/student/batch/processing/c
 - Photos are validated server-side from file signatures and decoded with Sharp. SHA-256 duplicate detection preserves the duplicate record and links it to the original record.
 - Database changes are recorded in `supabase/phase6_student_photo_matching.sql`. The production Supabase migration history contains `phase6_student_photo_matching`, `phase6_storage_policy_hardening`, `phase6_photo_batch_byte_limits`, and `phase6_photo_fk_indexes`, and `phase6_photo_path_reservations`.
 - Photo readiness counts only approved photos. Unresolved duplicate/review states keep the project from being considered ready for the next phase.
+
+
+## Phase 7 — Automatic student photo cropping
+
+- Keeps uploaded originals immutable and writes each processed derivative to a unique versioned path under the existing private student-photo bucket.
+- Uses Sharp to decode, normalize EXIF orientation, crop, resize without source-image stretching beyond the crop's target ratio, preserve background, and embed configured DPI metadata.
+- Uses server-side TensorFlow.js + BlazeFace face detection. Only one sufficiently confident detected face is eligible for automatic framing. Missing, multiple, low-confidence, edge-risk, low-resolution, and detector-unavailable cases are flagged for review.
+- Project-level photo settings are stored in `school_projects.photo_processing_settings`; the initial 600×800 px / 300 DPI defaults are illustrative and are not production-confirmed until saved by the user.
+- `student_photos` stores a separate processed path, processing status, face count/confidence, crop coordinates, warnings, dimensions, version, attempts, and approval metadata.
+- Photos remain in the private `printforge-student-photos` bucket, with existing owner-folder storage policies. Server routes verify the authenticated owner and project before reading/writing images.
+- Batch processing uses three concurrent per-photo requests so failures remain isolated and refreshes can resume from persisted statuses.
+- Run `npm test`, `npm run typecheck`, `npm run lint`, and `npm run build` before release.
