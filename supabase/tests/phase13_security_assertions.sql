@@ -69,7 +69,8 @@ begin
   end if;
 
   if position('p_limit is distinct from v_limit' in pg_get_functiondef('public.consume_security_rate_limit(text,integer,integer)'::regprocedure)) = 0
-     or position('p_window_seconds is distinct from v_window_seconds' in pg_get_functiondef('public.consume_security_rate_limit(text,integer,integer)'::regprocedure)) = 0 then
+     or position('p_window_seconds is distinct from v_window_seconds' in pg_get_functiondef('public.consume_security_rate_limit(text,integer,integer)'::regprocedure)) = 0
+     or position('photo_processing' in pg_get_functiondef('public.consume_security_rate_limit(text,integer,integer)'::regprocedure)) = 0 then
     raise exception 'Rate-limit function assertion failed: caller-supplied quotas are not pinned to trusted limits';
   end if;
 
