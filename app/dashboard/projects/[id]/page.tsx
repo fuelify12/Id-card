@@ -21,7 +21,7 @@ export default async function ProjectPage({params}:{params:Promise<{id:string}>}
  if(active){const {data,error:fe}=await (s as any).from("template_fields").select("id,key,label,field_type,required,x,y,width,height,font_family,font_size,font_weight,color,alignment,fit_mode,source_column,confidence,static_value,max_lines,overflow_policy,auto_shrink,min_font_size,line_height,vertical_alignment,rotation,visible,field_format").eq("template_id",active.id).eq("owner_id",uid).order("sort_order");if(fe)throw new Error(fe.message);fields=data??[]}
  const {data:studentRows,error:studentsError}=await s.from("students").select("id,serial_number,data").eq("project_id",id).eq("owner_id",uid).order("serial_number").limit(1000);
  if(studentsError)throw new Error(studentsError.message);
- const sampleStudents=(studentRows??[]).map(st=>({id:st.id,serial_number:st.serial_number,data:(st.data??{}) as Record<string,unknown>}));
+ const sampleStudents=(studentRows??[]).map(st=>({id:st.id,serial_number:st.serial_number,data:(st.data??{}) as unknown as Record<string,unknown>}));
  return <section>
   <Link href="/dashboard" className="text-sm text-blue-300">← All projects</Link>
   <div className="mt-4 flex flex-col gap-2"><p className="text-sm text-blue-300">SCHOOL PROJECT</p><h1 className="text-3xl font-bold">{project.name}</h1><p className="pf-muted">{project.school_name} · {project.academic_session||"Session not set"} · {project.status}</p></div>
