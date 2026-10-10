@@ -49,7 +49,7 @@ function requireSafeEnvironment() {
   const supabaseUrlText = process.env.E2E_SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!supabaseUrlText) throw new Error("Safety stop: target Supabase URL is missing.");
   const supabaseUrl = new URL(supabaseUrlText);
-  const match = supabaseUrl.hostname.match(/^([a-z0-9-]+)\\.supabase\\.co$/i);
+  const match = supabaseUrl.hostname.match(/^([a-z0-9-]+)\.supabase\.co$/i);
   if (supabaseUrl.protocol !== "https:" || !match || match[1] !== actualProjectRef) {
     throw new Error("Safety stop: Supabase URL does not match the declared isolated project ref.");
   }
