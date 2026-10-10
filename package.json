@@ -12,7 +12,7 @@
     "prebuild": "npm run test && npm run typecheck && npm run lint",
     "test:e2e": "playwright test",
     "test:e2e:smoke": "playwright test tests/e2e/smoke.spec.ts",
-    "test:e2e:acceptance": "playwright test tests/e2e/acceptance.spec.ts"
+    "test:e2e:acceptance": "node scripts/e2e-safety-preflight.mjs && playwright test tests/e2e/export-download.spec.ts --workers=1"
   },
   "dependencies": {
     "@fontsource/noto-sans": "^5.3.0",
