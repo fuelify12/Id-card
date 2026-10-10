@@ -1,0 +1,41 @@
+name: Browser smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      preview_url:
+        description: "Exact inspected preview URL (read-only smoke tests only)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run read-only browser smoke
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ inputs.preview_url }}
+          CI: "true"
+        run: npm run test:e2e:smoke
+      - name: Upload sanitized test report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: browser-smoke-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 3
