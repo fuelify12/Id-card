@@ -9,7 +9,7 @@ import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
 import { createClient } from "@/lib/supabase/server";
 import { STORAGE_BUCKETS } from "@/lib/supabase/storage";
-import { buildManifests, chooseCardSides, csvCell, exportEligibilityReasons, safeFilenamePart, sha256, sourceFormatSupports, uniqueArchiveName, verifyZipDirectory } from "@/lib/exports/archive";
+import { buildManifests, chooseCardSides, csvCell, exportEligibilityReasons, safeFilenamePart, sha256, sourceFormatSupports, uniqueArchiveName } from "@/lib/exports/archive";
 import { consumeRateLimit } from "@/lib/security/rate-limit";
 import { isExpectedExportStoragePath, verifyArchiveIntegrity } from "@/lib/exports/integrity";
 
