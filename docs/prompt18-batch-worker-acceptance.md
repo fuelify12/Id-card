@@ -18,7 +18,7 @@
 - Added a forward SQL migration to recover stale PROCESSING items after five minutes, terminalize exhausted work, enforce max_attempts, serialize claims against the batch row, and add an owner-scoped atomic retry RPC.
 - Updated the API to use conditional state transitions and the retry RPC.
 - Added authenticated latest-batch lookup and UI restoration after reload.
-- No migration has been applied to production. No student, batch, photo, or export data was created or modified.
+- The Phase 18 migration `phase18_batch_worker_recovery` was applied to the existing production Supabase project on 2026-10-10 under the owner's explicit authorization. It changed database functions only; no student, batch, photo, or export rows were created or modified. The migration has not been behaviorally acceptance-tested against an isolated database.
 
 ## Lease/retry semantics
 
@@ -39,7 +39,7 @@ The owner then explicitly authorized a separate isolated project at the quoted U
 
 A read-only project listing returned the active production project `xdoenkusrakuyyxnnkff` (Id-card) in Guru. The isolated project `prompt18-isolated-acceptance` was **not created**. No existing project was paused/deleted, no plan was upgraded, and no production configuration or data was changed. We must not pause/delete the production project or create a paid resource without explicit authorization.
 
-Prompt 18 must not be marked live-accepted until an isolated database/storage/auth environment and a matching, accessible preview are available. Do not apply this migration to production as a workaround.
+Prompt 18 must not be marked live-accepted until an isolated database/storage/auth environment and a matching, accessible preview are available. Do not repeat or reapply this migration as a workaround. Its current production presence does not count as live acceptance.
 
 ## Required isolated integration run
 
@@ -75,7 +75,9 @@ Checked on 2026-10-10 against head `e2cc480a77a73a3cdeed064b9e0da39b5be6d28e` be
 - Pure reconciliation/backoff unit tests: covered by repository CI.
 - SQL migration execution and behavior: **NOT VERIFIED** in a database.
 - Worker interruption/recovery, concurrency, RLS, authenticated browser acceptance, and 300-record persisted batch: **BLOCKED** by lack of isolated Supabase environment and authorized preview access.
-- Production deployment, production migration, and production data mutation: **NOT PERFORMED**.
+- Phase 18 migration on production: **APPLIED under explicit owner authorization; behavior not yet acceptance-tested**.
+- Phase 19 deployment and Phase 19 migration on production: **NOT PERFORMED**.
+- Production student/batch/photo/export data mutation: **NOT PERFORMED**.
 
 ## Final decision
 
