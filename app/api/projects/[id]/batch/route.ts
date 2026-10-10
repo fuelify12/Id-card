@@ -71,7 +71,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   let body: any;
   try { body = await request.json(); } catch { return reply("Request body must be valid JSON."); }
   const action = String(body?.action ?? "");
-  if (!["preflight", "create", "status", "pause", "resume", "cancel", "retry", "process"].includes(action)) return reply("Unsupported batch action.");
+  if (!["preflight", "create", "latest", "status", "pause", "resume", "cancel", "retry", "process"].includes(action)) return reply("Unsupported batch action.");
   if (action === "create" || action === "retry") {
     const decision = await consumeRateLimit(db, "batch_generate", 5, 60);
     if (!decision.allowed) {
@@ -136,6 +136,22 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       const { error: itemsError } = await db.from("batch_generation_items").insert(items);
       if (itemsError) { await db.from("batches").update({ status: "failed", last_error: "Could not persist batch work items." }).eq("id", batch.id); throw new Error("Batch was created but its work items could not be saved; inspect the batch before retrying."); }
       return NextResponse.json({ batchId: batch.id, status: batch.status, preflight: report }, { status: 201 });
+    }
+
+    if (action === "latest") {
+      const { data: activeBatch, error: activeError } = await db.from("batches")
+        .select("id,status,created_at")
+        .eq("project_id", projectId).eq("owner_id", uid)
+        .in("status", ["queued", "running", "paused", "pausing"])
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (activeError) throw new Error(activeError.message);
+      if (activeBatch) return NextResponse.json({ batchId: activeBatch.id, status: activeBatch.status });
+      const { data: latestBatch, error: latestError } = await db.from("batches")
+        .select("id,status,created_at")
+        .eq("project_id", projectId).eq("owner_id", uid)
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (latestError) throw new Error(latestError.message);
+      return NextResponse.json({ batchId: latestBatch?.id ?? null, status: latestBatch?.status ?? null });
     }
 
     const batchId = String(body.batchId ?? "");
