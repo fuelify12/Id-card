@@ -65,7 +65,7 @@ describe("E2E safety preflight", () => {
 
   it("requires the Vercel protection bypass secret without printing it", () => {
     const env = safeEnv();
-    delete env.VERCEL_AUTOMATION_BYPASS_SECRET;
+    env.VERCEL_AUTOMATION_BYPASS_SECRET = "";
     const result = runPreflight(env);
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("Missing required variable: VERCEL_AUTOMATION_BYPASS_SECRET");
