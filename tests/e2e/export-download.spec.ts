@@ -72,7 +72,17 @@ test("downloads a completed synthetic ZIP and verifies its archive hash and mani
   requireSafeEnvironment();
 
   const bypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
-  await page.goto("/login", bypassSecret ? { headers: { "x-vercel-protection-bypass": bypassSecret } } : {});
+  if (bypassSecret) {
+    // Attach the deployment-protection bypass only to the initial login document request.
+    // Do not install it as a context-wide header: later requests include signed object URLs.
+    await page.route("**/login", async (route) => {
+      await route.continue({
+        headers: { ...route.request().headers(), "x-vercel-protection-bypass": bypassSecret },
+      });
+    });
+  }
+  await page.goto("/login");
+  if (bypassSecret) await page.unroute("**/login");
   await page.locator('input[type="email"]').fill(email!);
   await page.locator('input[type="password"]').fill(password!);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
