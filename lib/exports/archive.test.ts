@@ -21,7 +21,7 @@ describe("Phase 11 ZIP export helpers", () => {
   it("CSV-escapes quotes and keeps valid JSON manifest data", () => {
     const m = buildManifests([{ serial_number:"001", filename:'front/A,"B.png', side:"front", format:"png", sha256:"a".repeat(64) }], "export-id", "2026-10-09T00:00:00Z");
     expect(m.csv).toContain('"front/A,""B.png');
-    expect(m.csv.split("\\r\\n")[0]).toContain("sha256");
+    expect(m.csv.split(/\\r?\\n/)[0]).toContain("sha256");
     expect(m.csv).toContain("a".repeat(64));
     expect(JSON.parse(m.json).items[0].sha256).toBe("a".repeat(64));
     expect(JSON.parse(m.json).item_count).toBe(1);
