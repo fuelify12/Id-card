@@ -249,7 +249,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           const renderResponse = await fetch(new URL("/api/projects/" + projectId + "/render", request.url), { method: "POST", headers: { "content-type": "application/json", cookie }, body: JSON.stringify({ action: "render", studentId: item.student_id, batchId, templateId: batch.template_id, templateVersion: batch.template_version }) });
           const result = await renderResponse.json().catch(() => ({}));
           if (!renderResponse.ok || !result.ok || !result.cardId || !result.previewUrl) {
-            const permanent = renderResponse.status === 400 || renderResponse.status === 403 || renderResponse.status === 404 || renderResponse.status === 422;
+            const permanent = [400, 403, 404, 413, 422].includes(renderResponse.status);
             const retry = !permanent && Number(item.attempts) < Number(item.max_attempts);
             await db.from("batch_generation_items").update({ status: retry ? "PENDING" : permanent ? "NEEDS_REVIEW" : "FAILED", available_at: new Date(Date.now() + retryDelayMs(Number(item.attempts))).toISOString(), error_category: permanent ? "validation" : renderResponse.status === 413 ? "resource_limit" : "rendering", error_summary: String(result.error ?? "Card renderer returned an invalid result.").slice(0, 500), claimed_by: null, claimed_at: null, heartbeat_at: new Date().toISOString(), ...(retry ? {} : { completed_at: new Date().toISOString() }) }).eq("id", item.id).eq("status", "PROCESSING");
           } else {
