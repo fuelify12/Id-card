@@ -20,6 +20,8 @@ const required = [
   "E2E_TEST_PASSWORD",
   "E2E_EXPORT_PROJECT_ID",
   "E2E_EXPORT_ID",
+  "E2E_OTHER_TENANT_PROJECT_ID",
+  "E2E_OTHER_TENANT_EXPORT_ID",
   "E2E_SUPABASE_PROJECT_REF",
   "E2E_PRODUCTION_SUPABASE_PROJECT_REF",
   "E2E_PREVIEW_COMMIT_SHA",
@@ -76,8 +78,14 @@ if (process.env.E2E_PREVIEW_COMMIT_SHA !== process.env.E2E_EXPECTED_COMMIT_SHA) 
 }
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-for (const key of ["E2E_EXPORT_PROJECT_ID", "E2E_EXPORT_ID"]) {
+for (const key of ["E2E_EXPORT_PROJECT_ID", "E2E_EXPORT_ID", "E2E_OTHER_TENANT_PROJECT_ID", "E2E_OTHER_TENANT_EXPORT_ID"]) {
   if (!uuidPattern.test(process.env[key])) fail(`${key} must be a valid UUID.`);
+}
+if (process.env.E2E_OTHER_TENANT_PROJECT_ID === process.env.E2E_EXPORT_PROJECT_ID) {
+  fail("Cross-tenant test project must differ from the primary test project.");
+}
+if (process.env.E2E_OTHER_TENANT_EXPORT_ID === process.env.E2E_EXPORT_ID) {
+  fail("Cross-tenant test export must differ from the primary test export.");
 }
 
 if (process.exitCode) process.exit(1);
