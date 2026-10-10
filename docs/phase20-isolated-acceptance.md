@@ -7,7 +7,7 @@ Establish a fail-closed path for authenticated end-to-end acceptance without eve
 ## Implemented in this branch
 
 - Added `scripts/e2e-safety-preflight.mjs`; the acceptance command runs it before Playwright. It refuses to run unless explicit mutation and synthetic-data confirmations are set, target Supabase project refs differ, the Supabase URL matches the declared non-production ref, the inspected Preview commit matches the expected commit, and the URL is an HTTPS Vercel Preview rather than the production alias.
-- Hardened `tests/e2e/export-download.spec.ts` with the same core fail-closed checks, plus an optional Vercel Protection Bypass header on the first page navigation so the protected Preview can be reached without putting the bypass value into browser code or logs.
+- Hardened `tests/e2e/export-download.spec.ts` with fail-closed checks and a Vercel Protection Bypass header scoped to the login document request only. Added `tests/e2e/tenant-isolation.spec.ts` to verify one tenant cannot list or request a signed download for another tenant’s export (expected 403/404) when two synthetic tenant fixtures are available.
 - Changed `npm run test:e2e:acceptance` to invoke the safety preflight and the real signed-URL download test serially.
 - Reuses the existing synthetic 300-row workbook/photo/template fixture builder. It contains fictional records and intentionally invalid/missing/duplicate photo cases.
 
@@ -36,7 +36,7 @@ The preflight validates configuration metadata; it cannot prove that a database 
 
 1. Create or designate a **separate, isolated Supabase project**. Do not use the production project, pause/delete the current project, or upgrade a plan as an implicit workaround.
 2. Apply the reviewed Phase 19 migration to that isolated project only, then verify the RPC grants, ownership checks, and RLS/storage policies.
-3. Seed the synthetic 300-row fixture and generate a completed synthetic export. Record the resulting project/export UUIDs.
+3. Seed the synthetic 300-row fixture for the primary test tenant and generate a completed synthetic export. Create a second isolated test tenant with its own synthetic project/export and record both sets of UUIDs.
 4. Deploy the same reviewed commit to a Preview whose environment variables point only to the isolated project. Verify the commit SHA and inspect the Preview read-only.
 5. Configure the variables above in a protected local shell/CI environment, then run `npm run test:e2e:acceptance`.
 6. Preserve Playwright's test report and traces privately. Review any failed assertion before changing code or rerunning tests.
