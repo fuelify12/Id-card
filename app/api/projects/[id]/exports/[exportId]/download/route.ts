@@ -35,7 +35,7 @@ export async function GET(_request:Request,{params}:{params:Promise<{id:string;e
  if(!verification.ok)return fail("Stored archive contents failed integrity verification. Create a fresh export.",422);
  const {data,error:se}=await db.storage.from(STORAGE_BUCKETS.exports).createSignedUrl(job.storage_path,60,{download:job.filename});
  if(se||!data?.signedUrl)return fail("Could not create a secure download link.",500);
- const {error:ae}=await db.from("audit_logs").insert({owner_id:uid,project_id:id,action:"export_download_link_issued",entity_type:"export",entity_id:exportId,metadata:{expires_in_seconds:60}});
+ const {error:ae}=await db.rpc("record_export_download_link_issued",{p_project_id:id,p_export_id:exportId});
  if(ae)return fail("Could not record download audit event.",500);
  return NextResponse.json({url:data.signedUrl,expiresInSeconds:60,filename:job.filename});
 }
