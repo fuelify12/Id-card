@@ -14,6 +14,8 @@ const safeEnv = () => ({
   E2E_TEST_PASSWORD: "synthetic-test-password",
   E2E_EXPORT_PROJECT_ID: "123e4567-e89b-42d3-a456-426614174000",
   E2E_EXPORT_ID: "123e4567-e89b-42d3-a456-426614174001",
+  E2E_OTHER_TENANT_PROJECT_ID: "123e4567-e89b-42d3-a456-426614174002",
+  E2E_OTHER_TENANT_EXPORT_ID: "123e4567-e89b-42d3-a456-426614174003",
   E2E_SUPABASE_PROJECT_REF: "isolated-test-project",
   E2E_PRODUCTION_SUPABASE_PROJECT_REF: "production-project",
   E2E_SUPABASE_URL: "https://isolated-test-project.supabase.co",
@@ -61,6 +63,14 @@ describe("E2E safety preflight", () => {
     const result = runPreflight(env);
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("Inspected Preview commit SHA does not match");
+  });
+
+  it("rejects reuse of the primary project for the second tenant", () => {
+    const env = safeEnv();
+    env.E2E_OTHER_TENANT_PROJECT_ID = env.E2E_EXPORT_PROJECT_ID;
+    const result = runPreflight(env);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Cross-tenant test project must differ");
   });
 
   it("requires the Vercel protection bypass secret without printing it", () => {
