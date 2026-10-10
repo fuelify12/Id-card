@@ -23,6 +23,7 @@
   - serializes claims against the batch row;
   - adds an atomic owner-scoped RPC for manually retrying failed items and resetting their retry budget.
 - Updated the API to use conditional status transitions and the retry RPC.
+- Added an authenticated latest-batch lookup and UI restoration so a page reload rediscovers persisted work instead of losing the in-memory batch ID.
 - No migration has been applied to the live Supabase project. No student, batch, photo, or export data was created or modified.
 
 ## Lease/retry semantics
