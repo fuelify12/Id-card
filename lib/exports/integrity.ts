@@ -20,6 +20,9 @@ export function verifyArchiveIntegrity(
   expectedNames: string[],
   expectedItems: ExpectedArchiveItem[],
 ): ArchiveIntegrityResult {
+  if (expectedNames.length === 0 || expectedItems.length === 0) {
+    return { ok: false, reason: "Archive integrity metadata is empty.", names: [], verifiedItems: 0 };
+  }
   const directory = verifyZipDirectory(bytes, expectedNames);
   if (!directory.ok) {
     return { ok: false, reason: directory.reason ?? "ZIP directory verification failed.", names: directory.names, verifiedItems: 0 };
