@@ -25,7 +25,7 @@ export async function GET(_request:Request,{params}:{params:Promise<{id:string;e
  if(archiveError||!archiveBlob)return fail("Archive is no longer available.",410);
  const archiveBytes=Buffer.from(await archiveBlob.arrayBuffer());
  if(!job.archive_sha256||sha256(archiveBytes)!==String(job.archive_sha256).toLowerCase())return fail("Stored archive integrity verification failed. Create a fresh export.",422);
- if(Number.isFinite(Number(job.archive_bytes))&&Number(job.archive_bytes)!==archiveBytes.length)return fail("Stored archive size differs from its verified metadata.",422);
+ if(job.archive_bytes!=null&&Number.isFinite(Number(job.archive_bytes))&&Number(job.archive_bytes)!==archiveBytes.length)return fail("Stored archive size differs from its verified metadata.",422);
  const expectedNames=job.manifest?.expected_names;
  if(!Array.isArray(expectedNames)||!expectedNames.every((name:any)=>typeof name==="string"))return fail("Export integrity metadata is missing. Create a fresh export.",422);
  const expectedItems=job.manifest?.items;
