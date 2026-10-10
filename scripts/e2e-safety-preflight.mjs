@@ -25,6 +25,7 @@ const required = [
   "E2E_PREVIEW_COMMIT_SHA",
   "E2E_EXPECTED_COMMIT_SHA",
   "PLAYWRIGHT_BASE_URL",
+  "VERCEL_AUTOMATION_BYPASS_SECRET",
 ];
 
 for (const key of required) {
