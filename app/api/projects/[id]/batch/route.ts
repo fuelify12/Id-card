@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { validateStudents, validateTemplateConfiguration } from "@/lib/validation/engine";
 import { consumeRateLimit } from "@/lib/security/rate-limit";
+import { reconcileBatchItemStatuses, retryDelayMs } from "@/lib/batch/recovery";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -30,31 +31,37 @@ async function refreshCounts(db: any, batchId: string, projectId: string) {
   if (error) throw new Error(error.message);
   if (batchError) throw new Error(batchError.message);
   if (!currentBatch) throw new Error("Batch no longer exists.");
-  const counts = { total_count: (items ?? []).length, eligible_count: 0, completed_count: 0, failed_count: 0, review_count: 0, skipped_count: 0, processing_count: 0 };
-  for (const item of items ?? []) {
-    if (item.status === "SUCCEEDED") counts.completed_count++;
-    else if (item.status === "FAILED") counts.failed_count++;
-    else if (item.status === "NEEDS_REVIEW") counts.review_count++;
-    else if (item.status === "SKIPPED") counts.skipped_count++;
-    else if (item.status === "PROCESSING") counts.processing_count++;
-  }
-  counts.eligible_count = counts.total_count - counts.skipped_count;
-  const terminal = counts.completed_count + counts.failed_count + counts.review_count + counts.skipped_count;
-  const existingState = String(currentBatch.status ?? "").toLowerCase();
-  // Status reads must never undo a user's pause or cancellation.
-  const state = existingState === "cancelled" ? "cancelled"
-    : existingState === "paused" || existingState === "pausing" ? existingState
-    : terminal === counts.total_count
-      ? (counts.failed_count || counts.review_count || counts.skipped_count ? "completed_with_errors" : "completed")
-      : counts.processing_count ? "running" : "queued";
-  const update: Record<string, unknown> = { ...counts, status: state, heartbeat_at: new Date().toISOString() };
-  if (TERMINAL.has(state) && !currentBatch.completed_at) update.completed_at = new Date().toISOString();
-  if (!TERMINAL.has(state)) update.completed_at = null;
-  const { error: updateError } = await db.from("batches").update(update).eq("id", batchId).eq("project_id", projectId);
-  if (updateError) throw new Error(updateError.message);
-  return { ...counts, status: state };
-}
 
+  const counts = reconcileBatchItemStatuses(
+    (items ?? []).map((item: { status: string }) => item.status),
+    currentBatch.status,
+  );
+  const now = new Date().toISOString();
+  const update: Record<string, unknown> = { ...counts, heartbeat_at: now };
+  if (TERMINAL.has(String(counts.status).toLowerCase()) && !currentBatch.completed_at) update.completed_at = now;
+  if (!TERMINAL.has(String(counts.status).toLowerCase())) update.completed_at = null;
+
+  // Compare-and-set prevents a stale status read from undoing a concurrent pause/cancel.
+  const { data: updated, error: updateError } = await db
+    .from("batches")
+    .update(update)
+    .eq("id", batchId)
+    .eq("project_id", projectId)
+    .eq("status", currentBatch.status)
+    .select("status")
+    .maybeSingle();
+  if (updateError) throw new Error(updateError.message);
+  if (updated?.status) return { ...counts, status: updated.status };
+
+  const { data: latest, error: latestError } = await db
+    .from("batches")
+    .select("status")
+    .eq("id", batchId)
+    .eq("project_id", projectId)
+    .maybeSingle();
+  if (latestError) throw new Error(latestError.message);
+  return { ...counts, status: latest?.status ?? counts.status };
+}
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id: projectId } = await context.params;
   if (typeof projectId !== "string" || !/^[0-9a-f-]{36}$/i.test(projectId)) return reply("Invalid project ID.");
@@ -145,13 +152,79 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       if (itemError) throw new Error(itemError.message);
       return NextResponse.json({ batch: { ...batch, ...counts }, items: items ?? [], progress: counts.total_count ? Math.round((counts.completed_count + counts.failed_count + counts.skipped_count + counts.review_count) / counts.total_count * 100) : 100, updatedAt: new Date().toISOString() });
     }
-    if (action === "pause") { await db.from("batches").update({ status: "paused", paused_at: new Date().toISOString() }).eq("id", batchId); return NextResponse.json({ ok: true, status: "paused" }); }
-    if (action === "resume") { if (TERMINAL.has(String(batch.status).toLowerCase())) return reply("A completed or cancelled batch cannot be resumed.", 409); await db.from("batches").update({ status: "queued", paused_at: null, heartbeat_at: new Date().toISOString() }).eq("id", batchId); return NextResponse.json({ ok: true, status: "queued" }); }
-    if (action === "cancel") { await db.from("batches").update({ status: "cancelled", cancelled_at: new Date().toISOString() }).eq("id", batchId); await db.from("batch_generation_items").update({ status: "SKIPPED", error_summary: "Cancelled by user", completed_at: new Date().toISOString() }).eq("batch_id", batchId).eq("status", "PENDING"); return NextResponse.json({ ok: true, status: "cancelled" }); }
-    if (action === "retry") { let query = db.from("batch_generation_items").update({ status: "PENDING", error_summary: null, error_category: null, completed_at: null, available_at: new Date().toISOString() }).eq("batch_id", batchId).eq("project_id", projectId).eq("status", "FAILED"); if (Array.isArray(body.itemIds) && body.itemIds.length) query = query.in("id", body.itemIds.filter((v: unknown) => typeof v === "string").slice(0, MAX_BATCH)); const { error } = await query; if (error) throw new Error(error.message); await db.from("batches").update({ status: "queued", completed_at: null }).eq("id", batchId); return NextResponse.json({ ok: true, status: "queued" }); }
+    if (action === "pause") {
+      const current = String(batch.status).toLowerCase();
+      if (current === "paused") return NextResponse.json({ ok: true, status: "paused", idempotent: true });
+      if (!["queued", "running"].includes(current)) return reply("Only queued or running batches can be paused.", 409);
+      const { data: changed, error } = await db.from("batches")
+        .update({ status: "paused", paused_at: new Date().toISOString(), heartbeat_at: new Date().toISOString() })
+        .eq("id", batchId).eq("project_id", projectId).eq("owner_id", uid).eq("status", batch.status)
+        .select("status").maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!changed) return reply("Batch state changed concurrently; refresh its status before retrying.", 409);
+      return NextResponse.json({ ok: true, status: changed.status });
+    }
+    if (action === "resume") {
+      const current = String(batch.status).toLowerCase();
+      if (current === "queued") return NextResponse.json({ ok: true, status: "queued", idempotent: true });
+      if (current !== "paused") return reply("Only a paused batch can be resumed.", 409);
+      const { data: changed, error } = await db.from("batches")
+        .update({ status: "queued", paused_at: null, heartbeat_at: new Date().toISOString() })
+        .eq("id", batchId).eq("project_id", projectId).eq("owner_id", uid).eq("status", batch.status)
+        .select("status").maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!changed) return reply("Batch state changed concurrently; refresh its status before retrying.", 409);
+      return NextResponse.json({ ok: true, status: changed.status });
+    }
+    if (action === "cancel") {
+      const current = String(batch.status).toLowerCase();
+      if (current === "cancelled") return NextResponse.json({ ok: true, status: "cancelled", idempotent: true });
+      if (TERMINAL.has(current)) return reply("A completed batch cannot be cancelled.", 409);
+      const { data: changed, error } = await db.from("batches")
+        .update({ status: "cancelled", cancelled_at: new Date().toISOString(), heartbeat_at: new Date().toISOString() })
+        .eq("id", batchId).eq("project_id", projectId).eq("owner_id", uid).eq("status", batch.status)
+        .select("status").maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!changed) return reply("Batch state changed concurrently; refresh its status before retrying.", 409);
+      // Already-claimed work may finish; no new claims are permitted after cancellation.
+      const { error: skipError } = await db.from("batch_generation_items")
+        .update({ status: "SKIPPED", error_summary: "Cancelled by user", completed_at: new Date().toISOString(), claimed_by: null, claimed_at: null })
+        .eq("batch_id", batchId).eq("project_id", projectId).eq("owner_id", uid).eq("status", "PENDING");
+      if (skipError) throw new Error(skipError.message);
+      return NextResponse.json({ ok: true, status: "cancelled" });
+    }
+    if (action === "retry") {
+      const current = String(batch.status).toLowerCase();
+      if (!["failed", "completed_with_errors"].includes(current)) {
+        return reply("Only failed batches or batches completed with errors can be retried.", 409);
+      }
+      let itemIds: string[] | null = null;
+      if (Array.isArray(body.itemIds)) {
+        itemIds = body.itemIds.filter((value: unknown): value is string =>
+          typeof value === "string" && /^[0-9a-f-]{36}$/i.test(value)
+        ).slice(0, MAX_BATCH);
+        if (body.itemIds.length && !itemIds.length) return reply("No valid item IDs were supplied.", 400);
+      }
+      const { data: retried, error } = await db.rpc("retry_failed_batch_items", {
+        p_batch_id: batchId,
+        p_item_ids: itemIds,
+      });
+      if (error) {
+        if (String(error.message).includes("no failed items")) return reply("There are no eligible failed items to retry.", 409);
+        if (String(error.message).includes("not eligible")) return reply("Batch state changed; refresh before retrying.", 409);
+        throw new Error(error.message);
+      }
+      return NextResponse.json({ ok: true, status: "queued", retriedCount: Number(retried ?? 0) });
+    }
     if (action === "process") {
-      if (["paused","cancelled"].includes(String(batch.status).toLowerCase())) return reply("Batch is paused or cancelled; no new work will be claimed.", 409);
-      await db.from("batches").update({ status: "running", started_at: batch.started_at ?? new Date().toISOString(), heartbeat_at: new Date().toISOString() }).eq("id", batchId);
+      const current = String(batch.status).toLowerCase();
+      if (!["queued", "running"].includes(current)) return reply("Batch is not claimable in its current state.", 409);
+      const { data: started, error: startError } = await db.from("batches")
+        .update({ status: "running", started_at: batch.started_at ?? new Date().toISOString(), heartbeat_at: new Date().toISOString() })
+        .eq("id", batchId).eq("project_id", projectId).eq("owner_id", uid).eq("status", batch.status)
+        .select("id,status").maybeSingle();
+      if (startError) throw new Error(startError.message);
+      if (!started) return reply("Batch state changed concurrently; no work was claimed.", 409);
       const { data: claimed, error: claimError } = await db.rpc("claim_batch_generation_items", { p_batch_id: batchId, p_worker_id: randomUUID(), p_limit: WORKER_CONCURRENCY });
       if (claimError) throw new Error(claimError.message);
       const cookie = request.headers.get("cookie") ?? "";
@@ -162,7 +235,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           if (!renderResponse.ok || !result.ok || !result.cardId || !result.previewUrl) {
             const permanent = renderResponse.status === 400 || renderResponse.status === 403 || renderResponse.status === 404 || renderResponse.status === 422;
             const retry = !permanent && Number(item.attempts) < Number(item.max_attempts);
-            await db.from("batch_generation_items").update({ status: retry ? "PENDING" : permanent ? "NEEDS_REVIEW" : "FAILED", available_at: new Date(Date.now() + Math.min(60000, 1000 * 2 ** Number(item.attempts))).toISOString(), error_category: permanent ? "validation" : renderResponse.status === 413 ? "resource_limit" : "rendering", error_summary: String(result.error ?? "Card renderer returned an invalid result.").slice(0, 500), claimed_by: null, claimed_at: null, heartbeat_at: new Date().toISOString(), ...(retry ? {} : { completed_at: new Date().toISOString() }) }).eq("id", item.id).eq("status", "PROCESSING");
+            await db.from("batch_generation_items").update({ status: retry ? "PENDING" : permanent ? "NEEDS_REVIEW" : "FAILED", available_at: new Date(Date.now() + retryDelayMs(Number(item.attempts))).toISOString(), error_category: permanent ? "validation" : renderResponse.status === 413 ? "resource_limit" : "rendering", error_summary: String(result.error ?? "Card renderer returned an invalid result.").slice(0, 500), claimed_by: null, claimed_at: null, heartbeat_at: new Date().toISOString(), ...(retry ? {} : { completed_at: new Date().toISOString() }) }).eq("id", item.id).eq("status", "PROCESSING");
           } else {
             const { data: card } = await db.from("generated_cards").select("storage_path,render_input_hash,status,validation_status,output_sha256,output_width_px,output_height_px,template_id,template_version,photo_id,photo_version").eq("id", result.cardId).eq("project_id", projectId).eq("student_id", item.student_id).maybeSingle();
             if (!card?.storage_path || !card.render_input_hash || !card.output_sha256 || card.status !== "generated" || card.template_id !== batch.template_id || Number(card.template_version) !== Number(batch.template_version)) throw new Error("Renderer output record failed persisted-output validation.");
