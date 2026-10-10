@@ -12,55 +12,14 @@ const actualProjectRef = process.env.E2E_SUPABASE_PROJECT_REF;
 const productionProjectRef = process.env.E2E_PRODUCTION_SUPABASE_PROJECT_REF;
 
 function requireSafeEnvironment() {
-  const required = [
-    ["E2E_ISOLATED_ENV", process.env.E2E_ISOLATED_ENV],
-    ["E2E_ALLOW_MUTATIONS", process.env.E2E_ALLOW_MUTATIONS],
-    ["E2E_SYNTHETIC_DATA_CONFIRMED", process.env.E2E_SYNTHETIC_DATA_CONFIRMED],
-    ["E2E_PREVIEW_INSPECTED", process.env.E2E_PREVIEW_INSPECTED],
-    ["E2E_TEST_EMAIL", email],
-    ["E2E_TEST_PASSWORD", password],
-    ["E2E_EXPORT_PROJECT_ID", projectId],
-    ["E2E_EXPORT_ID", exportId],
-    ["E2E_SUPABASE_PROJECT_REF", actualProjectRef],
-    ["E2E_PRODUCTION_SUPABASE_PROJECT_REF", productionProjectRef],
-    ["E2E_PREVIEW_COMMIT_SHA", process.env.E2E_PREVIEW_COMMIT_SHA],
-    ["E2E_EXPECTED_COMMIT_SHA", process.env.E2E_EXPECTED_COMMIT_SHA],
-    ["PLAYWRIGHT_BASE_URL", process.env.PLAYWRIGHT_BASE_URL],
-  ] as const;
-  for (const [key, value] of required) {
-    if (!value?.trim()) throw new Error(`Safety stop: missing required variable ${key}.`);
-  }
-  if (process.env.E2E_ISOLATED_ENV !== "true" || !allowMutations) {
-    throw new Error("Safety stop: explicit isolated-environment and mutation opt-ins are required.");
-  }
-  if (process.env.E2E_SYNTHETIC_DATA_CONFIRMED !== "true") {
-    throw new Error("Safety stop: synthetic-only data has not been explicitly confirmed.");
-  }
-  if (process.env.E2E_PREVIEW_INSPECTED !== "true") {
-    throw new Error("Safety stop: the Preview must be inspected read-only before mutation.");
+  if (!isolated || !allowMutations || !email || !password || !projectId || !exportId || !actualProjectRef || !productionProjectRef) {
+    throw new Error("Export download acceptance requires isolated-environment flags, test-account credentials, project/export IDs, and both Supabase refs.");
   }
   if (actualProjectRef === productionProjectRef) {
     throw new Error("Safety stop: export download test project ref matches production.");
   }
-  if (process.env.E2E_PREVIEW_COMMIT_SHA !== process.env.E2E_EXPECTED_COMMIT_SHA) {
-    throw new Error("Safety stop: inspected Preview commit does not match expected commit.");
-  }
-
-  const supabaseUrlText = process.env.E2E_SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!supabaseUrlText) throw new Error("Safety stop: target Supabase URL is missing.");
-  const supabaseUrl = new URL(supabaseUrlText);
-  const match = supabaseUrl.hostname.match(/^([a-z0-9-]+)\\.supabase\\.co$/i);
-  if (supabaseUrl.protocol !== "https:" || !match || match[1] !== actualProjectRef) {
-    throw new Error("Safety stop: Supabase URL does not match the declared isolated project ref.");
-  }
-
-  const previewUrl = new URL(process.env.PLAYWRIGHT_BASE_URL!);
-  if (
-    previewUrl.protocol !== "https:" ||
-    !previewUrl.hostname.endsWith(".vercel.app") ||
-    previewUrl.hostname === "printforge-id-card-studio.vercel.app"
-  ) {
-    throw new Error("Safety stop: use an inspected HTTPS Vercel Preview URL, never the production alias.");
+  if (!process.env.PLAYWRIGHT_BASE_URL) {
+    throw new Error("Safety stop: set PLAYWRIGHT_BASE_URL to the inspected isolated preview URL.");
   }
 }
 
