@@ -1,0 +1,48 @@
+name: Phase 20 isolated acceptance CI
+
+on:
+  push:
+    branches:
+      - phase-20-isolated-acceptance
+  pull_request:
+    branches:
+      - main
+      - prompt-19-export-integrity
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase20-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Unit tests, typecheck, lint, and production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies (repository has no lockfile)
+        run: npm install
+
+      - name: Run tests, TypeScript, lint, and production build
+        env:
+          # Build-time placeholders only; CI never connects to a real Supabase project.
+          NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+        run: npm run build
+
+      - name: Verify acceptance preflight fails closed without test secrets
+        run: |
+          if npm run test:e2e:acceptance; then
+            echo "ERROR: acceptance command unexpectedly passed without isolated test configuration"
+            exit 1
+          fi
