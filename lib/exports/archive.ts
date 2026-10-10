@@ -29,7 +29,7 @@ export function csvCell(value: unknown): string {
   return '"' + text.replace(/"/g, '""') + '"';
 }
 export function buildManifests(items: Array<Record<string, unknown>>, exportId: string, createdAt: string) {
-  const columns = ["item_number","serial_number","student_ref","filename","side","format","validation_status","template_version","batch_id","exported_at"];
+  const columns = ["item_number","serial_number","student_ref","filename","side","format","sha256","validation_status","template_version","batch_id","exported_at"];
   const csv = [columns.join(","), ...items.map((item, i) => columns.map((key) => csvCell(item[key] ?? (key === "item_number" ? i + 1 : ""))).join(","))].join("\r\n") + "\r\n";
   const json = JSON.stringify({ schema_version: 1, export_id: exportId, exported_at: createdAt, item_count: items.length, items }, null, 2) + "\n";
   return { csv, json };

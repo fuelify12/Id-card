@@ -10,6 +10,8 @@ export function BatchGenerationWorkspace({ projectId }: { projectId: string }) {
   const [busy,setBusy]=useState(false),[error,setError]=useState(""),[filter,setFilter]=useState("ALL"),[search,setSearch]=useState("");
   const idempotencyKey = useRef<string | null>(null);
   const request=useCallback(async(action:string,extra:Record<string,unknown>={})=>{const res=await fetch("/api/projects/"+projectId+"/batch",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action,batchId,...extra})});const data=await res.json();if(!res.ok)throw new Error(data.error??"Batch request failed.");return data},[projectId,batchId]);
+  const discoverLatest=useCallback(async()=>{try{const res=await fetch("/api/projects/"+projectId+"/batch",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"latest"})});const data=await res.json();if(!res.ok)throw new Error(data.error??"Could not restore batch state.");if(data.batchId){setBatchId(data.batchId);setBatch({status:data.status})}}catch(e){setError((e as Error).message)}},[projectId]);
+  useEffect(()=>{void discoverLatest()},[discoverLatest]);
   const preflight=useCallback(async()=>{setBusy(true);setError("");try{const data=await request("preflight");setReport(data)}catch(e){setError((e as Error).message)}finally{setBusy(false)}},[request]);
   const refresh=useCallback(async()=>{if(!batchId)return;try{const data=await request("status");setBatch(data.batch);setItems(data.items??[])}catch(e){setError((e as Error).message)}},[request,batchId]);
   useEffect(()=>{if(!batchId)return;void refresh();const timer=window.setInterval(()=>void refresh(),2500);return()=>window.clearInterval(timer)},[batchId,refresh]);

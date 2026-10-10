@@ -19,8 +19,11 @@ describe("Phase 11 ZIP export helpers", () => {
     expect(uniqueArchiveName("front/001_नाम.png", used)).toBe("front/001_नाम_2.png");
   });
   it("CSV-escapes quotes and keeps valid JSON manifest data", () => {
-    const m = buildManifests([{ serial_number:"001", filename:'front/A,"B.png', side:"front", format:"png" }], "export-id", "2026-10-09T00:00:00Z");
+    const m = buildManifests([{ serial_number:"001", filename:'front/A,"B.png', side:"front", format:"png", sha256:"a".repeat(64) }], "export-id", "2026-10-09T00:00:00Z");
     expect(m.csv).toContain('"front/A,""B.png');
+    expect(m.csv.split(String.fromCharCode(13, 10))[0]).toContain("sha256");
+    expect(m.csv).toContain("a".repeat(64));
+    expect(JSON.parse(m.json).items[0].sha256).toBe("a".repeat(64));
     expect(JSON.parse(m.json).item_count).toBe(1);
     expect(buildManifests([{ filename:"=HYPERLINK(\"https://bad\")" }],"id","now").csv).toContain("\"'=HYPERLINK");
   });

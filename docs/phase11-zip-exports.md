@@ -10,15 +10,16 @@
 
 ## ZIP contents
 - Folder layout on: `front/` and, for front/back exports, `back/`; flat layout is available. With folder layout enabled, a sanitized school/session root folder is used.
-- Optional `manifest.csv`, `manifest.json`, and `exclusions.csv`. The CSV manifest contains only files actually packaged; JSON lists exclusions separately.
+- Optional `manifest.csv`, `manifest.json`, and `exclusions.csv`. The CSV and JSON manifests include a SHA-256 hash of each final packaged card file; JSON lists exclusions separately.
 - Student names are omitted from filenames by default and can be explicitly enabled. Serial numbers are padded to at least three digits. Duplicate filenames are deterministically disambiguated.
 
 ## Security and retention
 - Archives remain private under `<user-id>/<project-id>/<export-id>/archive.zip`; the bucket is never public.
-- Download endpoints recheck project/export ownership, completion state, expiry, object existence and storage path, then issue a signed URL valid for 60 seconds.
+- Download endpoints recheck project/export ownership, completion state, expiry, object existence, and the exact canonical storage key; they re-download the private object and verify the archive SHA-256, recorded byte length, ZIP directory, and stored expected entry list before issuing a signed URL valid for 60 seconds. New exports also verify each item hash against the JSON manifest.
 - Expiration is enforced lazily on history refresh/download. Expired objects are removed; no scheduled cleanup job is configured in this phase.
 - Export creation, completion, failure, deletion, retry requests and download-link issuance are audited. Student names are not logged in audit metadata.
 - Temporary files are deleted in a `finally` cleanup path. Interrupted workers older than ten minutes are marked failed and may be retried after fresh eligibility checks.
+- Code-level integrity checks do not replace a real browser download test. Run the gated Prompt 19 acceptance only against an independently verified isolated Supabase project and matching preview; never use the production project for mutating tests.
 
 ## Operations
 Apply `supabase/phase11_zip_exports.sql` through the existing Supabase migration workflow. No new environment variables or paid services are required.

@@ -9,8 +9,9 @@ import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
 import { createClient } from "@/lib/supabase/server";
 import { STORAGE_BUCKETS } from "@/lib/supabase/storage";
-import { buildManifests, chooseCardSides, csvCell, exportEligibilityReasons, safeFilenamePart, sha256, sourceFormatSupports, uniqueArchiveName, verifyZipDirectory } from "@/lib/exports/archive";
+import { buildManifests, chooseCardSides, csvCell, exportEligibilityReasons, safeFilenamePart, sha256, sourceFormatSupports, uniqueArchiveName } from "@/lib/exports/archive";
 import { consumeRateLimit } from "@/lib/security/rate-limit";
+import { isExpectedExportStoragePath, verifyArchiveIntegrity } from "@/lib/exports/integrity";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -262,7 +263,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{id:
       const archiveName=uniqueArchiveName(root?root+"/"+item.archiveName:item.archiveName,used);
       const entry=new ZipPassThrough(archiveName);zip.add(entry);entry.push(bytes,true);if(writer.writableNeedDrain)await new Promise<void>((resolve,reject)=>{writer.once("drain",resolve);writer.once("error",reject);});
       expectedNames.push(archiveName);processed++;
-      actualManifest.push({item_number:processed,serial_number:item.serialNumber,student_ref:item.studentRef,filename:archiveName,side:item.side,format:outFormat,validation_status:card.validation_status,template_version:card.template_version,batch_id:job.batch_id,exported_at:new Date().toISOString()});
+      actualManifest.push({item_number:processed,serial_number:item.serialNumber,student_ref:item.studentRef,filename:archiveName,side:item.side,format:outFormat,sha256:sha256(bytes),validation_status:card.validation_status,template_version:card.template_version,batch_id:job.batch_id,exported_at:new Date().toISOString()});
       const {error:peu}=await db.from("exports").update({packaged_file_count:processed,failed_item_count:failed,status:"running",updated_at:new Date().toISOString()}).eq("id",exportId).eq("owner_id",uid);
       if(peu)throw new Error("Could not persist export progress.");
       {const size=(await stat(zipPath).catch(()=>({size:0} as any))).size;if(size>MAX_ARCHIVE_BYTES)throw Object.assign(new Error("Archive exceeded the 90 MB storage safety limit."),{code:"ARCHIVE_LIMIT"});}
@@ -278,11 +279,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{id:
     await db.from("exports").update({status:"verifying",updated_at:new Date().toISOString()}).eq("id",exportId).eq("owner_id",uid);
     const info=await stat(zipPath);if(info.size>MAX_ARCHIVE_BYTES)throw Object.assign(new Error("Archive exceeded the 90 MB storage safety limit."),{code:"ARCHIVE_LIMIT"});
     const archive=await readFile(zipPath);
-    const verification=verifyZipDirectory(archive,expectedNames);
+    const verification=verifyArchiveIntegrity(archive,expectedNames,actualManifest);
     if(!verification.ok)throw new Error("ZIP integrity verification failed: "+(verification.reason??"unknown archive error"));
     if(verification.names.length!==expectedNames.length)throw new Error("ZIP entry count does not match the manifest.");
     const archiveHash=sha256(archive);
     const storagePath=String(job.storage_path??`${uid}/${id}/${exportId}/archive.zip`);
+    if(!isExpectedExportStoragePath(storagePath,uid,id,exportId))throw new Error("Export storage key is outside the canonical private namespace.");
     const {error:up}=await db.storage.from(STORAGE_BUCKETS.exports).upload(storagePath,createReadStream(zipPath) as any,{contentType:"application/zip",upsert:true,cacheControl:"0"});
     if(up)throw new Error("Could not store the verified ZIP archive in private storage.");
     uploadedPath=storagePath;
@@ -290,16 +292,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{id:
     if(storedError||!stored)throw new Error("Stored archive could not be retrieved for final verification.");
     const storedBytes=Buffer.from(await stored.arrayBuffer());
     if(sha256(storedBytes)!==archiveHash)throw new Error("Stored archive hash differs from the verified archive.");
-    const finalVerification=verifyZipDirectory(storedBytes,expectedNames);
-    if(!finalVerification.ok)throw new Error("Stored archive failed final integrity verification.");
+    const finalVerification=verifyArchiveIntegrity(storedBytes,expectedNames,actualManifest);
+    if(!finalVerification.ok)throw new Error("Stored archive failed final integrity verification: "+(finalVerification.reason??"unknown archive error"));
     const status=failed?"completed_with_errors":"completed";
-    const {error:done}=await db.from("exports").update({status,retryable:false,storage_path:storagePath,packaged_file_count:processed,failed_item_count:failed,archive_bytes:storedBytes.length,archive_sha256:archiveHash,completed_at:new Date().toISOString(),updated_at:new Date().toISOString(),error_summary:failed?`${failed} card output(s) failed final revalidation and were excluded.`:null,manifest:{entries:actualManifest.length,expected_names:expectedNames}}).eq("id",exportId).eq("owner_id",uid);
+    const {error:done}=await db.from("exports").update({status,retryable:false,storage_path:storagePath,packaged_file_count:processed,failed_item_count:failed,archive_bytes:storedBytes.length,archive_sha256:archiveHash,completed_at:new Date().toISOString(),updated_at:new Date().toISOString(),error_summary:failed?`${failed} card output(s) failed final revalidation and were excluded.`:null,manifest:{entries:actualManifest.length,expected_names:expectedNames,items:actualManifest}}).eq("id",exportId).eq("owner_id",uid);
     if(done)throw new Error("Archive was stored but completion could not be persisted.");
     await insertAudit(db,uid,id,"export_completed",exportId,{packagedFileCount:processed,failedItemCount:failed,archiveBytes:storedBytes.length,archiveSha256:archiveHash});
     return NextResponse.json({ok:true,status,packagedFileCount:processed,failedItemCount:failed,archiveBytes:storedBytes.length});
   } catch(e:any) {
     if(uploadedPath)await db.storage.from(STORAGE_BUCKETS.exports).remove([uploadedPath]).catch(()=>{});
-    const rawMessage=String(e?.message??"");const message=e?.code==="ARCHIVE_LIMIT"?"Archive exceeds the configured 90 MB limit. Export fewer cards or split the batch.":"Export packaging failed. Check the source batch and private storage before retrying.";const retryable=e?.code!=="ARCHIVE_LIMIT"&&!rawMessage.includes("No cards remained eligible")&&!rawMessage.includes("integrity verification failed")&&!rawMessage.includes("exceeded the 90 MB")&&!rawMessage.includes("invalid archive path");
+    const rawMessage=String(e?.message??"");const message=e?.code==="ARCHIVE_LIMIT"?"Archive exceeds the configured 90 MB limit. Export fewer cards or split the batch.":"Export packaging failed. Check the source batch and private storage before retrying.";const lowerMessage=rawMessage.toLowerCase();const retryable=e?.code!=="ARCHIVE_LIMIT"&&!lowerMessage.includes("no cards remained eligible")&&!lowerMessage.includes("integrity")&&!lowerMessage.includes("sha-256")&&!lowerMessage.includes("hash differs")&&!lowerMessage.includes("manifest")&&!lowerMessage.includes("canonical private namespace")&&!lowerMessage.includes("exceeded the 90 mb")&&!lowerMessage.includes("invalid archive path");
     await db.from("exports").update({status:"failed",retryable,error_summary:message,failed_item_count:failed,updated_at:new Date().toISOString()}).eq("id",exportId).eq("owner_id",uid);
     await insertAudit(db,uid,id,"export_failed",exportId,{reason:message,failedItemCount:failed}).catch(()=>{});
     return fail(message,500);
