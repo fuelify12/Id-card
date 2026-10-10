@@ -71,7 +71,8 @@ test("downloads a completed synthetic ZIP and verifies its archive hash and mani
   );
   requireSafeEnvironment();
 
-  await page.goto("/login");
+  const bypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  await page.goto("/login", bypassSecret ? { headers: { "x-vercel-protection-bypass": bypassSecret } } : {});
   await page.locator('input[type="email"]').fill(email!);
   await page.locator('input[type="password"]').fill(password!);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
