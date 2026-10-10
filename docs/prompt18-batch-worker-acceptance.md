@@ -1,6 +1,6 @@
 # Prompt 18 — Persistent batch worker recovery
 
-**Status: CODE IMPLEMENTATION PRESENT; LIVE ACCEPTANCE BLOCKED BY SUPABASE PLAN RESTRICTION AND PREVIEW ACCESS.**
+**Status: CODE IMPLEMENTATION PRESENT; LIVE ACCEPTANCE BLOCKED BY SUPABASE PROJECT LIMIT AND PREVIEW ACCESS.**
 
 ## Verified baseline
 
@@ -31,27 +31,30 @@
 
 ## Isolated acceptance — currently blocked
 
-The owner approved a development branch at the quoted cost of USD 0.01344/hour. The Supabase create-branch API then returned:
+The owner first authorized a development branch at USD 0.01344/hour, but Supabase rejected branch creation because branching requires the Pro plan or above. No branch was created.
 
-`PaymentRequiredException: Branching is supported only on the Pro plan or above`
+The owner then explicitly authorized a separate isolated project at the quoted USD 0/month project cost, in the Guru organization, with synthetic-only testing and no production changes. Supabase rejected project creation with this account/organization limit:
 
-The branch `prompt-18-isolated-acceptance` was **not created**. The current Supabase project has no development branches. Cost confirmation does not override the Pro-plan requirement. No plan upgrade or separate paid project was authorized or attempted.
+`The following organization members have reached their maximum limits for the number of active free projects within organizations where they are an administrator or owner: fuelify12 (2 project limit). To continue, these users will need to either delete, pause or upgrade one or more of these projects.`
+
+A read-only project listing returned the active production project `xdoenkusrakuyyxnnkff` (Id-card) in Guru. The isolated project `prompt18-isolated-acceptance` was **not created**. No existing project was paused/deleted, no plan was upgraded, and no production configuration or data was changed. We must not pause/delete the production project or create a paid resource without explicit authorization.
 
 Prompt 18 must not be marked live-accepted until an isolated database/storage/auth environment and a matching, accessible preview are available. Do not apply this migration to production as a workaround.
 
 ## Required isolated integration run
 
-1. Provide an isolated Supabase branch after the project has a plan that supports branching, or separately authorize an isolated test project and its cost.
-2. Configure an inspected Vercel preview to use only that isolated database, storage and auth environment; keep the production project ref distinct and verify runtime configuration.
-3. Use two synthetic test users/tenants and synthetic projects/template/student/photo records.
-4. Apply the migration only to the isolated database and inspect migration output.
-5. Interrupt a worker after claim, wait five minutes or inject a test-controlled stale heartbeat in the isolated DB, then verify the next process request reclaims the item.
-6. Verify an item at max_attempts becomes FAILED rather than remaining PROCESSING.
-7. Run concurrent claim requests and verify there are no duplicate live claims.
-8. Test pause, resume, cancel and manual retry using the real UI/API and persisted rows.
-9. Run the 300-record synthetic batch and reconcile each item against persisted counters.
-10. Verify tenant B cannot read, retry, cancel, resume or process tenant A's batch.
-11. Save sanitized SQL assertions, API responses, worker logs, test outputs and reproduction steps.
+1. Resolve the Supabase active-free-project limit safely: the owner can choose to pause/delete a confirmed non-production project or authorize an upgrade/paid isolated project. Do not assume which project may be changed.
+2. Create the isolated test project in Guru, with a separate database, storage and auth environment; do not copy production data.
+3. Configure an inspected Vercel preview to use only the isolated environment; keep the production project ref distinct and verify runtime configuration.
+4. Use two synthetic test users/tenants and synthetic projects/template/student/photo records.
+5. Apply the migration only to the isolated database and inspect migration output.
+6. Interrupt a worker after claim, wait five minutes or inject a test-controlled stale heartbeat in the isolated DB, then verify the next process request reclaims the item.
+7. Verify an item at max_attempts becomes FAILED rather than remaining PROCESSING.
+8. Run concurrent claim requests and verify there are no duplicate live claims.
+9. Test pause, resume, cancel and manual retry using the real UI/API and persisted rows.
+10. Run the 300-record synthetic batch and reconcile each item against persisted counters.
+11. Verify tenant B cannot read, retry, cancel, resume or process tenant A's batch.
+12. Save sanitized SQL assertions, API responses, worker logs, test outputs and reproduction steps.
 
 ## Browser access block
 
@@ -59,11 +62,12 @@ The previously inspected Vercel preview was behind Vercel SSO and configured to 
 
 ## Automated repository checks (GitHub Actions)
 
-Checked on 2026-10-10 against latest head `e2cc480a77a73a3cdeed064b9e0da39b5be6d28e`:
+Checked on 2026-10-10 against head `e2cc480a77a73a3cdeed064b9e0da39b5be6d28e` before the documentation refresh:
 
 - Main CI: https://github.com/fuelify12/Id-card/actions/runs/38049605342 — completed successfully.
 - Phase 8 rendering checks: https://github.com/fuelify12/Id-card/actions/runs/38049605329 — completed successfully.
-- These repository checks do not execute the SQL migration against Supabase, exercise an interrupted persisted worker, prove tenant isolation, or substitute for a real browser acceptance run.
+- The documentation refresh creates a new head; its CI runs were still in progress at the last inspection.
+- Repository checks do not execute the SQL migration against Supabase, exercise an interrupted persisted worker, prove tenant isolation, or substitute for a real browser acceptance run.
 - PR #3 remains a draft; do not treat CI success as launch approval.
 
 ## Evidence labels
@@ -75,4 +79,4 @@ Checked on 2026-10-10 against latest head `e2cc480a77a73a3cdeed064b9e0da39b5be6d
 
 ## Final decision
 
-**NOT READY FOR LAUNCH.** The code implementation and current automated repository checks are present, but Prompt 18 live acceptance is blocked. The next environment step requires a Supabase plan supporting branching or explicit authorization for a separate isolated project. Do not merge or deploy this PR as proof of live acceptance.
+**NOT READY FOR LAUNCH.** Code implementation is present, but Prompt 18 live acceptance is blocked by Supabase's free-project limit and the protected/misconfigured preview. The owner must decide how to resolve the project limit without touching production. Do not merge or deploy this PR as proof of live acceptance.
