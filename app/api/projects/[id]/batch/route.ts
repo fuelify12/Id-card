@@ -203,7 +203,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         itemIds = body.itemIds.filter((value: unknown): value is string =>
           typeof value === "string" && /^[0-9a-f-]{36}$/i.test(value)
         ).slice(0, MAX_BATCH);
-        if (body.itemIds.length && !itemIds.length) return reply("No valid item IDs were supplied.", 400);
+        if (body.itemIds.length && !(itemIds?.length)) return reply("No valid item IDs were supplied.", 400);
       }
       const { data: retried, error } = await db.rpc("retry_failed_batch_items", {
         p_batch_id: batchId,
