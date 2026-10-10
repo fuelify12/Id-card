@@ -53,6 +53,16 @@ This phase must not be represented as live acceptance until all of the following
 
 Supabase reported the development branch cost for the Guru organization as USD 0.01344/hour. No branch was created because owner cost confirmation is required first. No production migration or mutating test was performed.
 
+## Automated repository checks (GitHub Actions)
+
+Checked against the Prompt 18 head commit `b681324f1a7e1db66b8d85c1f71c8c4c3eb27f34` on 2026-10-10:
+
+- Main CI run: https://github.com/fuelify12/Id-card/actions/runs/38049430050
+- Rendering checks run: https://github.com/fuelify12/Id-card/actions/runs/38049430049
+- The retrieved workflow job summaries report `success` for unit tests, TypeScript, lint/ESLint, production build and (main CI) client-bundle secret exposure checks; dependency vulnerability and repository secret hygiene checks also report success in main CI.
+- These are repository-level checks only. They do not execute the SQL migration against Supabase, exercise an interrupted persisted worker, or prove tenant isolation in a live preview.
+- Pull request #3 remains a draft; do not treat successful CI as launch approval.
+
 ## Evidence labels
 
 - Unit tests for pure reconciliation/backoff logic can pass without Supabase.
