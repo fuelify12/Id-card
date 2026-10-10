@@ -66,3 +66,8 @@ export function verifyArchiveIntegrity(
     return { ok: false, reason: "Archive or manifest could not be decoded for integrity verification.", names: directory.names, verifiedItems: 0 };
   }
 }
+
+/** Export archives have one canonical object key; prefixes alone are not sufficient. */
+export function isExpectedExportStoragePath(path: unknown, userId: string, projectId: string, exportId: string): boolean {
+  return typeof path === "string" && path === userId + "/" + projectId + "/" + exportId + "/archive.zip";
+}
