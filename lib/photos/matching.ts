@@ -23,27 +23,27 @@ export function parsePhotoFilename(filename:string, configuredPrefix:string|null
   if(prefixMatch){candidate=prefixMatch[1];method="filename_prefixed";}
  }
  if(!candidate) {
-  const numeric=stem.match(/^(\\d+)(?:[_ -]([A-Za-z][A-Za-z0-9 _-]*))?$/);
+  const numeric=stem.match(/^(\d+)(?:[_ -]([A-Za-z][A-Za-z0-9 _-]*))?$/);
   if(numeric){candidate=numeric[1];method="filename_numeric";}
  }
  if(!candidate) {
-  const optionalSuffix=stem.match(/^([\\p{L}\\p{N}.-]+)_([A-Za-z][A-Za-z0-9 _-]*)$/u);
-  if(optionalSuffix && /\\d/.test(optionalSuffix[1])) {
-   candidate=optionalSuffix[1];method=/^\\d+$/.test(candidate)?"filename_numeric":"filename_text";
+  const optionalSuffix=stem.match(/^([\p{L}\p{N}.-]+)_([A-Za-z][A-Za-z0-9 _-]*)$/u);
+  if(optionalSuffix && /\d/.test(optionalSuffix[1])) {
+   candidate=optionalSuffix[1];method=/^\d+$/.test(candidate)?"filename_numeric":"filename_text";
   } else {
    // A text identifier may contain underscores. If an underscore could instead begin a
    // descriptive suffix, do not guess unless the configured prefix/numeric rule disambiguates it.
-   if(stem.includes("_") && !/^\\d+_[A-Za-z][A-Za-z0-9 _-]*$/.test(stem)) {
-    const groups=stem.match(/\\d+/g)??[];
+   if(stem.includes("_") && !/^\d+_[A-Za-z][A-Za-z0-9 _-]*$/.test(stem)) {
+    const groups=stem.match(/\d+/g)??[];
     if(groups.length>1) return {status:"NEEDS_REVIEW",originalSerial:null,normalizedSerial:null,legacySerialNumber:null,reason:"Filename contains multiple possible identifier/serial groups"};
-    if(!/^[\\p{L}\\p{N}][\\p{L}\\p{N}._/-]*$/u.test(stem)) return {status:"NEEDS_REVIEW",originalSerial:null,normalizedSerial:null,legacySerialNumber:null,reason:"Filename identifier is ambiguous or contains unsupported characters"};
+    if(!/^[\p{L}\p{N}][\p{L}\p{N}._/-]*$/u.test(stem)) return {status:"NEEDS_REVIEW",originalSerial:null,normalizedSerial:null,legacySerialNumber:null,reason:"Filename identifier is ambiguous or contains unsupported characters"};
    }
-   candidate=stem;method=/^\\d+$/.test(stem)?"filename_numeric":"filename_text";
+   candidate=stem;method=/^\d+$/.test(stem)?"filename_numeric":"filename_text";
   }
  }
  const result=canonicalizeStudentIdentifier(candidate,policy);
  if(!result.ok) return {status:"NEEDS_REVIEW",originalSerial:candidate,normalizedSerial:null,legacySerialNumber:null,reason:result.error};
- const digitGroups=stem.match(/\\d+/g)??[];
+ const digitGroups=stem.match(/\d+/g)??[];
  if(digitGroups.length>1 && !configuredPrefix) return {status:"NEEDS_REVIEW",originalSerial:candidate,normalizedSerial:null,legacySerialNumber:null,reason:"Filename contains multiple numeric groups; identifier cannot be determined safely"};
  return {status:"EXACT",originalSerial:candidate,normalizedSerial:result.value,legacySerialNumber:result.legacySerialNumber,method};
 }
