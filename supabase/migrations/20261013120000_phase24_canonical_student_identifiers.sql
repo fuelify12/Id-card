@@ -17,6 +17,8 @@ where student_identifier is null;
 -- Keep the legacy integer column for old readers, but allow text-only identifiers to be represented
 -- without lossy coercion. Existing values are preserved unchanged.
 alter table public.students alter column serial_number drop not null;
+alter table public.batch_generation_items alter column serial_number drop not null;
+alter table public.generated_cards alter column serial_number drop not null;
 
 alter table public.student_photos
   add column if not exists student_identifier text;
