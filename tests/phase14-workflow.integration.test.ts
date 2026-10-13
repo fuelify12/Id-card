@@ -32,7 +32,7 @@ describe("Phase 14 synthetic workflow integration", () => {
     expect(parsed.rows[0].serialNumber).toBe("001");
 
     const match = proposePhotoMatch(parsePhotoFilename("001_Aarav.jpg"), [
-      { id: "student-1", serial_number: 1 }, { id: "student-duplicate", serial_number: 1 },
+      { id: "student-1", serial_number: 1, student_identifier: "001" }, { id: "student-duplicate", serial_number: 1, student_identifier: "001" },
     ]);
     expect(match.status).toBe("NEEDS_REVIEW");
     expect(match.studentId).toBeNull();

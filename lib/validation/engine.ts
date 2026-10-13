@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 export type Severity="CRITICAL"|"ERROR"|"WARNING"|"INFO";
 export type FindingStatus="OPEN"|"IN_REVIEW"|"RESOLVED"|"WAIVED";
 export type Finding={ruleId:string;ruleVersion:number;severity:Severity;status:FindingStatus;message:string;correctiveAction:string;studentId?:string|null;generatedCardId?:string|null;batchId?:string|null;fieldRef?:string|null;assetRef?:string|null;inputFingerprint:string;details?:Record<string,unknown>};
-type Student={id:string;project_id?:string;serial_number:number|null;data?:Record<string,unknown>|null};
+type Student={id:string;project_id?:string;serial_number:number|null;student_identifier?:string|null;student_identifier_review_required?:boolean;student_identifier_source?:string;data?:Record<string,unknown>|null};
 type Field={id?:string;key?:string;label?:string;field_type?:string;source_column?:string|null;required?:boolean;visible?:boolean;x:number;y:number;width:number;height:number;font_family?:string|null;font_size?:number|null;color?:string|null;static_value?:string|null;render_options?:Record<string,unknown>|null};
 const norm=(s:string)=>s.normalize("NFKC").trim().toLowerCase().replace(/[\s_-]+/g,"");
 const empty=(v:unknown)=>v===undefined||v===null||String(v).trim()==="";
@@ -10,9 +10,10 @@ const hash=(v:unknown)=>createHash("sha256").update(JSON.stringify(v)).digest("h
 function make(ruleId:string,severity:Severity,message:string,correctiveAction:string,fingerprint:unknown,more:Partial<Finding>={}):Finding{return{ruleId,ruleVersion:1,severity,status:"OPEN",message,correctiveAction,inputFingerprint:hash(fingerprint),...more}}
 export function validateStudents(students:Student[],requiredFields:string[]=[],options:{admissionNumberUnique?:boolean}={}):Finding[]{
  const out:Finding[]=[],serials=new Map<string,Student[]>(),admissions=new Map<string,Student[]>();
- for(const s of students){const d=s.data??{},serial=s.serial_number==null?"":String(s.serial_number).trim();
- if(!serial)out.push(make("STUDENT_SERIAL_MISSING","CRITICAL","Student serial number is missing.","Correct the serial number in the source sheet and verify the imported record.",{id:s.id,serial},{studentId:s.id}));
+ for(const s of students){const d=s.data??{},serial=String(s.student_identifier??(s.serial_number==null?"":s.serial_number));
+ if(!serial)out.push(make("STUDENT_SERIAL_MISSING","CRITICAL","Student identifier is missing.","Correct the student identifier in the source sheet and verify the imported record.",{id:s.id,serial},{studentId:s.id}));
  else serials.set(serial,[...(serials.get(serial)??[]),s]);
+ if(s.student_identifier_review_required)out.push(make("STUDENT_IDENTIFIER_REVIEW_REQUIRED","CRITICAL","This identifier was backfilled from a legacy numeric value and may have lost leading-zero formatting.","Review the exact identifier shown in the project and explicitly confirm or correct it before generating cards.",{id:s.id,identifier:serial,source:s.student_identifier_source??"legacy_numeric_backfill"},{studentId:s.id,fieldRef:"student_identifier"}));
  const nk=Object.keys(d).find(k=>["studentname","name","fullname","pupilname"].includes(norm(k)));
  const nameValue=nk?d[nk]:undefined;if(!nk||empty(nameValue))out.push(make("STUDENT_NAME_MISSING","ERROR","Required student name is missing.","Map the correct name column and verify this student record.",{id:s.id,key:nk,value:nameValue},{studentId:s.id,fieldRef:nk??"student_name"}));
  for(const req of requiredFields){const k=Object.keys(d).find(x=>norm(x)===norm(req));const value=k?d[k]:undefined;if(!k||empty(value))out.push(make("STUDENT_REQUIRED_FIELD_MISSING","ERROR","A project-required student field is missing.","Fill the required field or update the school-specific configuration.",{id:s.id,req,k,value},{studentId:s.id,fieldRef:req}))}
@@ -25,7 +26,7 @@ export function validateStudents(students:Student[],requiredFields:string[]=[],o
  const ak=Object.keys(d).find(k=>["admissionnumber","admissionno","admissionid","enrollmentnumber","enrollmentno"].includes(norm(k)));
  if(ak&&!empty(d[ak])){const a=String(d[ak]).normalize("NFKC").trim().toLocaleLowerCase("en-IN");admissions.set(a,[...(admissions.get(a)??[]),s])}
  }
- for(const [serial,rows]of serials)if(rows.length>1)for(const s of rows)out.push(make("STUDENT_SERIAL_DUPLICATE","CRITICAL","More than one student record uses the same serial number.","Resolve duplicate serial numbers before matching photos or generating cards.",{serial,ids:rows.map(r=>r.id).sort()},{studentId:s.id,fieldRef:"serial_number"}));
+ for(const [serial,rows]of serials)if(rows.length>1)for(const s of rows)out.push(make("STUDENT_SERIAL_DUPLICATE","CRITICAL","More than one student record uses the same canonical identifier.","Resolve duplicate student identifiers before matching photos or generating cards.",{serial,ids:rows.map(r=>r.id).sort()},{studentId:s.id,fieldRef:"student_identifier"}));
  for(const [admission,rows]of admissions)if(options.admissionNumberUnique!==false&&rows.length>1)for(const s of rows)out.push(make("STUDENT_ADMISSION_DUPLICATE","ERROR","Admission number is duplicated within this project.","Confirm the school's uniqueness policy and correct the source record if needed.",{admission,ids:rows.map(r=>r.id).sort()},{studentId:s.id,fieldRef:"admission_number"}));
  return out;
 }

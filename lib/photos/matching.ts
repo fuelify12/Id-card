@@ -1,46 +1,70 @@
+import { canonicalizeStudentIdentifier, DEFAULT_STUDENT_IDENTIFIER_POLICY, type StudentIdentifierPolicy } from "@/lib/identifiers/student-identifier";
 export type FilenameMatch =
- | {status:"EXACT"; originalSerial:string; normalizedSerial:string; method:"filename_numeric"|"filename_prefixed"}
- | {status:"NEEDS_REVIEW"; originalSerial:string|null; normalizedSerial:null; reason:string};
-export type StudentSerial = {id:string; serial_number:number};
-export type MatchProposal = {status:"MATCHED"|"NEEDS_REVIEW"|"UNMATCHED"|"DUPLICATE"; studentId:string|null; serialNumber:number|null; normalizedSerial:string|null; matchingMethod:string|null; reason?:string};
+ | {status:"EXACT"; originalSerial:string; normalizedSerial:string; legacySerialNumber:number|null; method:"filename_numeric"|"filename_prefixed"|"filename_text"}
+ | {status:"NEEDS_REVIEW"; originalSerial:string|null; normalizedSerial:null; legacySerialNumber:null; reason:string};
+export type StudentSerial = {id:string; serial_number:number|null; student_identifier?:string|null};
+export type MatchProposal = {status:"MATCHED"|"NEEDS_REVIEW"|"UNMATCHED"|"DUPLICATE"; studentId:string|null; serialNumber:number|null; studentIdentifier:string|null; normalizedSerial:string|null; matchingMethod:string|null; reason?:string};
 export function normalizeCanonicalSerial(value:string|number|null|undefined):string|null {
  if(value===null||value===undefined) return null;
- const s=String(value).trim();
- if(!/^\d+$/.test(s)) return null;
- try { const n=BigInt(s); if(n>2147483647n) return null; return n.toString(); } catch { return null; }
+ const result=canonicalizeStudentIdentifier(String(value),DEFAULT_STUDENT_IDENTIFIER_POLICY);
+ return result.ok?result.value:null;
 }
-export function parsePhotoFilename(filename:string, configuredPrefix:string|null=null):FilenameMatch {
+export function parsePhotoFilename(filename:string, configuredPrefix:string|null=null, policy:StudentIdentifierPolicy=DEFAULT_STUDENT_IDENTIFIER_POLICY):FilenameMatch {
  const base=filename.split(/[\\/]/).pop()??filename;
  const dot=base.lastIndexOf(".");
- if(dot<=0) return {status:"NEEDS_REVIEW",originalSerial:null,normalizedSerial:null,reason:"Missing or unsupported file extension"};
- const stem=base.slice(0,dot).trim();
- if(!stem) return {status:"NEEDS_REVIEW",originalSerial:null,normalizedSerial:null,reason:"Empty filename"};
- let m:RegExpMatchArray|null=null;
- let method:"filename_numeric"|"filename_prefixed"="filename_numeric";
+ if(dot<=0) return {status:"NEEDS_REVIEW",originalSerial:null,normalizedSerial:null,legacySerialNumber:null,reason:"Missing or unsupported file extension"};
+ const stem=base.slice(0,dot);
+ if(!stem) return {status:"NEEDS_REVIEW",originalSerial:null,normalizedSerial:null,legacySerialNumber:null,reason:"Empty filename"};
+ if(["photo","image","img","student","unknown","untitled"].includes(stem.toLocaleLowerCase("en-US"))) return {status:"NEEDS_REVIEW",originalSerial:null,normalizedSerial:null,legacySerialNumber:null,reason:"Filename is generic and does not identify a student"};
+ let candidate:string|null=null;
+ let method:"filename_numeric"|"filename_prefixed"|"filename_text"="filename_text";
  if(configuredPrefix && /^[A-Za-z][A-Za-z0-9_-]{0,15}$/.test(configuredPrefix)) {
   const escaped=configuredPrefix.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
-  m=stem.match(new RegExp("^"+escaped+"[-_ ](\\d+)(?:[_ -][A-Za-z][A-Za-z0-9 _-]*)?$","i"));
-  if(m) method="filename_prefixed";
+  const prefixMatch=stem.match(new RegExp("^("+escaped+"-\\d+)(?:_([A-Za-z][A-Za-z0-9 _-]*))?$","i"));
+  if(prefixMatch){candidate=prefixMatch[1];method="filename_prefixed";}
  }
- if(!m) m=stem.match(/^(\d+)(?:[_ -][A-Za-z][A-Za-z0-9 _-]*)?$/);
- if(!m) {
-  const digits=stem.match(/\d+/g)??[];
-  return {status:"NEEDS_REVIEW",originalSerial:digits.length===1?digits[0]:null,normalizedSerial:null,reason:digits.length>1?"Filename contains multiple possible serial numbers":"Filename does not match a supported serial pattern"};
+ if(!candidate && !configuredPrefix && /^[A-Za-z][A-Za-z0-9_]*-\d+(?:_.*)?$/.test(stem)) return {status:"NEEDS_REVIEW",originalSerial:null,normalizedSerial:null,legacySerialNumber:null,reason:"Prefixed identifier requires an explicit project prefix configuration"};
+ if(!candidate) {
+  const numeric=stem.match(/^(\d+)(?:[_ -]([A-Za-z][A-Za-z0-9 _-]*))?$/);
+  if(numeric){candidate=numeric[1];method="filename_numeric";}
  }
- const originalSerial=m[1];
- const normalizedSerial=normalizeCanonicalSerial(originalSerial);
- if(normalizedSerial===null) return {status:"NEEDS_REVIEW",originalSerial,normalizedSerial:null,reason:"Serial number is outside the supported numeric range"};
- const allDigitGroups=stem.match(/\d+/g)??[];
- if(allDigitGroups.length>1) return {status:"NEEDS_REVIEW",originalSerial,normalizedSerial:null,reason:"Filename contains conflicting or multiple serial-like number groups"};
- return {status:"EXACT",originalSerial,normalizedSerial,method};
+ if(!candidate) {
+  const optionalSuffix=stem.match(/^([\p{L}\p{N}.-]+)_([A-Za-z][A-Za-z0-9 _-]*)$/u);
+  if(optionalSuffix && /\d/.test(optionalSuffix[1])) {
+   candidate=optionalSuffix[1];method=/^\d+$/.test(candidate)?"filename_numeric":"filename_text";
+  } else {
+   // A text identifier may contain underscores. If an underscore could instead begin a
+   // descriptive suffix, do not guess unless the configured prefix/numeric rule disambiguates it.
+   if(stem.includes("_") && !/^\d+_[A-Za-z][A-Za-z0-9 _-]*$/.test(stem)) {
+    const groups=stem.match(/\d+/g)??[];
+    if(groups.length>1) return {status:"NEEDS_REVIEW",originalSerial:null,normalizedSerial:null,legacySerialNumber:null,reason:"Filename contains multiple possible identifier/serial groups"};
+    if(groups.length===0 && /^([\p{L}\p{N}.-]+)_([A-Za-z][A-Za-z0-9 _-]*)$/u.test(stem)) return {status:"NEEDS_REVIEW",originalSerial:null,normalizedSerial:null,legacySerialNumber:null,reason:"Underscore may separate an identifier from a descriptive name"};
+    if(!/^[\p{L}\p{N}][\p{L}\p{N}._/-]*$/u.test(stem)) return {status:"NEEDS_REVIEW",originalSerial:null,normalizedSerial:null,legacySerialNumber:null,reason:"Filename identifier is ambiguous or contains unsupported characters"};
+   }
+   candidate=stem;method=/^\d+$/.test(stem)?"filename_numeric":"filename_text";
+  }
+ }
+ const result=canonicalizeStudentIdentifier(candidate,policy);
+ if(!result.ok) return {status:"NEEDS_REVIEW",originalSerial:candidate,normalizedSerial:null,legacySerialNumber:null,reason:result.error};
+ const digitGroups=stem.match(/\d+/g)??[];
+ if(digitGroups.length>1 && !configuredPrefix) return {status:"NEEDS_REVIEW",originalSerial:candidate,normalizedSerial:null,legacySerialNumber:null,reason:"Filename contains multiple numeric groups; identifier cannot be determined safely"};
+ return {status:"EXACT",originalSerial:candidate,normalizedSerial:result.value,legacySerialNumber:result.legacySerialNumber,method};
 }
-export function proposePhotoMatch(filenameMatch:FilenameMatch,students:StudentSerial[],duplicateHash=false):MatchProposal {
- if(duplicateHash) return {status:"DUPLICATE",studentId:null,serialNumber:null,normalizedSerial:filenameMatch.status==="EXACT"?filenameMatch.normalizedSerial:null,matchingMethod:"sha256",reason:"Exact file content already exists in this project"};
- if(filenameMatch.status!=="EXACT") return {status:"NEEDS_REVIEW",studentId:null,serialNumber:null,normalizedSerial:null,matchingMethod:null,reason:filenameMatch.reason};
- const found=students.filter(s=>normalizeCanonicalSerial(s.serial_number)===filenameMatch.normalizedSerial);
- if(found.length===0) return {status:"UNMATCHED",studentId:null,serialNumber:Number(filenameMatch.normalizedSerial),normalizedSerial:filenameMatch.normalizedSerial,matchingMethod:filenameMatch.method,reason:"No student has this serial number in the current project"};
- if(found.length>1) return {status:"NEEDS_REVIEW",studentId:null,serialNumber:Number(filenameMatch.normalizedSerial),normalizedSerial:filenameMatch.normalizedSerial,matchingMethod:filenameMatch.method,reason:"Multiple students have the same canonical serial number"};
- return {status:"MATCHED",studentId:found[0].id,serialNumber:found[0].serial_number,normalizedSerial:filenameMatch.normalizedSerial,matchingMethod:filenameMatch.method};
+export function proposePhotoMatch(filenameMatch:FilenameMatch,students:StudentSerial[],duplicateHash=false,policy:StudentIdentifierPolicy=DEFAULT_STUDENT_IDENTIFIER_POLICY):MatchProposal {
+ if(duplicateHash) return {status:"DUPLICATE",studentId:null,serialNumber:filenameMatch.status==="EXACT"?filenameMatch.legacySerialNumber:null,studentIdentifier:filenameMatch.status==="EXACT"?filenameMatch.normalizedSerial:null,normalizedSerial:filenameMatch.status==="EXACT"?filenameMatch.normalizedSerial:null,matchingMethod:"sha256",reason:"Exact file content already exists in this project"};
+ if(filenameMatch.status!=="EXACT") return {status:"NEEDS_REVIEW",studentId:null,serialNumber:null,studentIdentifier:null,normalizedSerial:null,matchingMethod:null,reason:filenameMatch.reason};
+ const candidate=canonicalizeStudentIdentifier(filenameMatch.normalizedSerial,policy);
+ if(!candidate.ok) return {status:"NEEDS_REVIEW",studentId:null,serialNumber:null,studentIdentifier:null,normalizedSerial:null,matchingMethod:null,reason:candidate.error};
+ const found=students.filter(s=>{
+  const identifier=s.student_identifier??(s.serial_number===null?null:String(s.serial_number));
+  if(identifier===null)return false;
+  const parsed=canonicalizeStudentIdentifier(identifier,policy);
+  return parsed.ok&&parsed.key===candidate.key;
+ });
+ if(found.length===0) return {status:"UNMATCHED",studentId:null,serialNumber:filenameMatch.legacySerialNumber,studentIdentifier:filenameMatch.normalizedSerial,normalizedSerial:filenameMatch.normalizedSerial,matchingMethod:filenameMatch.method,reason:"No student has this identifier under the current project's configured rules"};
+ if(found.length>1) return {status:"NEEDS_REVIEW",studentId:null,serialNumber:filenameMatch.legacySerialNumber,studentIdentifier:filenameMatch.normalizedSerial,normalizedSerial:filenameMatch.normalizedSerial,matchingMethod:filenameMatch.method,reason:"Multiple students resolve to this identifier under the current project's configured rules"};
+ const confirmedIdentifier=found[0].student_identifier??String(found[0].serial_number??filenameMatch.normalizedSerial);
+ return {status:"MATCHED",studentId:found[0].id,serialNumber:found[0].serial_number,studentIdentifier:confirmedIdentifier,normalizedSerial:confirmedIdentifier,matchingMethod:filenameMatch.method};
 }
 export function isSafeZipEntryName(name:string):boolean {
  if(!name||name.length>240||name.includes("\0")||name.startsWith("/")||name.startsWith("\\")||/^[A-Za-z]:/.test(name)) return false;

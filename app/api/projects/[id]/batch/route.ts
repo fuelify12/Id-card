@@ -92,7 +92,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       if (fieldError) throw new Error(fieldError.message);
       const students: any[] = [];
       for (let from = 0; from < 15000; from += 1000) {
-        const { data, error } = await db.from("students").select("id,serial_number,data").eq("project_id", projectId).eq("owner_id", uid).order("serial_number").range(from, from + 999);
+        const { data, error } = await db.from("students").select("id,serial_number,student_identifier,student_identifier_review_required,student_identifier_source,data").eq("project_id", projectId).eq("owner_id", uid).order("student_identifier").range(from, from + 999);
         if (error) throw new Error(error.message);
         students.push(...(data ?? [])); if ((data ?? []).length < 1000) break;
       }
@@ -115,8 +115,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         const data = student.data && typeof student.data === "object" ? student.data : {};
         const missing = (fields ?? []).filter((f: any) => f.required && !(String(data[f.source_column || f.key] ?? "").trim()) && !(["photo","image","student_photo","student-photo"].includes(String(f.field_type).toLowerCase()) || f.key === "student_photo")).map((f: any) => f.label || f.key);
         const photoMissing = needsPhoto && !approvedPhotos.has(student.id);
-        const identityIssues = studentFindings.filter(f => f.studentId === student.id && (f.severity === "CRITICAL" || f.severity === "ERROR"));
-        return { studentId: student.id, serialNumber: student.serial_number, studentName: String(data.name ?? data.student_name ?? data.full_name ?? ""), eligible: !missing.length && !photoMissing && !identityIssues.length && !configIssues.length, missingFields: missing, photoMissing, identityIssues: identityIssues.map(f => f.message) };
+        const identityIssues = studentFindings.filter(f => f.studentId === student.id && (f.severity === "CRITICAL" || f.severity === "ERROR")).map(f => f.message);
+        if (student.student_identifier_review_required) identityIssues.push("Student identifier was backfilled from a legacy numeric value and must be explicitly confirmed or corrected.");
+        return { studentId: student.id, serialNumber: String(student.student_identifier ?? student.serial_number ?? ""), studentIdentifier: String(student.student_identifier ?? student.serial_number ?? ""), legacySerialNumber: student.serial_number, studentName: String(data.name ?? data.student_name ?? data.full_name ?? ""), eligible: !missing.length && !photoMissing && !identityIssues.length && !configIssues.length, missingFields: missing, photoMissing, identityIssues };
       });
       const report = { ok: configIssues.length === 0, configWarnings: templateFindings.filter(f => f.severity === "WARNING" || f.severity === "INFO").map(f => f.message), project: { id: project.id, name: project.name }, template: { id: template.id, name: template.name, version: template.version_number, format: config.format ?? "png", widthMm: config.widthMm, heightMm: config.heightMm, dpi: config.dpi }, configIssues, totalStudents: rows.length, eligible: rows.filter(r => r.eligible).length, blocked: rows.filter(r => !r.eligible).length, students: rows.map(r => ({ ...r, reason: [...r.missingFields, ...(r.photoMissing ? ["Missing approved processed photo"] : []), ...(r.identityIssues ?? []), ...configIssues] })) };
       if (action === "preflight") return NextResponse.json(report);
@@ -132,7 +133,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         if (batchError.code === "23505") { const { data: duplicate } = await db.from("batches").select("id,status").eq("owner_id", uid).eq("idempotency_key", key).single(); if (duplicate) return NextResponse.json({ batchId: duplicate.id, status: duplicate.status, reusedRequest: true }); }
         throw new Error(batchError.message);
       }
-      const items = [...eligibleRows.map(r => ({ batch_id: batch.id, project_id: projectId, owner_id: uid, student_id: r.studentId, serial_number: r.serialNumber, student_name: r.studentName, status: "PENDING" })), ...skippedRows.map(r => ({ batch_id: batch.id, project_id: projectId, owner_id: uid, student_id: r.studentId, serial_number: r.serialNumber, student_name: r.studentName, status: "SKIPPED", error_category: "validation", error_summary: [...r.missingFields, ...(r.photoMissing ? ["Missing approved processed photo"] : [])].join(", ") || "Blocked by template configuration" }))];
+      const items = [...eligibleRows.map(r => ({ batch_id: batch.id, project_id: projectId, owner_id: uid, student_id: r.studentId, serial_number: r.legacySerialNumber, student_identifier: r.studentIdentifier, student_name: r.studentName, status: "PENDING" })), ...skippedRows.map(r => ({ batch_id: batch.id, project_id: projectId, owner_id: uid, student_id: r.studentId, serial_number: r.legacySerialNumber, student_identifier: r.studentIdentifier, student_name: r.studentName, status: "SKIPPED", error_category: "validation", error_summary: [...r.missingFields, ...(r.photoMissing ? ["Missing approved processed photo"] : []), ...(r.identityIssues ?? [])].join(", ") || "Blocked by template configuration" }))];
       const { error: itemsError } = await db.from("batch_generation_items").insert(items);
       if (itemsError) { await db.from("batches").update({ status: "failed", last_error: "Could not persist batch work items." }).eq("id", batch.id); throw new Error("Batch was created but its work items could not be saved; inspect the batch before retrying."); }
       return NextResponse.json({ batchId: batch.id, status: batch.status, preflight: report }, { status: 201 });
@@ -162,7 +163,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
     if (action === "status") {
       const [{ data: items, error: itemError }, counts] = await Promise.all([
-        db.from("batch_generation_items").select("id,student_id,serial_number,student_name,status,attempts,error_category,error_summary,output_card_id,completed_at").eq("batch_id", batchId).eq("project_id", projectId).order("serial_number"),
+        db.from("batch_generation_items").select("id,student_id,serial_number,student_identifier,student_name,status,attempts,error_category,error_summary,output_card_id,completed_at").eq("batch_id", batchId).eq("project_id", projectId).order("student_identifier"),
         refreshCounts(db, batchId, projectId)
       ]);
       if (itemError) throw new Error(itemError.message);

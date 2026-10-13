@@ -1,3 +1,4 @@
+import { canonicalizeStudentIdentifier, DEFAULT_STUDENT_IDENTIFIER_POLICY, type StudentIdentifierPolicy } from "@/lib/identifiers/student-identifier";
 import * as XLSX from "xlsx";
 
 export type CellValue = string | number | boolean | null;
@@ -29,11 +30,8 @@ function cellText(value: unknown, cell?: XLSX.CellObject): CellValue {
 }
 function rowBlank(row: unknown[]) { return row.every(v => v === null || v === undefined || String(v).trim() === ""); }
 function serialDuplicateKey(value: string): string {
-  const normalized = value.normalize("NFKC").trim();
-  if (/^\d+$/.test(normalized)) {
-    try { return BigInt(normalized).toString(); } catch { /* fall through to stable text key */ }
-  }
-  return normalized;
+  // Exact by default: 001 and 1 are distinct unless project policy opts into numeric normalization.
+  return value;
 }
 export function parseWorkbook(buffer: ArrayBuffer, fileName: string, selectedSheetName?: string): SpreadsheetPreview {
   if (!buffer.byteLength) throw new Error("The selected spreadsheet is empty.");
@@ -80,7 +78,7 @@ export function parseWorkbook(buffer: ArrayBuffer, fileName: string, selectedShe
       values[headers[i]] = cellText(value,cell);
     });
     if (blank) { rows.push({sourceRow:r+1,values,serialNumber:null,issues:["Blank row"],blank:true}); continue; }
-    const serialNumber = serialIndex >= 0 ? (values[headers[serialIndex]]===null ? null : String(values[headers[serialIndex]]).trim()) : null;
+    const serialNumber = serialIndex >= 0 ? (values[headers[serialIndex]]===null ? null : String(values[headers[serialIndex]])) : null;
     const issues: string[] = [];
     if (!serialColumn) issues.push("Serial-number column not detected; choose a column before importing.");
     else if (!serialNumber) issues.push("Missing serial number");
@@ -92,19 +90,20 @@ export function parseWorkbook(buffer: ArrayBuffer, fileName: string, selectedShe
   const dataRows = rows.filter(r=>!r.blank);
   return {sheetName:chosen.name,sheetNames:wb.SheetNames,headers,normalizedHeaders,headerRow:chosen.headerIndex+1,serialColumn,rows,summary:{total:dataRows.length,blank:rows.filter(r=>r.blank).length,missingSerial:dataRows.filter(r=>!r.serialNumber).length,duplicates:dataRows.filter(r=>r.issues.includes("Duplicate serial number")).length,invalid:dataRows.filter(r=>r.issues.length>0).length}};
 }
-export function validateStudentRows(rows: ParsedStudentRow[], serialColumn: string | null) {
+export function validateStudentRows(rows: ParsedStudentRow[], serialColumn: string | null, policy: StudentIdentifierPolicy = DEFAULT_STUDENT_IDENTIFIER_POLICY) {
   const candidates = rows.filter(r=>!r.blank).map(r=>{
     const raw = serialColumn ? r.values[serialColumn] : null;
-    const serial = raw === null || raw === undefined ? "" : String(raw).trim();
-    return { row: r, serial, serialKey: serial ? serialDuplicateKey(serial) : "" };
+    const serial = raw === null || raw === undefined ? "" : String(raw);
+    const result = serial ? canonicalizeStudentIdentifier(serial, policy) : null;
+    return { row: r, serial, serialKey: result?.ok ? result.key : "", identifierError: result && !result.ok ? result.error : null };
   });
   const counts = new Map<string,number>();
   candidates.forEach(({serialKey})=>{if(serialKey)counts.set(serialKey,(counts.get(serialKey)??0)+1);});
-  return candidates.map(({row,serial,serialKey})=>{
+  return candidates.map(({row,serial,serialKey,identifierError})=>{
     const issues = row.issues.filter(i=>!["Serial-number column not detected; choose a column before importing.","Missing serial number","Duplicate serial number"].includes(i));
-    if (!serial) issues.push("Missing serial number");
-    else if (!/^\d+$/.test(serial)) issues.push("Serial number must be a whole number");
-    if (serialKey && (counts.get(serialKey)??0)>1) issues.push("Duplicate serial number");
+    if (!serial) issues.push("Missing student identifier");
+    else if (identifierError) issues.push(identifierError);
+    if (serialKey && (counts.get(serialKey)??0)>1) issues.push("Duplicate student identifier");
     if (!Object.values(row.values).some(v=>v!==null && String(v).trim()!=="")) issues.push("Row contains no values");
     return {...row,serialNumber:serial||null,issues};
   });

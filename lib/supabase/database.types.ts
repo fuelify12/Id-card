@@ -170,7 +170,8 @@ export type Database = {
           id: string
           owner_id: string
           project_id: string
-          serial_number: number
+          serial_number: number | null
+          student_identifier: string | null
           status: string
           storage_path: string | null
           student_id: string | null
@@ -183,7 +184,8 @@ export type Database = {
           id?: string
           owner_id: string
           project_id: string
-          serial_number: number
+          serial_number?: number | null
+          student_identifier?: string | null
           status?: string
           storage_path?: string | null
           student_id?: string | null
@@ -196,7 +198,8 @@ export type Database = {
           id?: string
           owner_id?: string
           project_id?: string
-          serial_number?: number
+          serial_number?: number | null
+          student_identifier?: string | null
           status?: string
           storage_path?: string | null
           student_id?: string | null
@@ -236,7 +239,8 @@ export type Database = {
           id: string
           owner_id: string
           project_id: string
-          serial_number: number
+          serial_number: number | null
+          student_identifier: string | null
           status: string
           student_id: string | null
           updated_at: string
@@ -250,7 +254,8 @@ export type Database = {
           id?: string
           owner_id: string
           project_id: string
-          serial_number: number
+          serial_number?: number | null
+          student_identifier?: string | null
           status?: string
           student_id?: string | null
           updated_at?: string
@@ -264,7 +269,8 @@ export type Database = {
           id?: string
           owner_id?: string
           project_id?: string
-          serial_number?: number
+          serial_number?: number | null
+          student_identifier?: string | null
           status?: string
           student_id?: string | null
           updated_at?: string
@@ -323,6 +329,7 @@ export type Database = {
           owner_id: string
           photo_processing_settings: Json
           photo_serial_prefix: string | null
+          student_identifier_settings: Json
           school_address: string | null
           school_name: string
           status: string
@@ -336,6 +343,7 @@ export type Database = {
           owner_id: string
           photo_processing_settings?: Json
           photo_serial_prefix?: string | null
+          student_identifier_settings?: Json
           school_address?: string | null
           school_name: string
           status?: string
@@ -349,6 +357,7 @@ export type Database = {
           owner_id?: string
           photo_processing_settings?: Json
           photo_serial_prefix?: string | null
+          student_identifier_settings?: Json
           school_address?: string | null
           school_name?: string
           status?: string
@@ -397,6 +406,7 @@ export type Database = {
           processing_warnings: Json
           project_id: string
           serial_number: number | null
+          student_identifier: string | null
           storage_path: string
           student_id: string | null
           updated_at: string
@@ -443,6 +453,7 @@ export type Database = {
           processing_warnings?: Json
           project_id: string
           serial_number?: number | null
+          student_identifier?: string | null
           storage_path: string
           student_id?: string | null
           updated_at?: string
@@ -489,6 +500,7 @@ export type Database = {
           processing_warnings?: Json
           project_id?: string
           serial_number?: number | null
+          student_identifier?: string | null
           storage_path?: string
           student_id?: string | null
           updated_at?: string
@@ -547,7 +559,11 @@ export type Database = {
           id: string
           owner_id: string
           project_id: string
-          serial_number: number
+          serial_number: number | null
+          student_identifier: string | null
+          student_identifier_unique: string | null
+          student_identifier_source: string
+          student_identifier_review_required: boolean
           source_row: number | null
           updated_at: string
         }
@@ -557,7 +573,11 @@ export type Database = {
           id?: string
           owner_id: string
           project_id: string
-          serial_number: number
+          serial_number?: number | null
+          student_identifier?: string | null
+          student_identifier_unique?: string | null
+          student_identifier_source?: string
+          student_identifier_review_required?: boolean
           source_row?: number | null
           updated_at?: string
         }
@@ -567,7 +587,11 @@ export type Database = {
           id?: string
           owner_id?: string
           project_id?: string
-          serial_number?: number
+          serial_number?: number | null
+          student_identifier?: string | null
+          student_identifier_unique?: string | null
+          student_identifier_source?: string
+          student_identifier_review_required?: boolean
           source_row?: number | null
           updated_at?: string
         }
@@ -760,6 +784,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      correct_student_identifier: {
+        Args: { p_project_id: string; p_student_id: string; p_student_identifier: string; p_legacy_serial_number: number | null; p_data: Json }
+        Returns: string
+      }
       finalize_photo_upload: {
         Args: {
           p_actual_size: number
