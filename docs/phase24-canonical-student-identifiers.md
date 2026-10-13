@@ -28,20 +28,22 @@ Migration: `supabase/migrations/20261013120000_phase24_canonical_student_identif
 
 - Additive columns: project identifier settings and text snapshots on students, photos, batch items, and generated cards.
 - Backfill from what is actually stored: `serial_number::text`. This does not invent leading zeros; if an old numeric value is 1, the backfilled value is `1`, not `001`.
+- Every row present at migration time is tagged `legacy_numeric_backfill` and `student_identifier_review_required=true`. Card/batch validation blocks these rows until the owner explicitly confirms the shown identifier or enters a corrected one in the project workspace.
 - Existing student IDs, photo associations, batch item foreign keys, card foreign keys, and storage paths are not deleted or rewritten.
 - Legacy integer columns remain as compatibility projections. They become nullable so `001` and alphanumeric IDs can exist without a lossy numeric cast. The application stores a legacy integer projection only when the exact canonical ID is an unpadded integer within the legacy range.
 - Unique indexes are scoped to project/batch: `(project_id, student_identifier)`, `(batch_id, student_identifier)`. The existing integer indexes remain for old readers.
-- Compatibility triggers fill missing text snapshots from existing integer values for old numeric writers; they never infer lost zero padding.
+- Compatibility triggers fill missing text snapshots from existing integer values for old numeric writers; they never infer lost zero padding. New spreadsheet imports are tagged `spreadsheet` and do not require legacy review.
+- The `correct_student_identifier` RPC runs as the authenticated invoker, checks project ownership, validates uniqueness and normalization, refuses changes during active processing, updates the student and its associated photo identifier snapshots in one transaction, refreshes pending batch/job snapshots, and invalidates previously succeeded batch items for regeneration. Historical generated-card metadata remains a snapshot and is not silently rewritten.
 - Batch item, processing-job, and generated-card snapshots carry the canonical text identifier. The worker-claim function keeps its original invoker-security checks, lease-expiry recovery, maximum-attempt handling, and row locking; only the deterministic order key changes to the canonical text snapshot.
 - Check constraints are added `NOT VALID` to enforce new writes without forcing a production data rewrite during migration.
-- The migration is transactional and rerunnable for columns, indexes, constraints, and triggers.
+- The migration is transactional and rerunnable for columns, indexes, constraints, and triggers. The batch worker function retains the existing invoker-security checks, lease recovery, maximum-attempt handling, and row locking; only the sort key changes.
 
 ### Rollout and rollback
 
 1. Apply and validate this migration only in an isolated disposable database.
 2. Run schema assertions in `supabase/tests/phase24_student_identifier_schema.sql` and the complete automated suite.
 3. Deploy the application code only after the schema is present. The current code intentionally expects the new columns; deploying it before migration would cause project-page/import queries to fail.
-4. Keep the integer columns during the compatibility window. Rollback is application rollback while retaining the additive schema. Do not drop the text columns or rewrite identifiers during rollback.
+4. Keep the integer columns during the compatibility window. Before any text-only identifiers are created, an application rollback can retain the additive schema. After text-only identifiers or corrected identifiers are in use, rollback to Phase 23 is not safe for those records because that code expects numeric serials; retain Phase 24 or ship a tested compatibility hotfix. Do not drop the text columns or rewrite identifiers during rollback.
 5. Before any eventual Production migration, take/verify a backup and perform a dry-run on an isolated clone. No Production migration is authorized by this PR.
 
 ## Canonical semantics
