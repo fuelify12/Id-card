@@ -53,7 +53,704 @@ begin
       end if;
     end if;
   end if;
-  v_identifier_unique:=case when coalesce(v_settings->>'case_sensitive','true')='false' then lower(p_student_identifier) else p_student_identifier end;
+  v_identifier_unique:=p_student_identifier;
+  if coalesce(v_settings->>'edge_whitespace','reject')='trim' then v_identifier_unique:=btrim(v_identifier_unique); end if;
+  if coalesce(v_settings->>'normalization','exact')='numeric' and v_identifier_unique ~ '^[0-9]+
+  if p_legacy_serial_number is distinct from v_expected_legacy
+  then raise exception 'legacy integer projection does not match canonical identifier'; end if;
+
+  if exists (
+    select 1 from public.students other
+    where other.project_id=p_project_id and other.owner_id=auth.uid()
+      and other.id<>p_student_id
+      and case
+        when coalesce(v_settings->>'normalization','exact')='numeric' and other.student_identifier ~ '^[0-9]+
+
+  if exists (
+    select 1 from public.batch_generation_items i
+    join public.batches b on b.id=i.batch_id and b.project_id=i.project_id
+    where i.student_id=p_student_id and i.project_id=p_project_id and i.owner_id=auth.uid()
+      and i.status in ('PENDING','PROCESSING')
+      and lower(b.status) in ('queued','running','processing','paused','pausing')
+  ) or exists (
+    select 1 from public.processing_jobs j
+    where j.student_id=p_student_id and j.project_id=p_project_id and j.owner_id=auth.uid()
+      and lower(j.status) in ('pending','processing','queued','running')
+  ) then raise exception 'cannot correct an identifier while processing is active'; end if;
+
+  update public.students s
+  set student_identifier=p_student_identifier,
+      student_identifier_unique=v_identifier_unique,
+      serial_number=p_legacy_serial_number,
+      data=coalesce(p_data,s.data),
+      student_identifier_source=case when v_old_identifier is distinct from p_student_identifier then 'owner_corrected' else 'owner_confirmed' end,
+      student_identifier_review_required=false,
+      updated_at=now()
+  where s.id=p_student_id and s.project_id=p_project_id and s.owner_id=auth.uid();
+
+  update public.student_photos p
+  set student_identifier=p_student_identifier,
+      normalized_serial_number=p_student_identifier,
+      serial_number=p_legacy_serial_number,
+      updated_at=now()
+  where p.student_id=p_student_id and p.project_id=p_project_id and p.owner_id=auth.uid();
+
+  update public.batch_generation_items i
+  set student_identifier=p_student_identifier,
+      serial_number=p_legacy_serial_number,
+      status=case when i.status='SUCCEEDED' then 'NEEDS_REVIEW' else i.status end,
+      error_category=case when i.status='SUCCEEDED' then 'validation' else i.error_category end,
+      error_summary=case when i.status='SUCCEEDED' then 'Student identifier was corrected after rendering; regenerate and revalidate this card.' else i.error_summary end,
+      output_card_id=case when i.status='SUCCEEDED' then null else i.output_card_id end,
+      output_storage_path=case when i.status='SUCCEEDED' then null else i.output_storage_path end,
+      input_fingerprint=case when i.status='SUCCEEDED' then null else i.input_fingerprint end,
+      completed_at=case when i.status='SUCCEEDED' then null else i.completed_at end,
+      updated_at=now()
+  where i.student_id=p_student_id and i.project_id=p_project_id and i.owner_id=auth.uid();
+
+  -- Existing outputs were rendered against the prior identifier snapshot; keep the private files
+  -- for audit/recovery, but make them ineligible for approval/export until regenerated.
+  update public.generated_cards g
+  set status='needs_review',
+      validation_status='failed',
+      approval_status='review_required',
+      validation_errors=coalesce(g.validation_errors,'[]'::jsonb) || jsonb_build_array('Student identifier was corrected or confirmed after this card was rendered; regenerate and revalidate before export.'),
+      validation_fingerprint=null,
+      approved_by=null,
+      approved_at=null
+  where g.student_id=p_student_id and g.project_id=p_project_id and g.owner_id=auth.uid();
+
+  update public.processing_jobs j
+  set student_identifier=p_student_identifier, serial_number=p_legacy_serial_number, updated_at=now()
+  where j.student_id=p_student_id and j.project_id=p_project_id and j.owner_id=auth.uid()
+    and lower(j.status) not in ('succeeded','completed','done');
+
+  return p_student_identifier;
+end;
+$phase24corr$;
+
+revoke all on function public.correct_student_identifier(uuid,uuid,text,integer,jsonb) from public,anon;
+grant execute on function public.correct_student_identifier(uuid,uuid,text,integer,jsonb) to authenticated;
+
+commit;
+ then
+    v_identifier_unique:=coalesce(nullif(regexp_replace(v_identifier_unique,'^0+',''),''),'0');
+  end if;
+  if coalesce(v_settings->>'case_sensitive','true')='false' then v_identifier_unique:=lower(v_identifier_unique); end if;
+  if p_legacy_serial_number is distinct from v_expected_legacy
+  then raise exception 'legacy integer projection does not match canonical identifier'; end if;
+
+  if exists (
+    select 1 from public.students other
+    where other.project_id=p_project_id and other.owner_id=auth.uid()
+      and other.id<>p_student_id and other.student_identifier_unique=v_identifier_unique
+  ) then raise exception 'student identifier already exists in this project'; end if;
+
+  if exists (
+    select 1 from public.batch_generation_items i
+    join public.batches b on b.id=i.batch_id and b.project_id=i.project_id
+    where i.student_id=p_student_id and i.project_id=p_project_id and i.owner_id=auth.uid()
+      and i.status in ('PENDING','PROCESSING')
+      and lower(b.status) in ('queued','running','processing','paused','pausing')
+  ) or exists (
+    select 1 from public.processing_jobs j
+    where j.student_id=p_student_id and j.project_id=p_project_id and j.owner_id=auth.uid()
+      and lower(j.status) in ('pending','processing','queued','running')
+  ) then raise exception 'cannot correct an identifier while processing is active'; end if;
+
+  update public.students s
+  set student_identifier=p_student_identifier,
+      student_identifier_unique=v_identifier_unique,
+      serial_number=p_legacy_serial_number,
+      data=coalesce(p_data,s.data),
+      student_identifier_source=case when v_old_identifier is distinct from p_student_identifier then 'owner_corrected' else 'owner_confirmed' end,
+      student_identifier_review_required=false,
+      updated_at=now()
+  where s.id=p_student_id and s.project_id=p_project_id and s.owner_id=auth.uid();
+
+  update public.student_photos p
+  set student_identifier=p_student_identifier,
+      normalized_serial_number=p_student_identifier,
+      serial_number=p_legacy_serial_number,
+      updated_at=now()
+  where p.student_id=p_student_id and p.project_id=p_project_id and p.owner_id=auth.uid();
+
+  update public.batch_generation_items i
+  set student_identifier=p_student_identifier,
+      serial_number=p_legacy_serial_number,
+      status=case when i.status='SUCCEEDED' then 'NEEDS_REVIEW' else i.status end,
+      error_category=case when i.status='SUCCEEDED' then 'validation' else i.error_category end,
+      error_summary=case when i.status='SUCCEEDED' then 'Student identifier was corrected after rendering; regenerate and revalidate this card.' else i.error_summary end,
+      output_card_id=case when i.status='SUCCEEDED' then null else i.output_card_id end,
+      output_storage_path=case when i.status='SUCCEEDED' then null else i.output_storage_path end,
+      input_fingerprint=case when i.status='SUCCEEDED' then null else i.input_fingerprint end,
+      completed_at=case when i.status='SUCCEEDED' then null else i.completed_at end,
+      updated_at=now()
+  where i.student_id=p_student_id and i.project_id=p_project_id and i.owner_id=auth.uid();
+
+  -- Existing outputs were rendered against the prior identifier snapshot; keep the private files
+  -- for audit/recovery, but make them ineligible for approval/export until regenerated.
+  update public.generated_cards g
+  set status='needs_review',
+      validation_status='failed',
+      approval_status='review_required',
+      validation_errors=coalesce(g.validation_errors,'[]'::jsonb) || jsonb_build_array('Student identifier was corrected or confirmed after this card was rendered; regenerate and revalidate before export.'),
+      validation_fingerprint=null,
+      approved_by=null,
+      approved_at=null
+  where g.student_id=p_student_id and g.project_id=p_project_id and g.owner_id=auth.uid();
+
+  update public.processing_jobs j
+  set student_identifier=p_student_identifier, serial_number=p_legacy_serial_number, updated_at=now()
+  where j.student_id=p_student_id and j.project_id=p_project_id and j.owner_id=auth.uid()
+    and lower(j.status) not in ('succeeded','completed','done');
+
+  return p_student_identifier;
+end;
+$phase24corr$;
+
+revoke all on function public.correct_student_identifier(uuid,uuid,text,integer,jsonb) from public,anon;
+grant execute on function public.correct_student_identifier(uuid,uuid,text,integer,jsonb) to authenticated;
+
+commit;
+
+          then coalesce(nullif(regexp_replace(other.student_identifier,'^0+',''),''),'0')
+        else other.student_identifier end is not null
+      and (
+        case
+          when coalesce(v_settings->>'normalization','exact')='numeric' and other.student_identifier ~ '^[0-9]+
+
+  if exists (
+    select 1 from public.batch_generation_items i
+    join public.batches b on b.id=i.batch_id and b.project_id=i.project_id
+    where i.student_id=p_student_id and i.project_id=p_project_id and i.owner_id=auth.uid()
+      and i.status in ('PENDING','PROCESSING')
+      and lower(b.status) in ('queued','running','processing','paused','pausing')
+  ) or exists (
+    select 1 from public.processing_jobs j
+    where j.student_id=p_student_id and j.project_id=p_project_id and j.owner_id=auth.uid()
+      and lower(j.status) in ('pending','processing','queued','running')
+  ) then raise exception 'cannot correct an identifier while processing is active'; end if;
+
+  update public.students s
+  set student_identifier=p_student_identifier,
+      student_identifier_unique=v_identifier_unique,
+      serial_number=p_legacy_serial_number,
+      data=coalesce(p_data,s.data),
+      student_identifier_source=case when v_old_identifier is distinct from p_student_identifier then 'owner_corrected' else 'owner_confirmed' end,
+      student_identifier_review_required=false,
+      updated_at=now()
+  where s.id=p_student_id and s.project_id=p_project_id and s.owner_id=auth.uid();
+
+  update public.student_photos p
+  set student_identifier=p_student_identifier,
+      normalized_serial_number=p_student_identifier,
+      serial_number=p_legacy_serial_number,
+      updated_at=now()
+  where p.student_id=p_student_id and p.project_id=p_project_id and p.owner_id=auth.uid();
+
+  update public.batch_generation_items i
+  set student_identifier=p_student_identifier,
+      serial_number=p_legacy_serial_number,
+      status=case when i.status='SUCCEEDED' then 'NEEDS_REVIEW' else i.status end,
+      error_category=case when i.status='SUCCEEDED' then 'validation' else i.error_category end,
+      error_summary=case when i.status='SUCCEEDED' then 'Student identifier was corrected after rendering; regenerate and revalidate this card.' else i.error_summary end,
+      output_card_id=case when i.status='SUCCEEDED' then null else i.output_card_id end,
+      output_storage_path=case when i.status='SUCCEEDED' then null else i.output_storage_path end,
+      input_fingerprint=case when i.status='SUCCEEDED' then null else i.input_fingerprint end,
+      completed_at=case when i.status='SUCCEEDED' then null else i.completed_at end,
+      updated_at=now()
+  where i.student_id=p_student_id and i.project_id=p_project_id and i.owner_id=auth.uid();
+
+  -- Existing outputs were rendered against the prior identifier snapshot; keep the private files
+  -- for audit/recovery, but make them ineligible for approval/export until regenerated.
+  update public.generated_cards g
+  set status='needs_review',
+      validation_status='failed',
+      approval_status='review_required',
+      validation_errors=coalesce(g.validation_errors,'[]'::jsonb) || jsonb_build_array('Student identifier was corrected or confirmed after this card was rendered; regenerate and revalidate before export.'),
+      validation_fingerprint=null,
+      approved_by=null,
+      approved_at=null
+  where g.student_id=p_student_id and g.project_id=p_project_id and g.owner_id=auth.uid();
+
+  update public.processing_jobs j
+  set student_identifier=p_student_identifier, serial_number=p_legacy_serial_number, updated_at=now()
+  where j.student_id=p_student_id and j.project_id=p_project_id and j.owner_id=auth.uid()
+    and lower(j.status) not in ('succeeded','completed','done');
+
+  return p_student_identifier;
+end;
+$phase24corr$;
+
+revoke all on function public.correct_student_identifier(uuid,uuid,text,integer,jsonb) from public,anon;
+grant execute on function public.correct_student_identifier(uuid,uuid,text,integer,jsonb) to authenticated;
+
+commit;
+ then
+    v_identifier_unique:=coalesce(nullif(regexp_replace(v_identifier_unique,'^0+',''),''),'0');
+  end if;
+  if coalesce(v_settings->>'case_sensitive','true')='false' then v_identifier_unique:=lower(v_identifier_unique); end if;
+  if p_legacy_serial_number is distinct from v_expected_legacy
+  then raise exception 'legacy integer projection does not match canonical identifier'; end if;
+
+  if exists (
+    select 1 from public.students other
+    where other.project_id=p_project_id and other.owner_id=auth.uid()
+      and other.id<>p_student_id and other.student_identifier_unique=v_identifier_unique
+  ) then raise exception 'student identifier already exists in this project'; end if;
+
+  if exists (
+    select 1 from public.batch_generation_items i
+    join public.batches b on b.id=i.batch_id and b.project_id=i.project_id
+    where i.student_id=p_student_id and i.project_id=p_project_id and i.owner_id=auth.uid()
+      and i.status in ('PENDING','PROCESSING')
+      and lower(b.status) in ('queued','running','processing','paused','pausing')
+  ) or exists (
+    select 1 from public.processing_jobs j
+    where j.student_id=p_student_id and j.project_id=p_project_id and j.owner_id=auth.uid()
+      and lower(j.status) in ('pending','processing','queued','running')
+  ) then raise exception 'cannot correct an identifier while processing is active'; end if;
+
+  update public.students s
+  set student_identifier=p_student_identifier,
+      student_identifier_unique=v_identifier_unique,
+      serial_number=p_legacy_serial_number,
+      data=coalesce(p_data,s.data),
+      student_identifier_source=case when v_old_identifier is distinct from p_student_identifier then 'owner_corrected' else 'owner_confirmed' end,
+      student_identifier_review_required=false,
+      updated_at=now()
+  where s.id=p_student_id and s.project_id=p_project_id and s.owner_id=auth.uid();
+
+  update public.student_photos p
+  set student_identifier=p_student_identifier,
+      normalized_serial_number=p_student_identifier,
+      serial_number=p_legacy_serial_number,
+      updated_at=now()
+  where p.student_id=p_student_id and p.project_id=p_project_id and p.owner_id=auth.uid();
+
+  update public.batch_generation_items i
+  set student_identifier=p_student_identifier,
+      serial_number=p_legacy_serial_number,
+      status=case when i.status='SUCCEEDED' then 'NEEDS_REVIEW' else i.status end,
+      error_category=case when i.status='SUCCEEDED' then 'validation' else i.error_category end,
+      error_summary=case when i.status='SUCCEEDED' then 'Student identifier was corrected after rendering; regenerate and revalidate this card.' else i.error_summary end,
+      output_card_id=case when i.status='SUCCEEDED' then null else i.output_card_id end,
+      output_storage_path=case when i.status='SUCCEEDED' then null else i.output_storage_path end,
+      input_fingerprint=case when i.status='SUCCEEDED' then null else i.input_fingerprint end,
+      completed_at=case when i.status='SUCCEEDED' then null else i.completed_at end,
+      updated_at=now()
+  where i.student_id=p_student_id and i.project_id=p_project_id and i.owner_id=auth.uid();
+
+  -- Existing outputs were rendered against the prior identifier snapshot; keep the private files
+  -- for audit/recovery, but make them ineligible for approval/export until regenerated.
+  update public.generated_cards g
+  set status='needs_review',
+      validation_status='failed',
+      approval_status='review_required',
+      validation_errors=coalesce(g.validation_errors,'[]'::jsonb) || jsonb_build_array('Student identifier was corrected or confirmed after this card was rendered; regenerate and revalidate before export.'),
+      validation_fingerprint=null,
+      approved_by=null,
+      approved_at=null
+  where g.student_id=p_student_id and g.project_id=p_project_id and g.owner_id=auth.uid();
+
+  update public.processing_jobs j
+  set student_identifier=p_student_identifier, serial_number=p_legacy_serial_number, updated_at=now()
+  where j.student_id=p_student_id and j.project_id=p_project_id and j.owner_id=auth.uid()
+    and lower(j.status) not in ('succeeded','completed','done');
+
+  return p_student_identifier;
+end;
+$phase24corr$;
+
+revoke all on function public.correct_student_identifier(uuid,uuid,text,integer,jsonb) from public,anon;
+grant execute on function public.correct_student_identifier(uuid,uuid,text,integer,jsonb) to authenticated;
+
+commit;
+
+            then coalesce(nullif(regexp_replace(other.student_identifier,'^0+',''),''),'0')
+          else other.student_identifier end
+      ) is not null
+      and (
+        case when coalesce(v_settings->>'case_sensitive','true')='false'
+          then lower(case when coalesce(v_settings->>'normalization','exact')='numeric' and other.student_identifier ~ '^[0-9]+
+
+  if exists (
+    select 1 from public.batch_generation_items i
+    join public.batches b on b.id=i.batch_id and b.project_id=i.project_id
+    where i.student_id=p_student_id and i.project_id=p_project_id and i.owner_id=auth.uid()
+      and i.status in ('PENDING','PROCESSING')
+      and lower(b.status) in ('queued','running','processing','paused','pausing')
+  ) or exists (
+    select 1 from public.processing_jobs j
+    where j.student_id=p_student_id and j.project_id=p_project_id and j.owner_id=auth.uid()
+      and lower(j.status) in ('pending','processing','queued','running')
+  ) then raise exception 'cannot correct an identifier while processing is active'; end if;
+
+  update public.students s
+  set student_identifier=p_student_identifier,
+      student_identifier_unique=v_identifier_unique,
+      serial_number=p_legacy_serial_number,
+      data=coalesce(p_data,s.data),
+      student_identifier_source=case when v_old_identifier is distinct from p_student_identifier then 'owner_corrected' else 'owner_confirmed' end,
+      student_identifier_review_required=false,
+      updated_at=now()
+  where s.id=p_student_id and s.project_id=p_project_id and s.owner_id=auth.uid();
+
+  update public.student_photos p
+  set student_identifier=p_student_identifier,
+      normalized_serial_number=p_student_identifier,
+      serial_number=p_legacy_serial_number,
+      updated_at=now()
+  where p.student_id=p_student_id and p.project_id=p_project_id and p.owner_id=auth.uid();
+
+  update public.batch_generation_items i
+  set student_identifier=p_student_identifier,
+      serial_number=p_legacy_serial_number,
+      status=case when i.status='SUCCEEDED' then 'NEEDS_REVIEW' else i.status end,
+      error_category=case when i.status='SUCCEEDED' then 'validation' else i.error_category end,
+      error_summary=case when i.status='SUCCEEDED' then 'Student identifier was corrected after rendering; regenerate and revalidate this card.' else i.error_summary end,
+      output_card_id=case when i.status='SUCCEEDED' then null else i.output_card_id end,
+      output_storage_path=case when i.status='SUCCEEDED' then null else i.output_storage_path end,
+      input_fingerprint=case when i.status='SUCCEEDED' then null else i.input_fingerprint end,
+      completed_at=case when i.status='SUCCEEDED' then null else i.completed_at end,
+      updated_at=now()
+  where i.student_id=p_student_id and i.project_id=p_project_id and i.owner_id=auth.uid();
+
+  -- Existing outputs were rendered against the prior identifier snapshot; keep the private files
+  -- for audit/recovery, but make them ineligible for approval/export until regenerated.
+  update public.generated_cards g
+  set status='needs_review',
+      validation_status='failed',
+      approval_status='review_required',
+      validation_errors=coalesce(g.validation_errors,'[]'::jsonb) || jsonb_build_array('Student identifier was corrected or confirmed after this card was rendered; regenerate and revalidate before export.'),
+      validation_fingerprint=null,
+      approved_by=null,
+      approved_at=null
+  where g.student_id=p_student_id and g.project_id=p_project_id and g.owner_id=auth.uid();
+
+  update public.processing_jobs j
+  set student_identifier=p_student_identifier, serial_number=p_legacy_serial_number, updated_at=now()
+  where j.student_id=p_student_id and j.project_id=p_project_id and j.owner_id=auth.uid()
+    and lower(j.status) not in ('succeeded','completed','done');
+
+  return p_student_identifier;
+end;
+$phase24corr$;
+
+revoke all on function public.correct_student_identifier(uuid,uuid,text,integer,jsonb) from public,anon;
+grant execute on function public.correct_student_identifier(uuid,uuid,text,integer,jsonb) to authenticated;
+
+commit;
+ then
+    v_identifier_unique:=coalesce(nullif(regexp_replace(v_identifier_unique,'^0+',''),''),'0');
+  end if;
+  if coalesce(v_settings->>'case_sensitive','true')='false' then v_identifier_unique:=lower(v_identifier_unique); end if;
+  if p_legacy_serial_number is distinct from v_expected_legacy
+  then raise exception 'legacy integer projection does not match canonical identifier'; end if;
+
+  if exists (
+    select 1 from public.students other
+    where other.project_id=p_project_id and other.owner_id=auth.uid()
+      and other.id<>p_student_id and other.student_identifier_unique=v_identifier_unique
+  ) then raise exception 'student identifier already exists in this project'; end if;
+
+  if exists (
+    select 1 from public.batch_generation_items i
+    join public.batches b on b.id=i.batch_id and b.project_id=i.project_id
+    where i.student_id=p_student_id and i.project_id=p_project_id and i.owner_id=auth.uid()
+      and i.status in ('PENDING','PROCESSING')
+      and lower(b.status) in ('queued','running','processing','paused','pausing')
+  ) or exists (
+    select 1 from public.processing_jobs j
+    where j.student_id=p_student_id and j.project_id=p_project_id and j.owner_id=auth.uid()
+      and lower(j.status) in ('pending','processing','queued','running')
+  ) then raise exception 'cannot correct an identifier while processing is active'; end if;
+
+  update public.students s
+  set student_identifier=p_student_identifier,
+      student_identifier_unique=v_identifier_unique,
+      serial_number=p_legacy_serial_number,
+      data=coalesce(p_data,s.data),
+      student_identifier_source=case when v_old_identifier is distinct from p_student_identifier then 'owner_corrected' else 'owner_confirmed' end,
+      student_identifier_review_required=false,
+      updated_at=now()
+  where s.id=p_student_id and s.project_id=p_project_id and s.owner_id=auth.uid();
+
+  update public.student_photos p
+  set student_identifier=p_student_identifier,
+      normalized_serial_number=p_student_identifier,
+      serial_number=p_legacy_serial_number,
+      updated_at=now()
+  where p.student_id=p_student_id and p.project_id=p_project_id and p.owner_id=auth.uid();
+
+  update public.batch_generation_items i
+  set student_identifier=p_student_identifier,
+      serial_number=p_legacy_serial_number,
+      status=case when i.status='SUCCEEDED' then 'NEEDS_REVIEW' else i.status end,
+      error_category=case when i.status='SUCCEEDED' then 'validation' else i.error_category end,
+      error_summary=case when i.status='SUCCEEDED' then 'Student identifier was corrected after rendering; regenerate and revalidate this card.' else i.error_summary end,
+      output_card_id=case when i.status='SUCCEEDED' then null else i.output_card_id end,
+      output_storage_path=case when i.status='SUCCEEDED' then null else i.output_storage_path end,
+      input_fingerprint=case when i.status='SUCCEEDED' then null else i.input_fingerprint end,
+      completed_at=case when i.status='SUCCEEDED' then null else i.completed_at end,
+      updated_at=now()
+  where i.student_id=p_student_id and i.project_id=p_project_id and i.owner_id=auth.uid();
+
+  -- Existing outputs were rendered against the prior identifier snapshot; keep the private files
+  -- for audit/recovery, but make them ineligible for approval/export until regenerated.
+  update public.generated_cards g
+  set status='needs_review',
+      validation_status='failed',
+      approval_status='review_required',
+      validation_errors=coalesce(g.validation_errors,'[]'::jsonb) || jsonb_build_array('Student identifier was corrected or confirmed after this card was rendered; regenerate and revalidate before export.'),
+      validation_fingerprint=null,
+      approved_by=null,
+      approved_at=null
+  where g.student_id=p_student_id and g.project_id=p_project_id and g.owner_id=auth.uid();
+
+  update public.processing_jobs j
+  set student_identifier=p_student_identifier, serial_number=p_legacy_serial_number, updated_at=now()
+  where j.student_id=p_student_id and j.project_id=p_project_id and j.owner_id=auth.uid()
+    and lower(j.status) not in ('succeeded','completed','done');
+
+  return p_student_identifier;
+end;
+$phase24corr$;
+
+revoke all on function public.correct_student_identifier(uuid,uuid,text,integer,jsonb) from public,anon;
+grant execute on function public.correct_student_identifier(uuid,uuid,text,integer,jsonb) to authenticated;
+
+commit;
+
+            then coalesce(nullif(regexp_replace(other.student_identifier,'^0+',''),''),'0')
+            else other.student_identifier end)
+          else case when coalesce(v_settings->>'normalization','exact')='numeric' and other.student_identifier ~ '^[0-9]+
+
+  if exists (
+    select 1 from public.batch_generation_items i
+    join public.batches b on b.id=i.batch_id and b.project_id=i.project_id
+    where i.student_id=p_student_id and i.project_id=p_project_id and i.owner_id=auth.uid()
+      and i.status in ('PENDING','PROCESSING')
+      and lower(b.status) in ('queued','running','processing','paused','pausing')
+  ) or exists (
+    select 1 from public.processing_jobs j
+    where j.student_id=p_student_id and j.project_id=p_project_id and j.owner_id=auth.uid()
+      and lower(j.status) in ('pending','processing','queued','running')
+  ) then raise exception 'cannot correct an identifier while processing is active'; end if;
+
+  update public.students s
+  set student_identifier=p_student_identifier,
+      student_identifier_unique=v_identifier_unique,
+      serial_number=p_legacy_serial_number,
+      data=coalesce(p_data,s.data),
+      student_identifier_source=case when v_old_identifier is distinct from p_student_identifier then 'owner_corrected' else 'owner_confirmed' end,
+      student_identifier_review_required=false,
+      updated_at=now()
+  where s.id=p_student_id and s.project_id=p_project_id and s.owner_id=auth.uid();
+
+  update public.student_photos p
+  set student_identifier=p_student_identifier,
+      normalized_serial_number=p_student_identifier,
+      serial_number=p_legacy_serial_number,
+      updated_at=now()
+  where p.student_id=p_student_id and p.project_id=p_project_id and p.owner_id=auth.uid();
+
+  update public.batch_generation_items i
+  set student_identifier=p_student_identifier,
+      serial_number=p_legacy_serial_number,
+      status=case when i.status='SUCCEEDED' then 'NEEDS_REVIEW' else i.status end,
+      error_category=case when i.status='SUCCEEDED' then 'validation' else i.error_category end,
+      error_summary=case when i.status='SUCCEEDED' then 'Student identifier was corrected after rendering; regenerate and revalidate this card.' else i.error_summary end,
+      output_card_id=case when i.status='SUCCEEDED' then null else i.output_card_id end,
+      output_storage_path=case when i.status='SUCCEEDED' then null else i.output_storage_path end,
+      input_fingerprint=case when i.status='SUCCEEDED' then null else i.input_fingerprint end,
+      completed_at=case when i.status='SUCCEEDED' then null else i.completed_at end,
+      updated_at=now()
+  where i.student_id=p_student_id and i.project_id=p_project_id and i.owner_id=auth.uid();
+
+  -- Existing outputs were rendered against the prior identifier snapshot; keep the private files
+  -- for audit/recovery, but make them ineligible for approval/export until regenerated.
+  update public.generated_cards g
+  set status='needs_review',
+      validation_status='failed',
+      approval_status='review_required',
+      validation_errors=coalesce(g.validation_errors,'[]'::jsonb) || jsonb_build_array('Student identifier was corrected or confirmed after this card was rendered; regenerate and revalidate before export.'),
+      validation_fingerprint=null,
+      approved_by=null,
+      approved_at=null
+  where g.student_id=p_student_id and g.project_id=p_project_id and g.owner_id=auth.uid();
+
+  update public.processing_jobs j
+  set student_identifier=p_student_identifier, serial_number=p_legacy_serial_number, updated_at=now()
+  where j.student_id=p_student_id and j.project_id=p_project_id and j.owner_id=auth.uid()
+    and lower(j.status) not in ('succeeded','completed','done');
+
+  return p_student_identifier;
+end;
+$phase24corr$;
+
+revoke all on function public.correct_student_identifier(uuid,uuid,text,integer,jsonb) from public,anon;
+grant execute on function public.correct_student_identifier(uuid,uuid,text,integer,jsonb) to authenticated;
+
+commit;
+ then
+    v_identifier_unique:=coalesce(nullif(regexp_replace(v_identifier_unique,'^0+',''),''),'0');
+  end if;
+  if coalesce(v_settings->>'case_sensitive','true')='false' then v_identifier_unique:=lower(v_identifier_unique); end if;
+  if p_legacy_serial_number is distinct from v_expected_legacy
+  then raise exception 'legacy integer projection does not match canonical identifier'; end if;
+
+  if exists (
+    select 1 from public.students other
+    where other.project_id=p_project_id and other.owner_id=auth.uid()
+      and other.id<>p_student_id and other.student_identifier_unique=v_identifier_unique
+  ) then raise exception 'student identifier already exists in this project'; end if;
+
+  if exists (
+    select 1 from public.batch_generation_items i
+    join public.batches b on b.id=i.batch_id and b.project_id=i.project_id
+    where i.student_id=p_student_id and i.project_id=p_project_id and i.owner_id=auth.uid()
+      and i.status in ('PENDING','PROCESSING')
+      and lower(b.status) in ('queued','running','processing','paused','pausing')
+  ) or exists (
+    select 1 from public.processing_jobs j
+    where j.student_id=p_student_id and j.project_id=p_project_id and j.owner_id=auth.uid()
+      and lower(j.status) in ('pending','processing','queued','running')
+  ) then raise exception 'cannot correct an identifier while processing is active'; end if;
+
+  update public.students s
+  set student_identifier=p_student_identifier,
+      student_identifier_unique=v_identifier_unique,
+      serial_number=p_legacy_serial_number,
+      data=coalesce(p_data,s.data),
+      student_identifier_source=case when v_old_identifier is distinct from p_student_identifier then 'owner_corrected' else 'owner_confirmed' end,
+      student_identifier_review_required=false,
+      updated_at=now()
+  where s.id=p_student_id and s.project_id=p_project_id and s.owner_id=auth.uid();
+
+  update public.student_photos p
+  set student_identifier=p_student_identifier,
+      normalized_serial_number=p_student_identifier,
+      serial_number=p_legacy_serial_number,
+      updated_at=now()
+  where p.student_id=p_student_id and p.project_id=p_project_id and p.owner_id=auth.uid();
+
+  update public.batch_generation_items i
+  set student_identifier=p_student_identifier,
+      serial_number=p_legacy_serial_number,
+      status=case when i.status='SUCCEEDED' then 'NEEDS_REVIEW' else i.status end,
+      error_category=case when i.status='SUCCEEDED' then 'validation' else i.error_category end,
+      error_summary=case when i.status='SUCCEEDED' then 'Student identifier was corrected after rendering; regenerate and revalidate this card.' else i.error_summary end,
+      output_card_id=case when i.status='SUCCEEDED' then null else i.output_card_id end,
+      output_storage_path=case when i.status='SUCCEEDED' then null else i.output_storage_path end,
+      input_fingerprint=case when i.status='SUCCEEDED' then null else i.input_fingerprint end,
+      completed_at=case when i.status='SUCCEEDED' then null else i.completed_at end,
+      updated_at=now()
+  where i.student_id=p_student_id and i.project_id=p_project_id and i.owner_id=auth.uid();
+
+  -- Existing outputs were rendered against the prior identifier snapshot; keep the private files
+  -- for audit/recovery, but make them ineligible for approval/export until regenerated.
+  update public.generated_cards g
+  set status='needs_review',
+      validation_status='failed',
+      approval_status='review_required',
+      validation_errors=coalesce(g.validation_errors,'[]'::jsonb) || jsonb_build_array('Student identifier was corrected or confirmed after this card was rendered; regenerate and revalidate before export.'),
+      validation_fingerprint=null,
+      approved_by=null,
+      approved_at=null
+  where g.student_id=p_student_id and g.project_id=p_project_id and g.owner_id=auth.uid();
+
+  update public.processing_jobs j
+  set student_identifier=p_student_identifier, serial_number=p_legacy_serial_number, updated_at=now()
+  where j.student_id=p_student_id and j.project_id=p_project_id and j.owner_id=auth.uid()
+    and lower(j.status) not in ('succeeded','completed','done');
+
+  return p_student_identifier;
+end;
+$phase24corr$;
+
+revoke all on function public.correct_student_identifier(uuid,uuid,text,integer,jsonb) from public,anon;
+grant execute on function public.correct_student_identifier(uuid,uuid,text,integer,jsonb) to authenticated;
+
+commit;
+
+            then coalesce(nullif(regexp_replace(other.student_identifier,'^0+',''),''),'0')
+            else other.student_identifier end end
+      )=v_identifier_unique
+  ) then raise exception 'student identifier already exists in this project'; end if;
+
+  if exists (
+    select 1 from public.batch_generation_items i
+    join public.batches b on b.id=i.batch_id and b.project_id=i.project_id
+    where i.student_id=p_student_id and i.project_id=p_project_id and i.owner_id=auth.uid()
+      and i.status in ('PENDING','PROCESSING')
+      and lower(b.status) in ('queued','running','processing','paused','pausing')
+  ) or exists (
+    select 1 from public.processing_jobs j
+    where j.student_id=p_student_id and j.project_id=p_project_id and j.owner_id=auth.uid()
+      and lower(j.status) in ('pending','processing','queued','running')
+  ) then raise exception 'cannot correct an identifier while processing is active'; end if;
+
+  update public.students s
+  set student_identifier=p_student_identifier,
+      student_identifier_unique=v_identifier_unique,
+      serial_number=p_legacy_serial_number,
+      data=coalesce(p_data,s.data),
+      student_identifier_source=case when v_old_identifier is distinct from p_student_identifier then 'owner_corrected' else 'owner_confirmed' end,
+      student_identifier_review_required=false,
+      updated_at=now()
+  where s.id=p_student_id and s.project_id=p_project_id and s.owner_id=auth.uid();
+
+  update public.student_photos p
+  set student_identifier=p_student_identifier,
+      normalized_serial_number=p_student_identifier,
+      serial_number=p_legacy_serial_number,
+      updated_at=now()
+  where p.student_id=p_student_id and p.project_id=p_project_id and p.owner_id=auth.uid();
+
+  update public.batch_generation_items i
+  set student_identifier=p_student_identifier,
+      serial_number=p_legacy_serial_number,
+      status=case when i.status='SUCCEEDED' then 'NEEDS_REVIEW' else i.status end,
+      error_category=case when i.status='SUCCEEDED' then 'validation' else i.error_category end,
+      error_summary=case when i.status='SUCCEEDED' then 'Student identifier was corrected after rendering; regenerate and revalidate this card.' else i.error_summary end,
+      output_card_id=case when i.status='SUCCEEDED' then null else i.output_card_id end,
+      output_storage_path=case when i.status='SUCCEEDED' then null else i.output_storage_path end,
+      input_fingerprint=case when i.status='SUCCEEDED' then null else i.input_fingerprint end,
+      completed_at=case when i.status='SUCCEEDED' then null else i.completed_at end,
+      updated_at=now()
+  where i.student_id=p_student_id and i.project_id=p_project_id and i.owner_id=auth.uid();
+
+  -- Existing outputs were rendered against the prior identifier snapshot; keep the private files
+  -- for audit/recovery, but make them ineligible for approval/export until regenerated.
+  update public.generated_cards g
+  set status='needs_review',
+      validation_status='failed',
+      approval_status='review_required',
+      validation_errors=coalesce(g.validation_errors,'[]'::jsonb) || jsonb_build_array('Student identifier was corrected or confirmed after this card was rendered; regenerate and revalidate before export.'),
+      validation_fingerprint=null,
+      approved_by=null,
+      approved_at=null
+  where g.student_id=p_student_id and g.project_id=p_project_id and g.owner_id=auth.uid();
+
+  update public.processing_jobs j
+  set student_identifier=p_student_identifier, serial_number=p_legacy_serial_number, updated_at=now()
+  where j.student_id=p_student_id and j.project_id=p_project_id and j.owner_id=auth.uid()
+    and lower(j.status) not in ('succeeded','completed','done');
+
+  return p_student_identifier;
+end;
+$phase24corr$;
+
+revoke all on function public.correct_student_identifier(uuid,uuid,text,integer,jsonb) from public,anon;
+grant execute on function public.correct_student_identifier(uuid,uuid,text,integer,jsonb) to authenticated;
+
+commit;
+ then
+    v_identifier_unique:=coalesce(nullif(regexp_replace(v_identifier_unique,'^0+',''),''),'0');
+  end if;
+  if coalesce(v_settings->>'case_sensitive','true')='false' then v_identifier_unique:=lower(v_identifier_unique); end if;
   if p_legacy_serial_number is distinct from v_expected_legacy
   then raise exception 'legacy integer projection does not match canonical identifier'; end if;
 
