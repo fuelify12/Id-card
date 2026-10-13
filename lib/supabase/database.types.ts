@@ -779,6 +779,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      correct_student_identifier: {
+        Args: { p_project_id: string; p_student_id: string; p_student_identifier: string; p_legacy_serial_number: number | null; p_data: Json }
+        Returns: string
+      }
       finalize_photo_upload: {
         Args: {
           p_actual_size: number
