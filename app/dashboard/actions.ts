@@ -53,7 +53,7 @@ export async function importStudentRows(input:{projectId:string;rows:Array<{sour
  const normalized=input.rows.map(r=>{
    const parsed=canonicalizeStudentIdentifier(r.serialNumber,policy);
    if(!parsed.ok) throw new Error(`Spreadsheet row ${r.sourceRow}: ${parsed.error}`);
-   return {source_row:r.sourceRow,student_identifier:parsed.value,serial_number:parsed.legacySerialNumber,student_identifier_source:"spreadsheet",student_identifier_review_required:false,data:r.values,owner_id:uid,project_id:input.projectId};
+   return {source_row:r.sourceRow,student_identifier:parsed.value,student_identifier_unique:parsed.key,serial_number:parsed.legacySerialNumber,student_identifier_source:"spreadsheet",student_identifier_review_required:false,data:r.values,owner_id:uid,project_id:input.projectId};
  });
  const seen=new Set<string>();
  for(const row of normalized){
@@ -271,7 +271,7 @@ export async function correctStudentIdentifier(input:{projectId:string;studentId
  const policy=studentIdentifierPolicyFromConfig(project.student_identifier_settings); policy.caseSensitive=true;
  const parsed=canonicalizeStudentIdentifier(input.identifier,policy);
  if(!parsed.ok) throw new Error(parsed.error);
- const {data:collision,error:ce}=await s.from("students").select("id").eq("project_id",input.projectId).eq("owner_id",uid).eq("student_identifier",parsed.value).neq("id",student.id).maybeSingle();
+ const {data:collision,error:ce}=await s.from("students").select("id").eq("project_id",input.projectId).eq("owner_id",uid).eq("student_identifier_unique",parsed.key).neq("id",student.id).maybeSingle();
  if(ce) throw new Error(ce.message); if(collision) throw new Error("That identifier already belongs to another student in this project.");
  const settings=project.student_identifier_settings as Record<string,unknown>|null;
  const sourceColumn=typeof settings?.identifier_source_column==="string"?settings.identifier_source_column:null;
