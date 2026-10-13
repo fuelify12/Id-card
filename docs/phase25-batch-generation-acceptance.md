@@ -70,3 +70,10 @@ This ledger distinguishes implementation history from current acceptance evidenc
 - The latest previously inspected Vercel preview was tied to a Phase 23 commit, not the Phase 24/25 commit. READY status alone is not application acceptance.
 - Vercel SSO is not bypassed. A browser profile with an authorized signed-in session is required for authenticated acceptance.
 - Production deployment, PR merge, paid infrastructure changes, and schema mutation are not authorized by this phase request.
+
+
+## Dependency audit residual
+
+The Phase 25 CI production dependency audit reports three **moderate** findings through the transitive dependency chain @tensorflow/tfjs → argparse → sprintf-js (GitHub advisory [GHSA-hp3w-g68c-fv3c](https://github.com/advisories/GHSA-hp3w-g68c-fv3c), CVE-2026-97058). The advisory lists every published sprintf-js version through 1.1.3 as affected and currently lists no patched version. Pinning 1.1.3 does not fix it, so the attempted override was removed. npm audit --omit=dev --audit-level=high passes because the reported severity is moderate, not because the dependency tree is vulnerability-free. npm audit fix --force proposes a breaking TensorFlow.js downgrade and was not applied.
+
+Remediation: identify whether TensorFlow.js can be removed or replaced without breaking photo processing; otherwise monitor the upstream advisory and replace the vulnerable transitive dependency only after a compatible fixed release or verified patch is available. Until then, treat dependency security as a release risk rather than claiming a clean audit.
