@@ -15,9 +15,8 @@ describe("Phase 24 migration safety contract", () => {
     expect(migration).not.toMatch(/drop table|delete from public\.(students|student_photos|generated_cards|batch_generation_items)/i);
   });
   it("enforces project-scoped uniqueness only after review and preserves card sides", () => {
-    expect(migration).toMatch(/unique index if not exists students_project_student_identifier_key\s+on public\.students\(project_id,\s*student_identifier\)\s+where student_identifier_review_required=false/i);
-    expect(migration).toContain("students_student_identifier_required");
-    expect(migration).toContain("where student_identifier_review_required=false");
+    expect(migration).toMatch(/unique index if not exists students_project_student_identifier_key\\s+on public\\.students\\(project_id,student_identifier_unique\\)/i);\n    expect(migration).toContain("students_student_identifier_required");
+    expect(migration).toContain("generated always as (case when student_identifier_review_required then null else student_identifier end) stored");
     expect(migration).toContain("idx_generated_cards_batch_student_identifier");
     expect(migration).not.toContain("create unique index if not exists generated_cards_batch_student_identifier_key");
     expect(correctionMigration).toContain("correct_student_identifier");
