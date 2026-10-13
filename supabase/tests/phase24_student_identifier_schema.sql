@@ -18,7 +18,7 @@ begin
   ) then raise exception 'transactional identifier correction RPC is missing'; end if;
   if not exists (
     select 1 from pg_indexes where schemaname='public' and indexname='students_project_student_identifier_key'
-      and indexdef like '%(project_id, student_identifier)%'
+      and indexdef like '%(project_id,student_identifier)%'
   ) then raise exception 'project-scoped canonical identifier unique index is missing'; end if;
   if not exists (select 1 from pg_indexes where schemaname='public' and indexname='batch_items_batch_student_identifier_key') then
     raise exception 'batch item canonical identifier unique index is missing';
