@@ -575,6 +575,7 @@ export type Database = {
           project_id: string
           serial_number?: number | null
           student_identifier?: string | null
+          student_identifier_unique?: string | null
           student_identifier_source?: string
           student_identifier_review_required?: boolean
           source_row?: number | null
