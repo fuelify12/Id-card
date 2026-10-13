@@ -1,0 +1,55 @@
+name: Phase 23 student photo workflow checks
+
+on:
+  push:
+    branches:
+      - phase-23-student-photo-workflow
+  pull_request:
+    branches:
+      - phase-22-school-import-mapping
+    paths:
+      - "app/api/projects/**/photos/**"
+      - "app/dashboard/actions.ts"
+      - "components/projects/student-photo-workspace.tsx"
+      - "components/projects/photo-crop-review-workspace.tsx"
+      - "components/projects/camera-capture.tsx"
+      - "lib/photos/**"
+      - "lib/mobile/**"
+      - "tests/**"
+      - "supabase/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - ".github/workflows/phase23-photo-workflow.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase23-photo-workflow-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Photo workflow tests, typecheck, lint, and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps --no-audit --no-fund
+      - name: Photo and regression tests
+        run: npm test
+      - name: TypeScript
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Production build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+        run: npm run build
