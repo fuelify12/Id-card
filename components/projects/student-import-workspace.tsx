@@ -1,11 +1,13 @@
 "use client";
 import {useMemo,useState} from "react";
+import {useRouter} from "next/navigation";
 import {parseWorkbook,validateStudentRows,type SpreadsheetPreview,type ParsedStudentRow} from "@/lib/imports/student-spreadsheet";
 import { DEFAULT_STUDENT_IDENTIFIER_POLICY, studentIdentifierPolicyFromConfig, type StudentIdentifierPolicy } from "@/lib/identifiers/student-identifier";
-import {importStudentRows,saveTemplateFields} from "@/app/dashboard/actions";
+import {correctStudentIdentifier,importStudentRows,saveTemplateFields} from "@/app/dashboard/actions";
 
 type Field={id:string;key:string;label:string;field_type:string;required:boolean;x:number;y:number;width:number;height:number;font_family:string|null;font_size:number|null;font_weight:string|null;color:string|null;alignment:string|null;fit_mode:string|null;source_column:string|null;confidence:number|null};
-export function StudentImportWorkspace({projectId,templateId,fields:initialFields,initialIdentifierSettings}:{projectId:string;templateId:string|null;fields:Field[];initialIdentifierSettings?:unknown}) {
+export function StudentImportWorkspace({projectId,templateId,fields:initialFields,initialIdentifierSettings,legacyIdentifierReview=[],hasMoreLegacyIdentifiers=false}:{projectId:string;templateId:string|null;fields:Field[];initialIdentifierSettings?:unknown;legacyIdentifierReview?:Array<{id:string;student_identifier:string;student_name:string}>;hasMoreLegacyIdentifiers?:boolean}) {
+ const router=useRouter();
  const [preview,setPreview]=useState<SpreadsheetPreview|null>(null);
  const [workbookBuffer,setWorkbookBuffer]=useState<ArrayBuffer|null>(null);
  const [workbookName,setWorkbookName]=useState("");
@@ -17,6 +19,10 @@ export function StudentImportWorkspace({projectId,templateId,fields:initialField
  const [notice,setNotice]=useState("");
  const [replaceExisting,setReplaceExisting]=useState(false);
  const [mappingsSaved,setMappingsSaved]=useState(true);
+ const [reviewEdits,setReviewEdits]=useState<Record<string,string>>({});
+ const [reviewBusyId,setReviewBusyId]=useState("");
+ const [reviewError,setReviewError]=useState("");
+ const [reviewNotice,setReviewNotice]=useState("");
  const [page,setPage]=useState(0);
  const columns=preview?.headers??[];
  const validated=useMemo(()=>preview?validateStudentRows(preview.rows,serialColumn||null,identifierPolicy):[],[preview,serialColumn,identifierPolicy]);
@@ -41,15 +47,21 @@ export function StudentImportWorkspace({projectId,templateId,fields:initialField
   if(!mappingsSaved){setError("Save your field mappings to the active template version before importing.");return;}
   setBusy(true);setError("");setNotice("");
   try{
-   const nonInteger=validRows.filter(r=>!r.serialNumber||!/^\d+$/.test(r.serialNumber));
-   if(nonInteger.length)throw new Error(`${nonInteger.length} row(s) have serial numbers that are not whole numbers. Correct the sheet before importing.`);
-   const result=await importStudentRows({projectId,replaceExisting,rows:validRows.map(r=>({sourceRow:r.sourceRow,serialNumber:r.serialNumber!,values:r.values as Record<string,string|number|boolean|null>}))});
+   const result=await importStudentRows({projectId,replaceExisting,identifierSettings:identifierPolicy,identifierSourceColumn:serialColumn,rows:validRows.map(r=>({sourceRow:r.sourceRow,serialNumber:r.serialNumber!,values:r.values as Record<string,string|number|boolean|null>}))});
    setNotice(`Imported ${result.imported.toLocaleString()} students. Original spreadsheet values were preserved in each student's data; only explicitly mapped fields will be used by later card rendering.`);
   }catch(e){setError(e instanceof Error?e.message:"Import failed.");}finally{setBusy(false);}
+ }
+ async function saveReviewedIdentifier(row:{id:string;student_identifier:string;student_name:string}) {
+  const identifier=reviewEdits[row.id]??row.student_identifier;
+  setReviewBusyId(row.id);setReviewError("");setReviewNotice("");
+  try { const result=await correctStudentIdentifier({projectId,studentId:row.id,identifier});setReviewNotice(result.corrected?`Corrected identifier to "${result.identifier}" and invalidated prior generated output for review.`:`Confirmed identifier "${result.identifier}" exactly as shown.`);setReviewEdits(old=>({...old,[row.id]:result.identifier}));router.refresh(); }
+  catch(e){setReviewError(e instanceof Error?e.message:"Could not save identifier review.");}
+  finally{setReviewBusyId("");}
  }
  const visible=validated.slice(page*100,page*100+100);
  return <section className="pf-panel mt-5 p-5">
   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-sm text-blue-300">PHASE 5</p><h2 className="text-xl font-bold">Student spreadsheet import</h2><p className="pf-muted mt-1 text-sm">Import XLSX, XLS, or CSV. Values are stored as source data; card fields are used only when explicitly mapped.</p></div><label className="cursor-pointer rounded-lg border border-white/15 px-4 py-2 text-sm font-medium">{busy?"Working…":"Choose spreadsheet"}<input className="sr-only" type="file" accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" disabled={busy} onChange={e=>void onFile(e.target.files?.[0])}/></label></div>
+  {legacyIdentifierReview.length>0&&<div className="mt-5 rounded-xl border border-amber-400/30 p-4"><h3 className="font-semibold text-amber-200">Review legacy numeric identifiers</h3><p className="pf-muted mt-1 text-sm">These identifiers were backfilled from integer values. Any original leading zeros that were already lost cannot be inferred. Confirm the shown value or enter the correct exact identifier before card generation.</p>{hasMoreLegacyIdentifiers&&<p className="mt-2 text-xs text-amber-200">Showing the first 500 records. Review these, refresh, then continue with the next set.</p>}{reviewError&&<p role="alert" className="mt-3 text-sm text-red-300">{reviewError}</p>}{reviewNotice&&<p role="status" className="mt-3 text-sm text-emerald-300">{reviewNotice}</p>}<div className="mt-3 max-h-96 space-y-2 overflow-auto">{legacyIdentifierReview.map(row=><div key={row.id} className="grid gap-2 rounded-lg border border-white/10 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-center"><div className="min-w-0"><p className="text-sm font-medium">{row.student_name||"Student"}</p><p className="pf-muted text-xs">Current stored identifier: {row.student_identifier}</p></div><label className="text-xs">Confirm or correct identifier<input aria-label={`Correct identifier for ${row.student_name||row.student_identifier}`} className="mt-1 w-full rounded border border-white/15 bg-black/20 px-3 py-2 text-sm" value={reviewEdits[row.id]??row.student_identifier} onChange={e=>setReviewEdits(old=>({...old,[row.id]:e.target.value}))}/></label><button type="button" disabled={!!reviewBusyId} onClick={()=>void saveReviewedIdentifier(row)} className="rounded-lg border border-amber-300/30 px-3 py-2 text-sm disabled:opacity-40">{reviewBusyId===row.id?"Saving…":"Confirm / correct"}</button></div>)}</div></div>}
   {error&&<p role="alert" className="mt-4 rounded-lg border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">{error}</p>}
   {notice&&<p role="status" className="mt-4 rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-3 text-sm text-emerald-200">{notice}</p>}
   {preview&&<div className="mt-5 space-y-5">
