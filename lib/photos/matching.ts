@@ -50,13 +50,21 @@ export function parsePhotoFilename(filename:string, configuredPrefix:string|null
  if(digitGroups.length>1 && !configuredPrefix) return {status:"NEEDS_REVIEW",originalSerial:candidate,normalizedSerial:null,legacySerialNumber:null,reason:"Filename contains multiple numeric groups; identifier cannot be determined safely"};
  return {status:"EXACT",originalSerial:candidate,normalizedSerial:result.value,legacySerialNumber:result.legacySerialNumber,method};
 }
-export function proposePhotoMatch(filenameMatch:FilenameMatch,students:StudentSerial[],duplicateHash=false):MatchProposal {
+export function proposePhotoMatch(filenameMatch:FilenameMatch,students:StudentSerial[],duplicateHash=false,policy:StudentIdentifierPolicy=DEFAULT_STUDENT_IDENTIFIER_POLICY):MatchProposal {
  if(duplicateHash) return {status:"DUPLICATE",studentId:null,serialNumber:filenameMatch.status==="EXACT"?filenameMatch.legacySerialNumber:null,studentIdentifier:filenameMatch.status==="EXACT"?filenameMatch.normalizedSerial:null,normalizedSerial:filenameMatch.status==="EXACT"?filenameMatch.normalizedSerial:null,matchingMethod:"sha256",reason:"Exact file content already exists in this project"};
  if(filenameMatch.status!=="EXACT") return {status:"NEEDS_REVIEW",studentId:null,serialNumber:null,studentIdentifier:null,normalizedSerial:null,matchingMethod:null,reason:filenameMatch.reason};
- const found=students.filter(s=>(s.student_identifier??(s.serial_number===null?null:String(s.serial_number)))===filenameMatch.normalizedSerial);
- if(found.length===0) return {status:"UNMATCHED",studentId:null,serialNumber:filenameMatch.legacySerialNumber,studentIdentifier:filenameMatch.normalizedSerial,normalizedSerial:filenameMatch.normalizedSerial,matchingMethod:filenameMatch.method,reason:"No student has this exact identifier in the current project"};
- if(found.length>1) return {status:"NEEDS_REVIEW",studentId:null,serialNumber:filenameMatch.legacySerialNumber,studentIdentifier:filenameMatch.normalizedSerial,normalizedSerial:filenameMatch.normalizedSerial,matchingMethod:filenameMatch.method,reason:"Multiple students have this exact identifier in the current project"};
- return {status:"MATCHED",studentId:found[0].id,serialNumber:found[0].serial_number,studentIdentifier:filenameMatch.normalizedSerial,normalizedSerial:filenameMatch.normalizedSerial,matchingMethod:filenameMatch.method};
+ const candidate=canonicalizeStudentIdentifier(filenameMatch.normalizedSerial,policy);
+ if(!candidate.ok) return {status:"NEEDS_REVIEW",studentId:null,serialNumber:null,studentIdentifier:null,normalizedSerial:null,matchingMethod:null,reason:candidate.error};
+ const found=students.filter(s=>{
+  const identifier=s.student_identifier??(s.serial_number===null?null:String(s.serial_number));
+  if(identifier===null)return false;
+  const parsed=canonicalizeStudentIdentifier(identifier,policy);
+  return parsed.ok&&parsed.key===candidate.key;
+ });
+ if(found.length===0) return {status:"UNMATCHED",studentId:null,serialNumber:filenameMatch.legacySerialNumber,studentIdentifier:filenameMatch.normalizedSerial,normalizedSerial:filenameMatch.normalizedSerial,matchingMethod:filenameMatch.method,reason:"No student has this identifier under the current project's configured rules"};
+ if(found.length>1) return {status:"NEEDS_REVIEW",studentId:null,serialNumber:filenameMatch.legacySerialNumber,studentIdentifier:filenameMatch.normalizedSerial,normalizedSerial:filenameMatch.normalizedSerial,matchingMethod:filenameMatch.method,reason:"Multiple students resolve to this identifier under the current project's configured rules"};
+ const confirmedIdentifier=found[0].student_identifier??String(found[0].serial_number??filenameMatch.normalizedSerial);
+ return {status:"MATCHED",studentId:found[0].id,serialNumber:found[0].serial_number,studentIdentifier:confirmedIdentifier,normalizedSerial:confirmedIdentifier,matchingMethod:filenameMatch.method};
 }
 export function isSafeZipEntryName(name:string):boolean {
  if(!name||name.length>240||name.includes("\0")||name.startsWith("/")||name.startsWith("\\")||/^[A-Za-z]:/.test(name)) return false;
