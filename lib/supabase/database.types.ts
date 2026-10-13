@@ -239,7 +239,8 @@ export type Database = {
           id: string
           owner_id: string
           project_id: string
-          serial_number: number
+          serial_number: number | null
+          student_identifier: string | null
           status: string
           student_id: string | null
           updated_at: string
@@ -253,7 +254,8 @@ export type Database = {
           id?: string
           owner_id: string
           project_id: string
-          serial_number: number
+          serial_number?: number | null
+          student_identifier?: string | null
           status?: string
           student_id?: string | null
           updated_at?: string
@@ -267,7 +269,8 @@ export type Database = {
           id?: string
           owner_id?: string
           project_id?: string
-          serial_number?: number
+          serial_number?: number | null
+          student_identifier?: string | null
           status?: string
           student_id?: string | null
           updated_at?: string
