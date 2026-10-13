@@ -3,7 +3,7 @@ import { canonicalizeStudentIdentifier, DEFAULT_STUDENT_IDENTIFIER_POLICY, findD
 
 describe("canonical student identifiers", () => {
   it("preserves leading zeroes in exact mode", () => {
-    expect(canonicalizeStudentIdentifier("001").ok && canonicalizeStudentIdentifier("001").value).toBe("001");
+    const result = canonicalizeStudentIdentifier("001");\n    expect(result).toMatchObject({ ok: true, value: "001" });
     expect(identifierMatches("001", "1")).toBe(false);
   });
   it("normalizes numeric IDs only when explicitly configured", () => {
@@ -28,7 +28,6 @@ describe("canonical student identifiers", () => {
     expect(findDuplicateIdentifiers(["001", "1", "001"])).toEqual(new Set(["001"]));
   });
   it("does not invent zero padding during legacy backfill semantics", () => {
-    expect(canonicalizeStudentIdentifier("1").ok && canonicalizeStudentIdentifier("1").value).toBe("1");
-    expect(canonicalizeStudentIdentifier("001").ok && canonicalizeStudentIdentifier("001").value).toBe("001");
+    const one = canonicalizeStudentIdentifier("1");\n    const padded = canonicalizeStudentIdentifier("001");\n    expect(one).toMatchObject({ ok: true, value: "1" });\n    expect(padded).toMatchObject({ ok: true, value: "001" });
   });
 });
