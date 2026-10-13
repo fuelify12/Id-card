@@ -92,7 +92,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       if (fieldError) throw new Error(fieldError.message);
       const students: any[] = [];
       for (let from = 0; from < 15000; from += 1000) {
-        const { data, error } = await db.from("students").select("id,serial_number,student_identifier,data").eq("project_id", projectId).eq("owner_id", uid).order("student_identifier").range(from, from + 999);
+        const { data, error } = await db.from("students").select("id,serial_number,student_identifier,student_identifier_review_required,student_identifier_source,data").eq("project_id", projectId).eq("owner_id", uid).order("student_identifier").range(from, from + 999);
         if (error) throw new Error(error.message);
         students.push(...(data ?? [])); if ((data ?? []).length < 1000) break;
       }
