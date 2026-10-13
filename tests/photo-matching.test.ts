@@ -4,8 +4,8 @@ import {inspectPhotoBuffer} from "@/lib/photos/image-validation";
 import {assertDuplicatePhotoAssignment,assertPhotoAssignmentProject,approvedPhotoConflict,detectImageMime,hasDuplicateContentHash,isSafeZipEntryName,normalizeCanonicalSerial,parsePhotoFilename,proposePhotoMatch,withinPhotoBatchLimits} from "@/lib/photos/matching";
 describe("deterministic photo filename matching",()=>{
  it.each([["1.jpg","1"],["001.jpg","001"],["1_Rahul.jpg","1"],["001_Rahul_Sharma.png","001"]])("extracts serial from %s", (filename,serial)=>{const r=parsePhotoFilename(filename);expect(r.status).toBe("EXACT");if(r.status==="EXACT")expect(r.originalSerial).toBe(serial);});
- it("preserves source zero padding but follows integer database canonicalization",()=>{const r=parsePhotoFilename("001.jpg");expect(r.status==="EXACT"&&r.originalSerial).toBe("001");expect(normalizeCanonicalSerial("001")).toBe("1");});
- it("supports prefixed IDs only when configured",()=>{expect(parsePhotoFilename("STU-001.jpg").status).toBe("NEEDS_REVIEW");const r=parsePhotoFilename("STU-001.jpg","STU");expect(r.status).toBe("EXACT");if(r.status==="EXACT")expect(r.normalizedSerial).toBe("1");});
+ it("preserves source zero padding under exact matching",()=>{const r=parsePhotoFilename("001.jpg");expect(r.status==="EXACT"&&r.originalSerial).toBe("001");expect(normalizeCanonicalSerial("001")).toBe("001");});
+ it("supports prefixed IDs only when configured",()=>{expect(parsePhotoFilename("STU-001.jpg").status).toBe("NEEDS_REVIEW");const r=parsePhotoFilename("STU-001.jpg","STU");expect(r.status).toBe("EXACT");if(r.status==="EXACT"){expect(r.originalSerial).toBe("STU-001");expect(r.normalizedSerial).toBe("STU-001");}});
  it("marks ambiguous and unsupported names for review",()=>{expect(parsePhotoFilename("class_5_roll_2.jpg").status).toBe("NEEDS_REVIEW");expect(parsePhotoFilename("photo.jpg").status).toBe("NEEDS_REVIEW");expect(parsePhotoFilename("1_Rahul_2024.jpg").status).toBe("NEEDS_REVIEW");});
  it("never guesses when the student is missing or duplicate",()=>{const m=parsePhotoFilename("8.jpg");expect(proposePhotoMatch(m,[]).status).toBe("UNMATCHED");expect(proposePhotoMatch(m,[{id:"a",serial_number:8},{id:"b",serial_number:8}]).status).toBe("NEEDS_REVIEW");});
  it("detects duplicate content without discarding it",()=>{const r=proposePhotoMatch(parsePhotoFilename("1.jpg"),[{id:"a",serial_number:1}],true);expect(r.status).toBe("DUPLICATE");});
@@ -15,10 +15,10 @@ describe("deterministic photo filename matching",()=>{
  it("requires explicit confirmation before replacing an approved photo",()=>{expect(approvedPhotoConflict(true,false)).toBe(true);expect(approvedPhotoConflict(true,true)).toBe(false);expect(approvedPhotoConflict(false,false)).toBe(false);});
  it("checks duplicate hashes and enforces file/archive limits",()=>{expect(hasDuplicateContentHash(["abc","def"],"abc")).toBe(true);expect(hasDuplicateContentHash(["abc"],"zzz")).toBe(false);expect(withinPhotoBatchLimits([100,200])).toBe(true);expect(withinPhotoBatchLimits([10*1024*1024+1])).toBe(false);expect(withinPhotoBatchLimits(Array(501).fill(1))).toBe(false);expect(withinPhotoBatchLimits([500*1024*1024,1])).toBe(false);});
  it("decodes valid images and rejects corrupt image payloads",async()=>{const good=await sharp({create:{width:100,height:120,channels:3,background:{r:90,g:120,b:160}}}).jpeg().toBuffer();const verified=await inspectPhotoBuffer(good);expect(verified.mime).toBe("image/jpeg");expect(verified.width).toBe(100);expect(verified.height).toBe(120);expect(verified.errors).toHaveLength(0);const corrupt=await inspectPhotoBuffer(Buffer.from([255,216,255,0,0,0,0,0]));expect(corrupt.errors.length).toBeGreaterThan(0);});
- it("handles a 300-photo matching batch deterministically",()=>{const students=Array.from({length:300},(_,i)=>({id:String(i+1),serial_number:i+1}));const matches=students.map(s=>proposePhotoMatch(parsePhotoFilename(String(s.serial_number).padStart(3,"0")+"_Student.jpg"),students));expect(matches).toHaveLength(300);expect(matches.every((m,i)=>m.status==="MATCHED"&&m.studentId===String(i+1))).toBe(true);});
+ it("handles a 300-photo matching batch deterministically",()=>{const students=Array.from({length:300},(_,i)=>({id:String(i+1),serial_number:i+1,student_identifier:String(i+1).padStart(3,"0")}));const matches=students.map(s=>proposePhotoMatch(parsePhotoFilename(String(s.student_identifier)+"_Student.jpg"),students));expect(matches).toHaveLength(300);expect(matches.every((m,i)=>m.status==="MATCHED"&&m.studentId===String(i+1))).toBe(true);});
 
  it("produces the same filename-to-student proposals regardless of upload order",()=>{
-  const students=[{id:"a",serial_number:1},{id:"b",serial_number:2},{id:"c",serial_number:3}];
+  const students=[{id:"a",serial_number:1,student_identifier:"001"},{id:"b",serial_number:2,student_identifier:"002"},{id:"c",serial_number:3,student_identifier:"003"}];
   const files=["003_Student_C.jpg","001_Student_A.jpg","002_Student_B.jpg"];
   const run=(names:string[])=>names.map(name=>{const proposal=proposePhotoMatch(parsePhotoFilename(name),students);return{name,studentId:proposal.studentId,status:proposal.status};}).sort((a,b)=>a.name.localeCompare(b.name));
   expect(run(files)).toEqual(run([...files].reverse()));
@@ -27,7 +27,7 @@ describe("deterministic photo filename matching",()=>{
   expect(parsePhotoFilename("STU-001.jpg").status).toBe("NEEDS_REVIEW");
   const configured=parsePhotoFilename("STU-001.jpg","STU");
   expect(configured.status).toBe("EXACT");
-  if(configured.status==="EXACT")expect(configured.originalSerial).toBe("001");
+  if(configured.status==="EXACT")expect(configured.originalSerial).toBe("STU-001");
  });
 
  it("requires explicit confirmation before assigning a duplicate-content photo",()=>{
