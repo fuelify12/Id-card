@@ -85,9 +85,90 @@ begin
   if new.student_identifier is null or new.student_identifier_review_required then new.student_identifier_unique:=null; return new; end if;
   select p.student_identifier_settings into v_settings from public.school_projects p where p.id=new.project_id;
   if not found then raise exception 'project configuration unavailable for identifier validation'; end if;
+  if new.student_identifier<>btrim(new.student_identifier)
+     or length(new.student_identifier)>coalesce((v_settings->>'max_length')::integer,64)
+     or new.student_identifier !~ '^[[:alnum:]][[:alnum:]._/-]{0,63}
+  return new;
+end;
+$phase24$;
+
+drop trigger if exists phase24_students_identifier_sync on public.students;
+create trigger phase24_students_identifier_sync before insert or update on public.students for each row execute function public.phase24_sync_student_identifier();
+
+create or replace function public.phase24_fill_legacy_student_identifier()
+returns trigger language plpgsql security invoker set search_path=public as $phase24$
+begin
+  if new.student_identifier is null and new.serial_number is not null then new.student_identifier:=new.serial_number::text; end if;
+  return new;
+end;
+$phase24$;
+drop trigger if exists phase24_batch_items_identifier_compat on public.batch_generation_items;
+create trigger phase24_batch_items_identifier_compat before insert or update on public.batch_generation_items for each row execute function public.phase24_fill_legacy_student_identifier();
+drop trigger if exists phase24_generated_cards_identifier_compat on public.generated_cards;
+create trigger phase24_generated_cards_identifier_compat before insert or update on public.generated_cards for each row execute function public.phase24_fill_legacy_student_identifier();
+drop trigger if exists phase24_processing_jobs_identifier_compat on public.processing_jobs;
+create trigger phase24_processing_jobs_identifier_compat before insert or update on public.processing_jobs for each row execute function public.phase24_fill_legacy_student_identifier();
+
+create or replace function public.phase24_fill_photo_student_identifier()
+returns trigger language plpgsql security invoker set search_path=public as $phase24$
+begin
+  if new.student_id is not null then
+    select s.student_identifier into new.student_identifier from public.students s where s.id=new.student_id and s.project_id=new.project_id;
+  elsif new.student_identifier is null and new.original_serial_number is not null then new.student_identifier:=new.original_serial_number;
+  end if;
+  return new;
+end;
+$phase24$;
+drop trigger if exists phase24_photo_identifier_compat on public.student_photos;
+create trigger phase24_photo_identifier_compat before insert or update on public.student_photos for each row execute function public.phase24_fill_photo_student_identifier();
+
+commit;
+
+  then raise exception 'invalid canonical student identifier'; end if;
   v_key:=new.student_identifier;
   if coalesce(v_settings->>'edge_whitespace','reject')='trim' then v_key:=btrim(v_key); end if;
-  if coalesce(v_settings->>'normalization','exact')='numeric' and v_key ~ '^[0-9]+$' then v_key:=coalesce(nullif(regexp_replace(v_key,'^0+',''),''),'0'); end if;
+  if coalesce(v_settings->>'normalization','exact')='numeric' and v_key ~ '^[0-9]+
+  return new;
+end;
+$phase24$;
+
+drop trigger if exists phase24_students_identifier_sync on public.students;
+create trigger phase24_students_identifier_sync before insert or update on public.students for each row execute function public.phase24_sync_student_identifier();
+
+create or replace function public.phase24_fill_legacy_student_identifier()
+returns trigger language plpgsql security invoker set search_path=public as $phase24$
+begin
+  if new.student_identifier is null and new.serial_number is not null then new.student_identifier:=new.serial_number::text; end if;
+  return new;
+end;
+$phase24$;
+drop trigger if exists phase24_batch_items_identifier_compat on public.batch_generation_items;
+create trigger phase24_batch_items_identifier_compat before insert or update on public.batch_generation_items for each row execute function public.phase24_fill_legacy_student_identifier();
+drop trigger if exists phase24_generated_cards_identifier_compat on public.generated_cards;
+create trigger phase24_generated_cards_identifier_compat before insert or update on public.generated_cards for each row execute function public.phase24_fill_legacy_student_identifier();
+drop trigger if exists phase24_processing_jobs_identifier_compat on public.processing_jobs;
+create trigger phase24_processing_jobs_identifier_compat before insert or update on public.processing_jobs for each row execute function public.phase24_fill_legacy_student_identifier();
+
+create or replace function public.phase24_fill_photo_student_identifier()
+returns trigger language plpgsql security invoker set search_path=public as $phase24$
+begin
+  if new.student_id is not null then
+    select s.student_identifier into new.student_identifier from public.students s where s.id=new.student_id and s.project_id=new.project_id;
+  elsif new.student_identifier is null and new.original_serial_number is not null then new.student_identifier:=new.original_serial_number;
+  end if;
+  return new;
+end;
+$phase24$;
+drop trigger if exists phase24_photo_identifier_compat on public.student_photos;
+create trigger phase24_photo_identifier_compat before insert or update on public.student_photos for each row execute function public.phase24_fill_photo_student_identifier();
+
+commit;
+ then
+    if v_key<>coalesce(nullif(regexp_replace(v_key,'^0+',''),''),'0') then
+      raise exception 'numeric identifier must already be normalized under project policy';
+    end if;
+    v_key:=coalesce(nullif(regexp_replace(v_key,'^0+',''),''),'0');
+  end if;
   if coalesce(v_settings->>'case_sensitive','true')='false' then v_key:=lower(v_key); end if;
   new.student_identifier_unique:=v_key;
   return new;
