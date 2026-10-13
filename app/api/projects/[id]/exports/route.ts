@@ -45,12 +45,12 @@ async function currentCards(db: any, projectId: string, uid: string, batchId: st
   const status = String(batch.status).toLowerCase();
   if (!["completed","completed_with_errors"].includes(status)) throw Object.assign(new Error("Export is available only after the source batch has finished."), { status: 422 });
   const [{ data: cards, error: ce }, { data: items, error: ie }, { data: students, error: se }, { error: fe }, { data: templates, error: te }, { data: photos, error: pe }] = await Promise.all([
-    db.from("generated_cards").select("id,project_id,owner_id,batch_id,student_id,serial_number,storage_path,filename,status,validation_status,approval_status,template_id,template_version,photo_id,photo_version,output_sha256,output_format,output_width_px,output_height_px,output_dpi,render_input_hash,render_config_snapshot,card_side,generated_at,created_at").eq("project_id", projectId).eq("owner_id", uid).eq("batch_id", batchId).order("serial_number").limit(MAX_CARDS + 1),
-    db.from("batch_generation_items").select("id,student_id,serial_number,status,output_card_id,output_storage_path,input_fingerprint,error_summary").eq("project_id", projectId).eq("owner_id", uid).eq("batch_id", batchId).order("serial_number").limit(MAX_CARDS + 1),
-    db.from("students").select("id,project_id,owner_id,serial_number,data,updated_at").eq("project_id", projectId).eq("owner_id", uid).limit(MAX_CARDS + 1),
+    db.from("generated_cards").select("id,project_id,owner_id,batch_id,student_id,serial_number,student_identifier,storage_path,filename,status,validation_status,approval_status,template_id,template_version,photo_id,photo_version,output_sha256,output_format,output_width_px,output_height_px,output_dpi,render_input_hash,render_config_snapshot,card_side,generated_at,created_at").eq("project_id", projectId).eq("owner_id", uid).eq("batch_id", batchId).order("serial_number").limit(MAX_CARDS + 1),
+    db.from("batch_generation_items").select("id,student_id,serial_number,student_identifier,status,output_card_id,output_storage_path,input_fingerprint,error_summary").eq("project_id", projectId).eq("owner_id", uid).eq("batch_id", batchId).order("serial_number").limit(MAX_CARDS + 1),
+    db.from("students").select("id,project_id,owner_id,serial_number,student_identifier,data,updated_at").eq("project_id", projectId).eq("owner_id", uid).limit(MAX_CARDS + 1),
     db.from("card_validation_findings").select("id,student_id,generated_card_id,severity,status,rule_id,message").eq("project_id", projectId).eq("owner_id", uid).in("status", ["OPEN","IN_REVIEW"]).limit(1),
     db.from("templates").select("id,version_number").eq("project_id", projectId).eq("owner_id", uid),
-    db.from("student_photos").select("id,project_id,owner_id,student_id,image_version,match_status,processing_status,crop_approved_at,processed_storage_path").eq("project_id", projectId).eq("owner_id", uid).limit(10000)
+    db.from("student_photos").select("id,project_id,owner_id,student_id,student_identifier,image_version,match_status,processing_status,crop_approved_at,processed_storage_path").eq("project_id", projectId).eq("owner_id", uid).limit(10000)
   ]);
   if (ce || ie || se || fe || te || pe) throw new Error("Could not load complete export eligibility data.");const pagedFindings=await readOpenFindings(db,projectId,uid);
   if ((cards ?? []).length > MAX_CARDS || (items ?? []).length > MAX_CARDS) throw Object.assign(new Error("This batch exceeds the 1,000-card-output export limit. Split it into smaller batches."), { status: 413 });
@@ -107,7 +107,7 @@ async function preflight(db: any, project: any, uid: string, batchId: string) {
   const eligibleChecks=checks.filter(x=>x.reasons.length===0);const formats = ["original"];
   if (eligibleChecks.length && eligibleChecks.every(x => ["png","jpeg"].includes(extOf(x.card.output_format)))) formats.push("png","jpeg");
   if (eligibleChecks.length && eligibleChecks.every(x => extOf(x.card.output_format)==="pdf")) formats.push("pdf");
-  return { batch:d.batch, counts, cards:checks.map(x=>({id:x.card.id,studentId:x.card.student_id,serialNumber:x.card.serial_number,studentName:nameOf(x.student),side:sideOf(x.card),format:extOf(x.card.output_format),eligible:x.reasons.length===0,reasons:x.reasons,approvalStatus:x.card.approval_status,validationStatus:x.card.validation_status})), eligibleStudentIds:eligibleStudents, eligibleStudentCount:eligibleStudents.length, formats, missingItems:missing.map((i:any)=>({serialNumber:i.serial_number,status:i.status,reason:i.error_summary??"No completed generated output exists."})), _private:{...d,checks} };
+  return { batch:d.batch, counts, cards:checks.map(x=>({id:x.card.id,studentId:x.card.student_id,serialNumber:x.card.student_identifier??x.card.serial_number,studentIdentifier:x.card.student_identifier??String(x.card.serial_number??""),studentName:nameOf(x.student),side:sideOf(x.card),format:extOf(x.card.output_format),eligible:x.reasons.length===0,reasons:x.reasons,approvalStatus:x.card.approval_status,validationStatus:x.card.validation_status})), eligibleStudentIds:eligibleStudents, eligibleStudentCount:eligibleStudents.length, formats, missingItems:missing.map((i:any)=>({serialNumber:i.student_identifier??i.serial_number,status:i.status,reason:i.error_summary??"No completed generated output exists."})), _private:{...d,checks} };
 }
 async function insertAudit(_db:any, _uid:string, _projectId:string, _action:string, _exportId:string, _metadata:Record<string,unknown>={}) {
   // Application roles are deliberately denied INSERT on audit_logs. The SECURITY DEFINER
@@ -174,7 +174,7 @@ export async function POST(request: Request, { params }: { params: Promise<{id:s
     const filename = `PRINTFORGE_${school}_${session}.zip`;
     const used = new Set<string>();
     const itemSnapshot = chosen.map((x:any) => {
-      const serial = String(x.card.serial_number).padStart(3,"0");
+      const serial = safeFilenamePart(x.card.student_identifier??String(x.card.serial_number??"student"),"Student",64);
       const studentName = safeFilenamePart(nameOf(x.student),"Student",60);
       const sideName = sideOf(x.card);
       const ext = format === "original" ? extOf(x.card.output_format) : format;
@@ -182,7 +182,7 @@ export async function POST(request: Request, { params }: { params: Promise<{id:s
       const leaf = side === "both" && !folderLayout ? `${base}_${sideName}.${ext}` : `${base}.${ext}`;
       const path = folderLayout ? `${sideName}/${leaf}` : leaf;
       const archiveName = uniqueArchiveName(path,used);
-      return {cardId:x.card.id,studentId:x.card.student_id,studentRef:createHash("sha256").update(String(x.card.student_id)).digest("hex").slice(0,12),serialNumber:String(x.card.serial_number).padStart(3,"0"),side:sideName,sourcePath:x.card.storage_path,sourceHash:x.card.output_sha256,sourceFormat:extOf(x.card.output_format),format:ext,archiveName,validationStatus:x.card.validation_status,templateVersion:x.card.template_version,batchId,studentName:includeNames?nameOf(x.student):undefined};
+      return {cardId:x.card.id,studentId:x.card.student_id,studentRef:createHash("sha256").update(String(x.card.student_id)).digest("hex").slice(0,12),studentIdentifier:String(x.card.student_identifier??x.student?.student_identifier??x.card.serial_number??""),serialNumber:String(x.card.student_identifier??x.student?.student_identifier??x.card.serial_number??""),side:sideName,sourcePath:x.card.storage_path,sourceHash:x.card.output_sha256,sourceFormat:extOf(x.card.output_format),format:ext,archiveName,validationStatus:x.card.validation_status,templateVersion:x.card.template_version,batchId,studentName:includeNames?nameOf(x.student):undefined};
     });
     const storagePath = `${uid}/${id}/${exportId}/archive.zip`;
     const expiresAt = new Date(now.getTime()+RETENTION_DAYS*24*60*60*1000).toISOString();
@@ -263,7 +263,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{id:
       const archiveName=uniqueArchiveName(root?root+"/"+item.archiveName:item.archiveName,used);
       const entry=new ZipPassThrough(archiveName);zip.add(entry);entry.push(bytes,true);if(writer.writableNeedDrain)await new Promise<void>((resolve,reject)=>{writer.once("drain",resolve);writer.once("error",reject);});
       expectedNames.push(archiveName);processed++;
-      actualManifest.push({item_number:processed,serial_number:item.serialNumber,student_ref:item.studentRef,filename:archiveName,side:item.side,format:outFormat,sha256:sha256(bytes),validation_status:card.validation_status,template_version:card.template_version,batch_id:job.batch_id,exported_at:new Date().toISOString()});
+      actualManifest.push({item_number:processed,student_identifier:item.studentIdentifier??item.serialNumber,serial_number:item.serialNumber,student_ref:item.studentRef,filename:archiveName,side:item.side,format:outFormat,sha256:sha256(bytes),validation_status:card.validation_status,template_version:card.template_version,batch_id:job.batch_id,exported_at:new Date().toISOString()});
       const {error:peu}=await db.from("exports").update({packaged_file_count:processed,failed_item_count:failed,status:"running",updated_at:new Date().toISOString()}).eq("id",exportId).eq("owner_id",uid);
       if(peu)throw new Error("Could not persist export progress.");
       {const size=(await stat(zipPath).catch(()=>({size:0} as any))).size;if(size>MAX_ARCHIVE_BYTES)throw Object.assign(new Error("Archive exceeded the 90 MB storage safety limit."),{code:"ARCHIVE_LIMIT"});}
