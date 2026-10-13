@@ -25,6 +25,13 @@ describe("canonical identifier end-to-end contract", () => {
     expect(proposePhotoMatch(parsed, [student])).toMatchObject({ status: "MATCHED", studentId: "synthetic-student-2", studentIdentifier: "STU-001" });
   });
 
+  it("applies configured case-insensitive policy during photo matching without rewriting the saved identifier", () => {
+    const policy = { normalization: "exact" as const, caseSensitive: false, edgeWhitespace: "reject" as const, maxLength: 64 };
+    const parsed = parsePhotoFilename("stu-001.jpg", "STU", policy);
+    expect(proposePhotoMatch(parsed, [{ id: "synthetic-student-3", serial_number: null, student_identifier: "STU-001" }], false, policy))
+      .toMatchObject({ status: "MATCHED", studentId: "synthetic-student-3", studentIdentifier: "STU-001" });
+  });
+
   it("does not equate 001 and 1 unless numeric normalization is explicitly configured", () => {
     expect(proposePhotoMatch(parsePhotoFilename("001.jpg"), [{ id: "one", serial_number: 1, student_identifier: "1" }]).status).toBe("UNMATCHED");
     const policy = { normalization: "numeric" as const, caseSensitive: true, edgeWhitespace: "reject" as const, maxLength: 64 };
