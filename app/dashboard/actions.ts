@@ -275,7 +275,7 @@ export async function correctStudentIdentifier(input:{projectId:string;studentId
  const sourceColumn=typeof settings?.identifier_source_column==="string"?settings.identifier_source_column:null;
  const data=student.data&&typeof student.data==="object"&&!Array.isArray(student.data)?{...(student.data as Record<string,unknown>)}:{};
  if(sourceColumn) data[sourceColumn]=parsed.value;
- const {data:saved,error:saveError}=await s.rpc("correct_student_identifier",{p_project_id:input.projectId,p_student_id:student.id,p_student_identifier:parsed.value,p_legacy_serial_number:parsed.legacySerialNumber,p_data:data});
+ const {data:saved,error:saveError}=await s.rpc("correct_student_identifier",{p_project_id:input.projectId,p_student_id:student.id,p_student_identifier:parsed.value,p_legacy_serial_number:parsed.legacySerialNumber,p_data:data as any});
  if(saveError) throw new Error(saveError.message.includes("cannot correct an identifier while processing is active")?"Wait for the active batch/photo-processing job to finish, then review this identifier again.":saveError.message.includes("student identifier already exists")?"That identifier already belongs to another student in this project.":saveError.message);
  await s.from("audit_logs").insert({owner_id:uid,project_id:input.projectId,action:student.student_identifier===parsed.value?"student_identifier_confirmed":"student_identifier_corrected",entity_type:"student",entity_id:student.id,metadata:{identifier_source:"owner_review",normalization:policy.normalization}});
  return {identifier:typeof saved==="string"?saved:parsed.value,corrected:student.student_identifier!==parsed.value};
