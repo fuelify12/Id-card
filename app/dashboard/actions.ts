@@ -58,9 +58,14 @@ export async function importStudentRows(input:{projectId:string;rows:Array<{sour
    if(seen.has(key)) throw new Error("Duplicate student identifiers are not allowed under this project's configured rules.");
    seen.add(key);
  }
- const {data:existing,error:ee}=await s.from("students").select("student_identifier,serial_number").eq("project_id",input.projectId).eq("owner_id",uid);
- if(ee) throw new Error(ee.message);
- if(supplied && (existing??[]).length && (
+ const existing:any[]=[];
+ for(let from=0;from<15000;from+=1000){
+   const {data,error}=await s.from("students").select("student_identifier,serial_number").eq("project_id",input.projectId).eq("owner_id",uid).range(from,from+999);
+   if(error) throw new Error(error.message);
+   existing.push(...(data??[]));
+   if((data??[]).length<1000) break;
+ }
+ if(supplied && existing.length && (
    currentPolicy.normalization!==policy.normalization ||
    currentPolicy.edgeWhitespace!==policy.edgeWhitespace ||
    currentPolicy.maxLength!==policy.maxLength ||
@@ -70,7 +75,7 @@ export async function importStudentRows(input:{projectId:string;rows:Array<{sour
    const {error:settingsError}=await s.from("school_projects").update({student_identifier_settings:{normalization:policy.normalization,case_sensitive:policy.caseSensitive,edge_whitespace:policy.edgeWhitespace,max_length:policy.maxLength}}).eq("id",input.projectId).eq("owner_id",uid);
    if(settingsError) throw new Error("Could not save this project's identifier rules. Apply the Phase 24 schema migration before importing.");
  }
- const existingKeys=new Set((existing??[]).map((r:any)=>{const raw=String(r.student_identifier??r.serial_number);const parsed=canonicalizeStudentIdentifier(raw,policy);return parsed.ok?parsed.key:raw;}));
+ const existingKeys=new Set(existing.map((r:any)=>{const raw=String(r.student_identifier??r.serial_number);const parsed=canonicalizeStudentIdentifier(raw,policy);return parsed.ok?parsed.key:raw;}));
  const collisions=normalized.filter(r=>{const parsed=canonicalizeStudentIdentifier(r.student_identifier,policy);return parsed.ok&&existingKeys.has(parsed.key);});
  if(collisions.length && !input.replaceExisting) throw new Error(`${collisions.length} student identifier(s) already exist in this project. Remove them from the import or explicitly choose replace existing records.`);
  if(input.replaceExisting) {
