@@ -11,6 +11,12 @@ begin
     where table_schema='public' and table_name='school_projects' and column_name='student_identifier_settings' and data_type='jsonb'
   ) then raise exception 'school_projects.student_identifier_settings must exist'; end if;
   if not exists (
+    select 1 from information_schema.columns where table_schema='public' and table_name='students' and column_name='student_identifier_review_required' and data_type='boolean'
+  ) then raise exception 'legacy identifier review flag must exist'; end if;
+  if not exists (
+    select 1 from information_schema.routines where routine_schema='public' and routine_name='correct_student_identifier'
+  ) then raise exception 'transactional identifier correction RPC is missing'; end if;
+  if not exists (
     select 1 from pg_indexes where schemaname='public' and indexname='students_project_student_identifier_key'
       and indexdef like '%(project_id, student_identifier)%'
   ) then raise exception 'project-scoped canonical identifier unique index is missing'; end if;
