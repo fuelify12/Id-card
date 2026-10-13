@@ -10,13 +10,15 @@ describe("Phase 24 migration safety contract", () => {
     expect(migration).toContain("add column if not exists student_identifier text");
     expect(migration).toContain("student_identifier_review_required boolean not null default true");
     expect(migration).toContain("student_identifier_source text not null default 'legacy_numeric_backfill'");
-    expect(migration).toMatch(/set student_identifier\s*=\s*serial_number::text/i);
+    expect(migration).toContain("set student_identifier=serial_number::text");
     expect(migration).not.toMatch(/padStart|lpad\s*\(/i);
     expect(migration).not.toMatch(/drop table|delete from public\.(students|student_photos|generated_cards|batch_generation_items)/i);
   });
-  it("enforces project-scoped uniqueness only after review and preserves card sides", () => {
-    expect(migration).toMatch(/unique index if not exists students_project_student_identifier_key\\s+on public\\.students\\(project_id,student_identifier_unique\\)/i);\n    expect(migration).toContain("students_student_identifier_required");
+  it("enforces project-scoped uniqueness through the generated review-aware key", () => {
+    expect(migration).toContain("create unique index if not exists students_project_student_identifier_key");
+    expect(migration).toContain("on public.students(project_id,student_identifier_unique)");
     expect(migration).toContain("generated always as (case when student_identifier_review_required then null else student_identifier end) stored");
+    expect(migration).toContain("students_student_identifier_required");
     expect(migration).toContain("idx_generated_cards_batch_student_identifier");
     expect(migration).not.toContain("create unique index if not exists generated_cards_batch_student_identifier_key");
     expect(correctionMigration).toContain("correct_student_identifier");
@@ -28,11 +30,11 @@ describe("Phase 24 migration safety contract", () => {
     expect(workerMigration).toContain("security invoker");
     expect(workerMigration).toContain("for update skip locked");
     expect(workerMigration).toContain("interval '5 minutes'");
-    expect(workerMigration).toMatch(/attempts\s*<\s*i\.max_attempts/);
-    expect(workerMigration).toMatch(/order by coalesce\(i\.student_identifier,\s*i\.serial_number::text\),\s*i\.id/i);
+    expect(workerMigration).toContain("attempts<i.max_attempts");
+    expect(workerMigration).toContain("order by coalesce(i.student_identifier,i.serial_number::text),i.id");
   });
-  it("does not mutate the production schema as part of tests", () => {
-    expect(migration).toMatch(/^begin;/);
+  it("keeps migrations atomic and does not mutate production as part of tests", () => {
+    expect(migration.trim().startsWith("begin;")).toBe(true);
     expect(migration.trim().endsWith("commit;")).toBe(true);
     expect(correctionMigration.trim().endsWith("commit;")).toBe(true);
     expect(workerMigration.trim().endsWith("commit;")).toBe(true);
