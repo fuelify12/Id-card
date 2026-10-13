@@ -37,9 +37,11 @@ from public.students s where j.student_id=s.id and j.project_id=s.project_id and
 update public.processing_jobs set student_identifier=serial_number::text where student_identifier is null and serial_number is not null;
 update public.student_photos p set student_identifier=s.student_identifier
 from public.students s where p.student_id=s.id and p.project_id=s.project_id and p.student_identifier is null;
+-- For unmatched historical photos, only the original filename-derived identifier is evidence.
+-- Do not promote a previously normalized value into canonical identity when the original is absent.
 update public.student_photos
-set student_identifier=coalesce(original_serial_number,normalized_serial_number)
-where student_identifier is null and coalesce(original_serial_number,normalized_serial_number) is not null;
+set student_identifier=original_serial_number
+where student_identifier is null and original_serial_number is not null;
 
 -- Generated uniqueness key excludes unresolved legacy rows, allowing their duplicates to be reviewed explicitly.
 create unique index if not exists students_project_student_identifier_key
