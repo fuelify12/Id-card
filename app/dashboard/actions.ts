@@ -48,8 +48,6 @@ export async function importStudentRows(input:{projectId:string;rows:Array<{sour
  const currentIdentifierSourceColumn=typeof rawIdentifierSettings?.identifier_source_column==="string"?rawIdentifierSettings.identifier_source_column:null;
  const requestedIdentifierSourceColumn=typeof input.identifierSourceColumn==="string"?input.identifierSourceColumn.slice(0,128):null;
  const policy:StudentIdentifierPolicy = supplied ? studentIdentifierPolicyFromConfig(supplied) : currentPolicy;
- // Case-insensitive uniqueness needs a dedicated persisted comparison-key migration; keep this release exact-case only.
- policy.caseSensitive=true;
  const normalized=input.rows.map(r=>{
    const parsed=canonicalizeStudentIdentifier(r.serialNumber,policy);
    if(!parsed.ok) throw new Error(`Spreadsheet row ${r.sourceRow}: ${parsed.error}`);
@@ -268,7 +266,7 @@ export async function correctStudentIdentifier(input:{projectId:string;studentId
  const {data:student,error:se}=await s.from("students").select("id,project_id,owner_id,student_identifier,serial_number,student_identifier_review_required,data").eq("id",input.studentId).eq("project_id",input.projectId).eq("owner_id",uid).maybeSingle();
  if(se) throw new Error(se.message); if(!student) throw new Error("Student not found in this project.");
  if(!student.student_identifier_review_required) throw new Error("This identifier is not awaiting legacy review.");
- const policy=studentIdentifierPolicyFromConfig(project.student_identifier_settings); policy.caseSensitive=true;
+ const policy=studentIdentifierPolicyFromConfig(project.student_identifier_settings);
  const parsed=canonicalizeStudentIdentifier(input.identifier,policy);
  if(!parsed.ok) throw new Error(parsed.error);
  const {data:collision,error:ce}=await s.from("students").select("id").eq("project_id",input.projectId).eq("owner_id",uid).eq("student_identifier_unique",parsed.key).neq("id",student.id).maybeSingle();
