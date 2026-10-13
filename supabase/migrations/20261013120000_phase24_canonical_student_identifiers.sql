@@ -78,7 +78,7 @@ create unique index if not exists batch_items_batch_student_identifier_key
 create unique index if not exists generated_cards_batch_student_identifier_key
   on public.generated_cards(batch_id, student_identifier);
 
-create unique index if not exists processing_jobs_batch_student_identifier_key
+create index if not exists idx_processing_jobs_batch_identifier
   on public.processing_jobs(batch_id, student_identifier);
 
 -- NOT VALID checks avoid scanning legacy rows during rollout but enforce every new/updated row.
