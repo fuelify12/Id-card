@@ -2,26 +2,30 @@ import * as XLSX from "xlsx";
 
 export type CellValue = string | number | boolean | null;
 export type ParsedStudentRow = { sourceRow: number; values: Record<string, CellValue>; serialNumber: string | null; issues: string[]; blank: boolean };
-export type SpreadsheetPreview = { sheetName: string; headers: string[]; normalizedHeaders: string[]; headerRow: number; serialColumn: string | null; rows: ParsedStudentRow[]; summary: { total: number; blank: number; missingSerial: number; duplicates: number; invalid: number } };
+export type SpreadsheetPreview = { sheetName: string; sheetNames: string[]; headers: string[]; normalizedHeaders: string[]; headerRow: number; serialColumn: string | null; rows: ParsedStudentRow[]; summary: { total: number; blank: number; missingSerial: number; duplicates: number; invalid: number } };
 const SERIAL_HEADERS = new Set(["serial","serialno","serialnumber","sno","srno","srnumber","srlno","studentno","studentnumber","क्रमांक","क्रमसंख्या","अनुक्रमांक"]);
 export function normalizeColumnName(value: unknown, index = 0): string {
   const s = String(value ?? "").normalize("NFKC").trim().toLowerCase()
-    .replace(/[.()\[\]{}]/g, " ").replace(/[\s_\-/\\]+/g, " ").replace(/[^\p{L}\p{N} ]/gu, "").trim();
+    .replace(/[.()\[\]{}]/g, " ").replace(/[\s_.-]+/g, " ").replace(/[\/\\]+/g, " ").replace(/[^\p{L}\p{N} ]/gu, "").trim();
   return s || `column ${index + 1}`;
 }
 export function detectSerialColumn(headers: string[]): string | null {
-  const exact = headers.find(h => SERIAL_HEADERS.has(normalizeColumnName(h).replace(/\s/g, "")));
-  if (exact) return exact;
+  const exact = headers.filter(h => SERIAL_HEADERS.has(normalizeColumnName(h).replace(/\s/g, "")));
+  if (exact.length === 1) return exact[0];
+  if (exact.length > 1) return null;
   const likely = headers.filter(h => /(^|\b)(serial|s\.?\s?no|sr\.?\s?no|sno|student no|क्रमांक|अनुक्रमांक)(\b|$)/i.test(h.trim()));
   return likely.length === 1 ? likely[0] : null;
 }
-function cellText(v: unknown): CellValue {
-  if (v === undefined || v === null) return null;
-  if (typeof v === "string") return v.trim() === "" ? null : v;
-  if (typeof v === "number") return Number.isFinite(v) ? v : String(v);
-  if (typeof v === "boolean") return v;
-  if (v instanceof Date) return v.toISOString().slice(0,10);
-  return String(v);
+function cellText(value: unknown, cell?: XLSX.CellObject): CellValue {
+  if (value === undefined || value === null) return null;
+  if (cell?.t === "n" && cell.z) {
+    try { return XLSX.utils.format_cell(cell).trim(); } catch { /* use underlying value */ }
+  }
+  if (typeof value === "string") return value.trim() === "" ? null : value;
+  if (typeof value === "number") return Number.isFinite(value) ? value : String(value);
+  if (typeof value === "boolean") return value;
+  if (value instanceof Date) return value.toISOString().slice(0,10);
+  return String(value);
 }
 function rowBlank(row: unknown[]) { return row.every(v => v === null || v === undefined || String(v).trim() === ""); }
 function serialDuplicateKey(value: string): string {
@@ -31,33 +35,37 @@ function serialDuplicateKey(value: string): string {
   }
   return normalized;
 }
-export function parseWorkbook(buffer: ArrayBuffer, fileName: string): SpreadsheetPreview {
+export function parseWorkbook(buffer: ArrayBuffer, fileName: string, selectedSheetName?: string): SpreadsheetPreview {
+  if (!buffer.byteLength) throw new Error("The selected spreadsheet is empty.");
   if (buffer.byteLength > 25 * 1024 * 1024) throw new Error("Spreadsheet exceeds 25 MB.");
   const ext = fileName.toLowerCase().split(".").pop();
   if (!["csv","xlsx","xls"].includes(ext || "")) throw new Error("Upload CSV, XLSX, or XLS files only.");
-  const wb = XLSX.read(buffer, { type: "array", cellDates: true, dense: true, raw: true });
+  const wb = XLSX.read(buffer, { type: "array", cellDates: true, cellNF: true, raw: true });
   if (!wb.SheetNames.length) throw new Error("Workbook has no worksheets.");
+  if (selectedSheetName && !wb.SheetNames.includes(selectedSheetName)) throw new Error("The selected worksheet is not present in this file.");
   const candidates = wb.SheetNames.map((name, order) => {
     const sheet = wb.Sheets[name];
     const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true, defval: null, blankrows: true }) as unknown[][];
-    const scan = matrix.slice(0, 30).map((row, i) => ({ row, i, filled: row.filter(v => v !== null && v !== undefined && String(v).trim() !== "").length }));
+    const scan = matrix.slice(0, 30).map((row, i) => ({ i, filled: row.filter(v => v !== null && v !== undefined && String(v).trim() !== "").length }));
     const best = scan.filter(x => x.filled >= 2).sort((a,b) => b.filled-a.filled || a.i-b.i)[0];
-    return { name, order, matrix, headerIndex: best?.i ?? -1, score: best?.filled ?? 0 };
-  }).sort((a,b) => b.score-a.score || a.order-b.order);
-  const chosen = candidates[0];
-  if (!chosen || chosen.headerIndex < 0) throw new Error("Could not find a header row with at least two non-empty cells in the first 30 rows.");
+    return { name, order, sheet, matrix, headerIndex: best?.i ?? -1, score: best?.filled ?? 0 };
+  });
+  const chosen = selectedSheetName ? candidates.find(c => c.name === selectedSheetName) : [...candidates].sort((a,b) => b.score-a.score || a.order-b.order)[0];
+  if (!chosen || chosen.headerIndex < 0) throw new Error("Could not find a header row with at least two non-empty cells in the first 30 rows of this worksheet.");
   const headerRow = chosen.matrix[chosen.headerIndex];
   const headers: string[] = [];
-  const used = new Map<string, number>();
+  const indexes: number[] = [];
+  const seenHeaders = new Set<string>();
   for (let i=0;i<headerRow.length;i++) {
     const original = String(headerRow[i] ?? "").trim();
     if (!original) continue;
-    const base = original;
-    const count = (used.get(normalizeColumnName(base)) ?? 0)+1;
-    used.set(normalizeColumnName(base),count);
-    headers.push(count===1 ? base : `${base} (${count})`);
+    const key = normalizeColumnName(original);
+    if (seenHeaders.has(key)) throw new Error(`Duplicate column headers found: "${original}". Rename duplicate columns before importing.`);
+    seenHeaders.add(key);
+    headers.push(original);
+    indexes.push(i);
   }
-  const indexes = headerRow.map((v,i)=>({v,i})).filter(x=>String(x.v??"").trim()!=="");
+  if (headers.length < 2) throw new Error("This worksheet needs at least two named columns in its detected header row.");
   const normalizedHeaders = headers.map((h,i)=>normalizeColumnName(h,i));
   const serialColumn = detectSerialColumn(headers);
   const serialIndex = serialColumn ? headers.indexOf(serialColumn) : -1;
@@ -66,10 +74,13 @@ export function parseWorkbook(buffer: ArrayBuffer, fileName: string): Spreadshee
     const raw = chosen.matrix[r] ?? [];
     const blank = rowBlank(raw);
     const values: Record<string,CellValue> = {};
-    indexes.forEach((x,i)=>{ values[headers[i]] = cellText(raw[x.i]); });
+    indexes.forEach((columnIndex,i)=>{
+      const value = raw[columnIndex];
+      const cell = chosen.sheet[XLSX.utils.encode_cell({r,c:columnIndex})] as XLSX.CellObject|undefined;
+      values[headers[i]] = cellText(value,cell);
+    });
     if (blank) { rows.push({sourceRow:r+1,values,serialNumber:null,issues:["Blank row"],blank:true}); continue; }
-    const rawSerial = serialIndex >= 0 ? raw[indexes[serialIndex]?.i] : null;
-    const serialNumber = rawSerial === null || rawSerial === undefined || String(rawSerial).trim()==="" ? null : String(rawSerial).trim();
+    const serialNumber = serialIndex >= 0 ? (values[headers[serialIndex]]===null ? null : String(values[headers[serialIndex]]).trim()) : null;
     const issues: string[] = [];
     if (!serialColumn) issues.push("Serial-number column not detected; choose a column before importing.");
     else if (!serialNumber) issues.push("Missing serial number");
@@ -79,7 +90,7 @@ export function parseWorkbook(buffer: ArrayBuffer, fileName: string): Spreadshee
   rows.forEach(r=>{ if(r.serialNumber) { const key=serialDuplicateKey(r.serialNumber); counts.set(key,(counts.get(key)??0)+1); } });
   rows.forEach(r=>{ if(r.serialNumber && (counts.get(serialDuplicateKey(r.serialNumber))??0)>1) r.issues.push("Duplicate serial number"); });
   const dataRows = rows.filter(r=>!r.blank);
-  return {sheetName:chosen.name,headers,normalizedHeaders,headerRow:chosen.headerIndex+1,serialColumn,rows,summary:{total:dataRows.length,blank:rows.filter(r=>r.blank).length,missingSerial:dataRows.filter(r=>!r.serialNumber).length,duplicates:dataRows.filter(r=>r.issues.includes("Duplicate serial number")).length,invalid:dataRows.filter(r=>r.issues.length>0).length}};
+  return {sheetName:chosen.name,sheetNames:wb.SheetNames,headers,normalizedHeaders,headerRow:chosen.headerIndex+1,serialColumn,rows,summary:{total:dataRows.length,blank:rows.filter(r=>r.blank).length,missingSerial:dataRows.filter(r=>!r.serialNumber).length,duplicates:dataRows.filter(r=>r.issues.includes("Duplicate serial number")).length,invalid:dataRows.filter(r=>r.issues.length>0).length}};
 }
 export function validateStudentRows(rows: ParsedStudentRow[], serialColumn: string | null) {
   const candidates = rows.filter(r=>!r.blank).map(r=>{
