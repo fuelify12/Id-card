@@ -1,7 +1,7 @@
 import {describe,expect,it} from "vitest";
 import sharp from "sharp";
 import {inspectPhotoBuffer} from "@/lib/photos/image-validation";
-import {assertPhotoAssignmentProject,approvedPhotoConflict,detectImageMime,hasDuplicateContentHash,isSafeZipEntryName,normalizeCanonicalSerial,parsePhotoFilename,proposePhotoMatch,withinPhotoBatchLimits} from "@/lib/photos/matching";
+import {assertDuplicatePhotoAssignment,assertPhotoAssignmentProject,approvedPhotoConflict,detectImageMime,hasDuplicateContentHash,isSafeZipEntryName,normalizeCanonicalSerial,parsePhotoFilename,proposePhotoMatch,withinPhotoBatchLimits} from "@/lib/photos/matching";
 describe("deterministic photo filename matching",()=>{
  it.each([["1.jpg","1"],["001.jpg","001"],["1_Rahul.jpg","1"],["001_Rahul_Sharma.png","001"]])("extracts serial from %s", (filename,serial)=>{const r=parsePhotoFilename(filename);expect(r.status).toBe("EXACT");if(r.status==="EXACT")expect(r.originalSerial).toBe(serial);});
  it("preserves source zero padding but follows integer database canonicalization",()=>{const r=parsePhotoFilename("001.jpg");expect(r.status==="EXACT"&&r.originalSerial).toBe("001");expect(normalizeCanonicalSerial("001")).toBe("1");});
@@ -28,5 +28,12 @@ describe("deterministic photo filename matching",()=>{
   const configured=parsePhotoFilename("STU-001.jpg","STU");
   expect(configured.status).toBe("EXACT");
   if(configured.status==="EXACT")expect(configured.originalSerial).toBe("001");
+ });
+
+ it("requires explicit confirmation before assigning a duplicate-content photo",()=>{
+  expect(()=>assertDuplicatePhotoAssignment("DUPLICATE",null,false)).toThrow(/explicitly confirm/);
+  expect(()=>assertDuplicatePhotoAssignment("MATCHED","photo-original",false)).toThrow(/explicitly confirm/);
+  expect(()=>assertDuplicatePhotoAssignment("DUPLICATE","photo-original",true)).not.toThrow();
+  expect(()=>assertDuplicatePhotoAssignment("NEEDS_REVIEW",null,false)).not.toThrow();
  });
 });
