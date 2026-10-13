@@ -29,6 +29,10 @@
 - Added a searchable, project-local student selector before mobile camera capture. The selected student travels with that queue item; after upload the app saves a manual association proposal, but it remains unapproved until the existing review/approval step. Assignment errors do not turn an already saved upload into a false upload-failure state.
 - Added a Phase 23 CI workflow to run the photo/regression suite, typecheck, lint, and production build.
 
+## Read-only Supabase schema/security metadata check
+
+A read-only metadata query confirmed the configured project has the existing `printforge-student-photos` bucket set to private (`public=false`), the expected photo/project ownership columns, an authenticated-only `student_photos` RLS policy qualified by `auth.uid()` and project ownership, and storage object policies qualified by the authenticated user folder plus owned project. This is metadata/policy inspection only: no student rows, photo objects, policies, or production data were changed. Policy inspection is not a substitute for live cross-tenant deny tests using separate authorized test accounts.
+
 ## Identifier safety limitation (not silently changed)
 
 The current `students.serial_number` is numeric, and the existing import action persists `Number(serialNumber)`. The project has a configurable filename prefix, but it does not yet have a complete textual identifier model or an explicit leading-zero policy. Consequently, numeric canonicalization treats `001` and `1` as the same identifier. It is not safe to claim that this schema can represent schools where those values are distinct.
