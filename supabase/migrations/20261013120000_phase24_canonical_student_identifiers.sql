@@ -81,7 +81,7 @@ create unique index if not exists generated_cards_batch_student_identifier_key
 create unique index if not exists processing_jobs_batch_student_identifier_key
   on public.processing_jobs(batch_id, student_identifier);
 
--- Constraints intentionally allow NULL on legacy snapshots while application code rolls forward.
+-- NOT VALID checks avoid scanning legacy rows during rollout but enforce every new/updated row.
 alter table public.students drop constraint if exists students_student_identifier_length_check;
 alter table public.students add constraint students_student_identifier_length_check
   check (student_identifier is null or (length(student_identifier) between 1 and 64))
