@@ -165,6 +165,417 @@ before insert or update of student_id, project_id, student_identifier, original_
 on public.student_photos for each row execute function public.phase24_fill_photo_student_identifier();
 
 -- Batch worker ordering must remain deterministic when text-only identifiers have no legacy integer.
+create or replace function public.correct_student_identifier(
+  p_project_id uuid,
+  p_student_id uuid,
+  p_student_identifier text,
+  p_legacy_serial_number integer,
+  p_data jsonb
+)
+returns text
+language plpgsql
+security invoker
+set search_path = public
+as $phase24corr$
+declare
+  v_settings jsonb;
+  v_old_identifier text;
+  v_review_required boolean;
+  v_expected_legacy integer := null;
+begin
+  if auth.uid() is null then raise exception 'unauthorized'; end if;
+
+  select p.student_identifier_settings into v_settings
+  from public.school_projects p
+  where p.id=p_project_id and p.owner_id=auth.uid()
+  for update;
+  if not found then raise exception 'project access denied'; end if;
+
+  select s.student_identifier, s.student_identifier_review_required
+    into v_old_identifier, v_review_required
+  from public.students s
+  where s.id=p_student_id and s.project_id=p_project_id and s.owner_id=auth.uid()
+  for update;
+  if not found then raise exception 'student access denied'; end if;
+  if not v_review_required then raise exception 'student identifier is not pending review'; end if;
+
+  if p_student_identifier is null or p_student_identifier='' or length(p_student_identifier)>64
+     or p_student_identifier<>btrim(p_student_identifier)
+     or p_student_identifier !~ '^[[:alnum:]][[:alnum:]._/-]{0,63}
+  p_batch_id uuid,
+  p_worker_id text,
+  p_limit integer default 3
+)
+returns setof public.batch_generation_items
+language plpgsql
+security invoker
+set search_path = public
+as $phase24$
+declare
+  v_owner_id uuid;
+  v_batch_status text;
+begin
+  if auth.uid() is null then
+    raise exception 'unauthorized';
+  end if;
+
+  select b.owner_id, lower(b.status)
+    into v_owner_id, v_batch_status
+  from public.batches b
+  join public.school_projects p on p.id = b.project_id
+  where b.id = p_batch_id
+    and b.owner_id = auth.uid()
+    and p.owner_id = auth.uid()
+  for update of b;
+
+  if not found or v_owner_id is distinct from auth.uid() then
+    raise exception 'batch access denied';
+  end if;
+
+  if v_batch_status not in ('queued', 'running') then
+    raise exception 'batch is not claimable';
+  end if;
+
+  update public.batch_generation_items i
+  set status = case when i.attempts >= i.max_attempts then 'FAILED' else 'PENDING' end,
+      error_category = case when i.attempts >= i.max_attempts then 'unknown' else i.error_category end,
+      error_summary = case
+        when i.attempts >= i.max_attempts then 'Worker lease expired after maximum attempts.'
+        else 'Recovered an expired worker lease; retry is scheduled.'
+      end,
+      available_at = case when i.attempts >= i.max_attempts then i.available_at else now() end,
+      completed_at = case when i.attempts >= i.max_attempts then now() else null end,
+      claimed_at = null,
+      claimed_by = null,
+      heartbeat_at = now(),
+      updated_at = now()
+  where i.batch_id = p_batch_id
+    and i.project_id = (select b.project_id from public.batches b where b.id = p_batch_id)
+    and i.owner_id = auth.uid()
+    and i.status = 'PROCESSING'
+    and coalesce(i.heartbeat_at, i.claimed_at, i.updated_at) < now() - interval '5 minutes';
+
+  update public.batch_generation_items i
+  set status = 'FAILED',
+      error_category = coalesce(i.error_category, 'unknown'),
+      error_summary = coalesce(i.error_summary, 'Maximum worker attempts exhausted.'),
+      completed_at = now(),
+      claimed_at = null,
+      claimed_by = null,
+      heartbeat_at = now(),
+      updated_at = now()
+  where i.batch_id = p_batch_id
+    and i.owner_id = auth.uid()
+    and i.status = 'PENDING'
+    and i.attempts >= i.max_attempts;
+
+  return query
+  with eligible as (
+    select i.id
+    from public.batch_generation_items i
+    where i.batch_id = p_batch_id
+      and i.owner_id = auth.uid()
+      and i.status = 'PENDING'
+      and i.attempts < i.max_attempts
+      and i.available_at <= now()
+    order by coalesce(i.student_identifier, i.serial_number::text), i.id
+    for update skip locked
+    limit greatest(1, least(coalesce(p_limit, 3), 8))
+  )
+  update public.batch_generation_items i
+  set status = 'PROCESSING',
+      claimed_at = now(),
+      claimed_by = left(coalesce(p_worker_id, 'worker'), 100),
+      heartbeat_at = now(),
+      attempts = i.attempts + 1,
+      last_attempt_at = now(),
+      updated_at = now()
+  from eligible e
+  where i.id = e.id
+  returning i.*;
+end;
+$phase24$;
+
+revoke all on function public.claim_batch_generation_items(uuid,text,integer) from public,anon;
+grant execute on function public.claim_batch_generation_items(uuid, text, integer) to authenticated;
+
+
+commit;
+
+  then raise exception 'invalid canonical student identifier'; end if;
+
+  if v_settings->>'normalization'='numeric' and p_student_identifier ~ '^[0-9]+
+  p_batch_id uuid,
+  p_worker_id text,
+  p_limit integer default 3
+)
+returns setof public.batch_generation_items
+language plpgsql
+security invoker
+set search_path = public
+as $phase24$
+declare
+  v_owner_id uuid;
+  v_batch_status text;
+begin
+  if auth.uid() is null then
+    raise exception 'unauthorized';
+  end if;
+
+  select b.owner_id, lower(b.status)
+    into v_owner_id, v_batch_status
+  from public.batches b
+  join public.school_projects p on p.id = b.project_id
+  where b.id = p_batch_id
+    and b.owner_id = auth.uid()
+    and p.owner_id = auth.uid()
+  for update of b;
+
+  if not found or v_owner_id is distinct from auth.uid() then
+    raise exception 'batch access denied';
+  end if;
+
+  if v_batch_status not in ('queued', 'running') then
+    raise exception 'batch is not claimable';
+  end if;
+
+  update public.batch_generation_items i
+  set status = case when i.attempts >= i.max_attempts then 'FAILED' else 'PENDING' end,
+      error_category = case when i.attempts >= i.max_attempts then 'unknown' else i.error_category end,
+      error_summary = case
+        when i.attempts >= i.max_attempts then 'Worker lease expired after maximum attempts.'
+        else 'Recovered an expired worker lease; retry is scheduled.'
+      end,
+      available_at = case when i.attempts >= i.max_attempts then i.available_at else now() end,
+      completed_at = case when i.attempts >= i.max_attempts then now() else null end,
+      claimed_at = null,
+      claimed_by = null,
+      heartbeat_at = now(),
+      updated_at = now()
+  where i.batch_id = p_batch_id
+    and i.project_id = (select b.project_id from public.batches b where b.id = p_batch_id)
+    and i.owner_id = auth.uid()
+    and i.status = 'PROCESSING'
+    and coalesce(i.heartbeat_at, i.claimed_at, i.updated_at) < now() - interval '5 minutes';
+
+  update public.batch_generation_items i
+  set status = 'FAILED',
+      error_category = coalesce(i.error_category, 'unknown'),
+      error_summary = coalesce(i.error_summary, 'Maximum worker attempts exhausted.'),
+      completed_at = now(),
+      claimed_at = null,
+      claimed_by = null,
+      heartbeat_at = now(),
+      updated_at = now()
+  where i.batch_id = p_batch_id
+    and i.owner_id = auth.uid()
+    and i.status = 'PENDING'
+    and i.attempts >= i.max_attempts;
+
+  return query
+  with eligible as (
+    select i.id
+    from public.batch_generation_items i
+    where i.batch_id = p_batch_id
+      and i.owner_id = auth.uid()
+      and i.status = 'PENDING'
+      and i.attempts < i.max_attempts
+      and i.available_at <= now()
+    order by coalesce(i.student_identifier, i.serial_number::text), i.id
+    for update skip locked
+    limit greatest(1, least(coalesce(p_limit, 3), 8))
+  )
+  update public.batch_generation_items i
+  set status = 'PROCESSING',
+      claimed_at = now(),
+      claimed_by = left(coalesce(p_worker_id, 'worker'), 100),
+      heartbeat_at = now(),
+      attempts = i.attempts + 1,
+      last_attempt_at = now(),
+      updated_at = now()
+  from eligible e
+  where i.id = e.id
+  returning i.*;
+end;
+$phase24$;
+
+revoke all on function public.claim_batch_generation_items(uuid,text,integer) from public,anon;
+grant execute on function public.claim_batch_generation_items(uuid, text, integer) to authenticated;
+
+
+commit;
+
+     and p_student_identifier<>coalesce(nullif(regexp_replace(p_student_identifier,'^0+',''),''),'0')
+  then raise exception 'numeric identifier must already be normalized under project policy'; end if;
+
+  if p_student_identifier ~ '^[0-9]+
+  p_batch_id uuid,
+  p_worker_id text,
+  p_limit integer default 3
+)
+returns setof public.batch_generation_items
+language plpgsql
+security invoker
+set search_path = public
+as $phase24$
+declare
+  v_owner_id uuid;
+  v_batch_status text;
+begin
+  if auth.uid() is null then
+    raise exception 'unauthorized';
+  end if;
+
+  select b.owner_id, lower(b.status)
+    into v_owner_id, v_batch_status
+  from public.batches b
+  join public.school_projects p on p.id = b.project_id
+  where b.id = p_batch_id
+    and b.owner_id = auth.uid()
+    and p.owner_id = auth.uid()
+  for update of b;
+
+  if not found or v_owner_id is distinct from auth.uid() then
+    raise exception 'batch access denied';
+  end if;
+
+  if v_batch_status not in ('queued', 'running') then
+    raise exception 'batch is not claimable';
+  end if;
+
+  update public.batch_generation_items i
+  set status = case when i.attempts >= i.max_attempts then 'FAILED' else 'PENDING' end,
+      error_category = case when i.attempts >= i.max_attempts then 'unknown' else i.error_category end,
+      error_summary = case
+        when i.attempts >= i.max_attempts then 'Worker lease expired after maximum attempts.'
+        else 'Recovered an expired worker lease; retry is scheduled.'
+      end,
+      available_at = case when i.attempts >= i.max_attempts then i.available_at else now() end,
+      completed_at = case when i.attempts >= i.max_attempts then now() else null end,
+      claimed_at = null,
+      claimed_by = null,
+      heartbeat_at = now(),
+      updated_at = now()
+  where i.batch_id = p_batch_id
+    and i.project_id = (select b.project_id from public.batches b where b.id = p_batch_id)
+    and i.owner_id = auth.uid()
+    and i.status = 'PROCESSING'
+    and coalesce(i.heartbeat_at, i.claimed_at, i.updated_at) < now() - interval '5 minutes';
+
+  update public.batch_generation_items i
+  set status = 'FAILED',
+      error_category = coalesce(i.error_category, 'unknown'),
+      error_summary = coalesce(i.error_summary, 'Maximum worker attempts exhausted.'),
+      completed_at = now(),
+      claimed_at = null,
+      claimed_by = null,
+      heartbeat_at = now(),
+      updated_at = now()
+  where i.batch_id = p_batch_id
+    and i.owner_id = auth.uid()
+    and i.status = 'PENDING'
+    and i.attempts >= i.max_attempts;
+
+  return query
+  with eligible as (
+    select i.id
+    from public.batch_generation_items i
+    where i.batch_id = p_batch_id
+      and i.owner_id = auth.uid()
+      and i.status = 'PENDING'
+      and i.attempts < i.max_attempts
+      and i.available_at <= now()
+    order by coalesce(i.student_identifier, i.serial_number::text), i.id
+    for update skip locked
+    limit greatest(1, least(coalesce(p_limit, 3), 8))
+  )
+  update public.batch_generation_items i
+  set status = 'PROCESSING',
+      claimed_at = now(),
+      claimed_by = left(coalesce(p_worker_id, 'worker'), 100),
+      heartbeat_at = now(),
+      attempts = i.attempts + 1,
+      last_attempt_at = now(),
+      updated_at = now()
+  from eligible e
+  where i.id = e.id
+  returning i.*;
+end;
+$phase24$;
+
+revoke all on function public.claim_batch_generation_items(uuid,text,integer) from public,anon;
+grant execute on function public.claim_batch_generation_items(uuid, text, integer) to authenticated;
+
+
+commit;
+
+     and p_student_identifier=coalesce(nullif(regexp_replace(p_student_identifier,'^0+',''),''),'0')
+     and p_student_identifier::numeric<=2147483647
+  then v_expected_legacy:=p_student_identifier::integer; end if;
+  if p_legacy_serial_number is distinct from v_expected_legacy
+  then raise exception 'legacy integer projection does not match canonical identifier'; end if;
+
+  if exists (
+    select 1 from public.students other
+    where other.project_id=p_project_id and other.owner_id=auth.uid()
+      and other.id<>p_student_id and other.student_identifier=p_student_identifier
+  ) then raise exception 'student identifier already exists in this project'; end if;
+
+  if exists (
+    select 1 from public.batch_generation_items i
+    join public.batches b on b.id=i.batch_id and b.project_id=i.project_id
+    where i.student_id=p_student_id and i.project_id=p_project_id and i.owner_id=auth.uid()
+      and i.status in ('PENDING','PROCESSING')
+      and lower(b.status) in ('queued','running','processing','paused','pausing')
+  ) or exists (
+    select 1 from public.processing_jobs j
+    where j.student_id=p_student_id and j.project_id=p_project_id and j.owner_id=auth.uid()
+      and lower(j.status) in ('pending','processing','queued','running')
+  ) then raise exception 'cannot correct an identifier while processing is active'; end if;
+
+  update public.students s
+  set student_identifier=p_student_identifier,
+      serial_number=p_legacy_serial_number,
+      data=coalesce(p_data,s.data),
+      student_identifier_source=case when v_old_identifier is distinct from p_student_identifier then 'owner_corrected' else 'owner_confirmed' end,
+      student_identifier_review_required=false,
+      updated_at=now()
+  where s.id=p_student_id and s.project_id=p_project_id and s.owner_id=auth.uid();
+
+  update public.student_photos p
+  set student_identifier=p_student_identifier,
+      normalized_serial_number=p_student_identifier,
+      serial_number=p_legacy_serial_number,
+      updated_at=now()
+  where p.student_id=p_student_id and p.project_id=p_project_id and p.owner_id=auth.uid();
+
+  update public.batch_generation_items i
+  set student_identifier=p_student_identifier,
+      serial_number=p_legacy_serial_number,
+      status=case when i.status='SUCCEEDED' then 'NEEDS_REVIEW' else i.status end,
+      error_category=case when i.status='SUCCEEDED' then 'validation' else i.error_category end,
+      error_summary=case when i.status='SUCCEEDED' then 'Student identifier was corrected after rendering; regenerate and revalidate this card.' else i.error_summary end,
+      output_card_id=case when i.status='SUCCEEDED' then null else i.output_card_id end,
+      output_storage_path=case when i.status='SUCCEEDED' then null else i.output_storage_path end,
+      input_fingerprint=case when i.status='SUCCEEDED' then null else i.input_fingerprint end,
+      completed_at=case when i.status='SUCCEEDED' then null else i.completed_at end,
+      updated_at=now()
+  where i.student_id=p_student_id and i.project_id=p_project_id and i.owner_id=auth.uid();
+
+  update public.processing_jobs j
+  set student_identifier=p_student_identifier,
+      serial_number=p_legacy_serial_number,
+      updated_at=now()
+  where j.student_id=p_student_id and j.project_id=p_project_id and j.owner_id=auth.uid()
+    and lower(j.status) not in ('succeeded','completed','done');
+
+  return p_student_identifier;
+end;
+$phase24corr$;
+
+revoke all on function public.correct_student_identifier(uuid,uuid,text,integer,jsonb) from public, anon;
+grant execute on function public.correct_student_identifier(uuid,uuid,text,integer,jsonb) to authenticated;
+
 create or replace function public.claim_batch_generation_items(
   p_batch_id uuid,
   p_worker_id text,
