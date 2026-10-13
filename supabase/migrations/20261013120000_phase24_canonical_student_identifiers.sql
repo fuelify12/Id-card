@@ -10,6 +10,8 @@ alter table public.school_projects
 alter table public.students add column if not exists student_identifier text;
 alter table public.students add column if not exists student_identifier_source text not null default 'legacy_numeric_backfill';
 alter table public.students add column if not exists student_identifier_review_required boolean not null default true;
+alter table public.students add column if not exists student_identifier_unique text
+  generated always as (case when student_identifier_review_required then null else student_identifier end) stored;
 alter table public.student_photos add column if not exists student_identifier text;
 alter table public.batch_generation_items add column if not exists student_identifier text;
 alter table public.generated_cards add column if not exists student_identifier text;
@@ -34,11 +36,9 @@ update public.student_photos
 set student_identifier=coalesce(original_serial_number,normalized_serial_number)
 where student_identifier is null and coalesce(original_serial_number,normalized_serial_number) is not null;
 
--- Historical rows are all marked review-required. Enforce uniqueness for confirmed/new canonical identifiers;
--- unresolved legacy duplicates remain visible for owner review instead of aborting the migration.
+-- Generated uniqueness key excludes unresolved legacy rows, allowing their duplicates to be reviewed explicitly.
 create unique index if not exists students_project_student_identifier_key
-  on public.students(project_id,student_identifier)
-  where student_identifier_review_required=false;
+  on public.students(project_id,student_identifier_unique);
 create index if not exists idx_students_project_identifier
   on public.students(project_id,student_identifier);
 create index if not exists idx_student_photos_project_identifier
