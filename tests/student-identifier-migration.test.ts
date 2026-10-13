@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 
 const migration = readFileSync("supabase/migrations/20261013120000_phase24_canonical_student_identifiers.sql", "utf8");
 const correctionMigration = readFileSync("supabase/migrations/20261013120100_phase24_identifier_correction_rpc.sql", "utf8");
-const workerMigration = readFileSync("supabase/migrations/20261013120200_phase24_worker_identifier_ordering.sql", "utf8");
 
 describe("Phase 24 migration safety contract", () => {
   it("uses additive text columns and backfills only from identifiers already stored", () => {
