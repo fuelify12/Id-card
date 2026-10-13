@@ -44,6 +44,11 @@ from public.students s
 where p.student_id = s.id and p.project_id = s.project_id
   and p.student_identifier is null;
 
+-- Preserve filename identifiers on unmatched historical photos when the original token was stored.
+update public.student_photos
+set student_identifier = coalesce(original_serial_number, normalized_serial_number)
+where student_identifier is null and coalesce(original_serial_number, normalized_serial_number) is not null;
+
 -- Canonical identifier uniqueness is project-scoped. The old numeric uniqueness remains in place
 -- for legacy values, while text-only IDs are protected by this new index.
 create unique index if not exists students_project_student_identifier_key
