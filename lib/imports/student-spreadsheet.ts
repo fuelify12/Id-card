@@ -10,10 +10,10 @@ export function normalizeColumnName(value: unknown, index = 0): string {
   return s || `column ${index + 1}`;
 }
 export function detectSerialColumn(headers: string[]): string | null {
-  const exact = headers.filter(h => SERIAL_HEADERS.has(normalizeColumnName(h).replace(/\\s/g, "")));
+  const exact = headers.filter(h => SERIAL_HEADERS.has(normalizeColumnName(h).replace(/\s/g, "")));
   if (exact.length === 1) return exact[0];
   if (exact.length > 1) return null;
-  const likely = headers.filter(h => /(^|\\b)(serial|s\\.?\\s?no|sr\\.?\\s?no|sno|student no|क्रमांक|अनुक्रमांक)(\\b|$)/i.test(h.trim()));
+  const likely = headers.filter(h => /(^|\b)(serial|s\.?\s?no|sr\.?\s?no|sno|student no|क्रमांक|अनुक्रमांक)(\b|$)/i.test(h.trim()));
   return likely.length === 1 ? likely[0] : null;
 }
 function cellText(value: unknown, cell?: XLSX.CellObject): CellValue {
@@ -30,7 +30,7 @@ function cellText(value: unknown, cell?: XLSX.CellObject): CellValue {
 function rowBlank(row: unknown[]) { return row.every(v => v === null || v === undefined || String(v).trim() === ""); }
 function serialDuplicateKey(value: string): string {
   const normalized = value.normalize("NFKC").trim();
-  if (/^\\d+$/.test(normalized)) {
+  if (/^\d+$/.test(normalized)) {
     try { return BigInt(normalized).toString(); } catch { /* fall through to stable text key */ }
   }
   return normalized;
@@ -103,7 +103,7 @@ export function validateStudentRows(rows: ParsedStudentRow[], serialColumn: stri
   return candidates.map(({row,serial,serialKey})=>{
     const issues = row.issues.filter(i=>!["Serial-number column not detected; choose a column before importing.","Missing serial number","Duplicate serial number"].includes(i));
     if (!serial) issues.push("Missing serial number");
-    else if (!/^\\d+$/.test(serial)) issues.push("Serial number must be a whole number");
+    else if (!/^\d+$/.test(serial)) issues.push("Serial number must be a whole number");
     if (serialKey && (counts.get(serialKey)??0)>1) issues.push("Duplicate serial number");
     if (!Object.values(row.values).some(v=>v!==null && String(v).trim()!=="")) issues.push("Row contains no values");
     return {...row,serialNumber:serial||null,issues};
