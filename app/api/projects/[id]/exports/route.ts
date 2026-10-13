@@ -45,7 +45,7 @@ async function currentCards(db: any, projectId: string, uid: string, batchId: st
   const status = String(batch.status).toLowerCase();
   if (!["completed","completed_with_errors"].includes(status)) throw Object.assign(new Error("Export is available only after the source batch has finished."), { status: 422 });
   const [{ data: cards, error: ce }, { data: items, error: ie }, { data: students, error: se }, { error: fe }, { data: templates, error: te }, { data: photos, error: pe }] = await Promise.all([
-    db.from("generated_cards").select("id,project_id,owner_id,batch_id,student_id,serial_number,student_identifier,storage_path,filename,status,validation_status,approval_status,template_id,template_version,photo_id,photo_version,output_sha256,output_format,output_width_px,output_height_px,output_dpi,render_input_hash,render_config_snapshot,card_side,generated_at,created_at").eq("project_id", projectId).eq("owner_id", uid).eq("batch_id", batchId).order("serial_number").limit(MAX_CARDS + 1),
+    db.from("generated_cards").select("id,project_id,owner_id,batch_id,student_id,serial_number,student_identifier,storage_path,filename,status,validation_status,approval_status,template_id,template_version,photo_id,photo_version,output_sha256,output_format,output_width_px,output_height_px,output_dpi,render_input_hash,render_config_snapshot,card_side,generated_at,created_at").eq("project_id", projectId).eq("owner_id", uid).eq("batch_id", batchId).order("student_identifier").limit(MAX_CARDS + 1),
     db.from("batch_generation_items").select("id,student_id,serial_number,student_identifier,status,output_card_id,output_storage_path,input_fingerprint,error_summary").eq("project_id", projectId).eq("owner_id", uid).eq("batch_id", batchId).order("serial_number").limit(MAX_CARDS + 1),
     db.from("students").select("id,project_id,owner_id,serial_number,student_identifier,data,updated_at").eq("project_id", projectId).eq("owner_id", uid).limit(MAX_CARDS + 1),
     db.from("card_validation_findings").select("id,student_id,generated_card_id,severity,status,rule_id,message").eq("project_id", projectId).eq("owner_id", uid).in("status", ["OPEN","IN_REVIEW"]).limit(1),
@@ -229,10 +229,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{id:
     const snap=Array.isArray(job.item_snapshot)?job.item_snapshot:[];
     if(!snap.length)throw new Error("Export job has no persisted item snapshot.");
     fresh.findings=await readOpenFindings(db,id,uid);
-    const {data:students,error:se}=await db.from("students").select("id,project_id,owner_id,serial_number,data,updated_at").eq("project_id",id).eq("owner_id",uid).limit(MAX_CARDS+1);
+    const {data:students,error:se}=await db.from("students").select("id,project_id,owner_id,serial_number,student_identifier,data,updated_at").eq("project_id",id).eq("owner_id",uid).limit(MAX_CARDS+1);
     if(se)throw new Error("Could not refresh student records before packaging.");
     fresh.students=students??[];
-    const {data:photos,error:pe}=await db.from("student_photos").select("id,project_id,owner_id,student_id,image_version,match_status,processing_status,crop_approved_at,processed_storage_path").eq("project_id",id).eq("owner_id",uid).limit(10000);
+    const {data:photos,error:pe}=await db.from("student_photos").select("id,project_id,owner_id,student_id,student_identifier,image_version,match_status,processing_status,crop_approved_at,processed_storage_path").eq("project_id",id).eq("owner_id",uid).limit(10000);
     if(pe)throw new Error("Could not refresh photo records before packaging.");
     fresh.photos=photos??[];
     const {data:templates,error:te}=await db.from("templates").select("id,version_number").eq("project_id",id).eq("owner_id",uid);
@@ -240,7 +240,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{id:
     fresh.templates=templates??[];
     const {data:projectFresh,error:pr}=await db.from("school_projects").select("id,owner_id,validation_settings").eq("id",id).eq("owner_id",uid).maybeSingle();
     if(pr||!projectFresh)throw new Error("Project authorization could not be reverified.");
-    const {data:batchItems,error:bi}=await db.from("batch_generation_items").select("id,student_id,serial_number,status,output_card_id,output_storage_path,input_fingerprint,error_summary").eq("project_id",id).eq("owner_id",uid).eq("batch_id",job.batch_id).limit(MAX_CARDS+1);
+    const {data:batchItems,error:bi}=await db.from("batch_generation_items").select("id,student_id,serial_number,student_identifier,status,output_card_id,output_storage_path,input_fingerprint,error_summary").eq("project_id",id).eq("owner_id",uid).eq("batch_id",job.batch_id).limit(MAX_CARDS+1);
     if(bi)throw new Error("Could not refresh batch items.");
     fresh.items=batchItems??[];
     const root=job.options?.folderLayout!==false?safeFilenamePart(String(job.filename).replace(/\.zip$/i,""),"PRINTFORGE",100):"";
