@@ -38,7 +38,8 @@ describe("Phase 16 synthetic final-acceptance fixtures", () => {
     expect(parsed.summary.total).toBe(300);
     expect(parsed.rows.some(row => String(row.values["Student Name"] ?? "").includes("आरव"))).toBe(true);
     expect(parsed.rows.some(row => String(row.values["Student Name"] ?? "").includes("प्रयांशु"))).toBe(true);
-    expect(parsed.summary.duplicates).toBe(0);\n    expect(validateStudentRows(parsed.rows,"Serial Number",{...DEFAULT_STUDENT_IDENTIFIER_POLICY,normalization:"numeric"}).some(row=>row.issues.includes("Duplicate student identifier"))).toBe(true);
+    expect(parsed.summary.duplicates).toBe(0);
+    expect(validateStudentRows(parsed.rows,"Serial Number",{...DEFAULT_STUDENT_IDENTIFIER_POLICY,normalization:"numeric"}).some(row=>row.issues.includes("Duplicate student identifier"))).toBe(true);
     expect(parsed.summary.missingSerial).toBeGreaterThan(0);
     expect(parsed.rows.some(row => row.values["Optional Note"] === "optional")).toBe(true);
   }, 30_000);
