@@ -8,6 +8,10 @@ alter table public.school_projects
 
 alter table public.students
   add column if not exists student_identifier text;
+alter table public.students
+  add column if not exists student_identifier_source text not null default 'legacy_numeric_backfill';
+alter table public.students
+  add column if not exists student_identifier_review_required boolean not null default true;
 
 -- Backfill only what the numeric database actually knows. Never invent lost zero padding.
 update public.students
