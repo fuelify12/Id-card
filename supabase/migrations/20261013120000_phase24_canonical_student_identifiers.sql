@@ -95,13 +95,13 @@ alter table public.school_projects add constraint school_projects_identifier_set
 -- Preserve compatibility for old numeric writers: only fill a missing text snapshot from
 -- the numeric value they actually supplied. This cannot and does not invent leading zeroes.
 create or replace function public.phase24_fill_legacy_student_identifier()
-returns trigger language plpgsql set search_path=public as $
+returns trigger language plpgsql set search_path=public as $phase24$
 begin
   if new.student_identifier is null and new.serial_number is not null then
     new.student_identifier := new.serial_number::text;
   end if;
   return new;
-end $;
+end $phase24$;
 
 drop trigger if exists phase24_students_identifier_compat on public.students;
 create trigger phase24_students_identifier_compat
@@ -119,7 +119,7 @@ before insert or update of serial_number, student_identifier on public.generated
 for each row execute function public.phase24_fill_legacy_student_identifier();
 
 create or replace function public.phase24_fill_photo_student_identifier()
-returns trigger language plpgsql set search_path=public as $
+returns trigger language plpgsql set search_path=public as $phase24$
 begin
   if new.student_identifier is null and new.student_id is not null then
     select s.student_identifier into new.student_identifier
@@ -130,7 +130,7 @@ begin
     new.student_identifier := coalesce(new.original_serial_number,new.normalized_serial_number);
   end if;
   return new;
-end $;
+end $phase24$;
 
 drop trigger if exists phase24_photo_identifier_compat on public.student_photos;
 create trigger phase24_photo_identifier_compat
@@ -139,7 +139,7 @@ on public.student_photos for each row execute function public.phase24_fill_photo
 
 -- Batch worker ordering must remain deterministic when text-only identifiers have no legacy integer.
 create or replace function public.claim_batch_generation_items(p_batch_id uuid,p_worker_id text,p_limit integer default 3)
-returns setof public.batch_generation_items language plpgsql security definer set search_path=public as $
+returns setof public.batch_generation_items language plpgsql security definer set search_path=public as $phase24$
 begin
  if auth.uid() is null then raise exception 'unauthorized'; end if;
  if not exists(select 1 from public.batches b join public.school_projects p on p.id=b.project_id where b.id=p_batch_id and b.owner_id=auth.uid() and p.owner_id=auth.uid() and lower(b.status) in ('queued','running')) then raise exception 'batch access denied'; end if;
@@ -148,7 +148,7 @@ begin
   order by coalesce(i.student_identifier,i.serial_number::text),i.id for update skip locked limit greatest(1,least(coalesce(p_limit,3),8))
  ) update public.batch_generation_items i set status='PROCESSING',claimed_at=now(),claimed_by=left(p_worker_id,100),heartbeat_at=now(),attempts=i.attempts+1,last_attempt_at=now(),updated_at=now()
  from eligible e where i.id=e.id returning i.*;
-end $;
+end $phase24$;
 revoke all on function public.claim_batch_generation_items(uuid,text,integer) from public,anon;
 grant execute on function public.claim_batch_generation_items(uuid,text,integer) to authenticated,service_role;
 
