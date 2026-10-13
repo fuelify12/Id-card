@@ -22,8 +22,7 @@ describe("canonical student identifiers", () => {
   });
   it("rejects blank, control, and unsupported characters", () => {
     expect(canonicalizeStudentIdentifier("")).toMatchObject({ ok: false });
-    expect(canonicalizeStudentIdentifier("001
-")).toMatchObject({ ok: false });
+    expect(canonicalizeStudentIdentifier("001\n")).toMatchObject({ ok: false });
     expect(canonicalizeStudentIdentifier("STU 001")).toMatchObject({ ok: false });
   });
   it("keeps exact identifiers separate in duplicate detection", () => {
