@@ -163,7 +163,7 @@ export async function POST(request: Request, { params }: { params: Promise<{id:s
     for (const sid of requestedStudents) {
       const all = eligibleByStudent.get(sid)??[];
       const sideSelection=chooseCardSides(all.map((x:any)=>({side:sideOf(x.card),eligible:x.reasons.length===0,format:extOf(x.card.output_format),check:x})),side,format);
-      if(sideSelection.reason){excluded.push({studentId:sid,serialNumber:all[0]?.card.serial_number,reason:sideSelection.reason});continue;}
+      if(sideSelection.reason){excluded.push({studentId:sid,studentIdentifier:all[0]?.card.student_identifier??all[0]?.student?.student_identifier,serialNumber:all[0]?.card.serial_number,reason:sideSelection.reason});continue;}
       chosen.push(...sideSelection.items.map((x:any)=>x.check));
     }
     if (!chosen.length) return NextResponse.json({error:"No selected cards satisfy the current export policy.",excluded,preflight:{counts:report.counts}}, {status:422});
@@ -182,7 +182,7 @@ export async function POST(request: Request, { params }: { params: Promise<{id:s
       const leaf = side === "both" && !folderLayout ? `${base}_${sideName}.${ext}` : `${base}.${ext}`;
       const path = folderLayout ? `${sideName}/${leaf}` : leaf;
       const archiveName = uniqueArchiveName(path,used);
-      return {cardId:x.card.id,studentId:x.card.student_id,studentRef:createHash("sha256").update(String(x.card.student_id)).digest("hex").slice(0,12),studentIdentifier:String(x.card.student_identifier??x.student?.student_identifier??x.card.serial_number??""),serialNumber:String(x.card.student_identifier??x.student?.student_identifier??x.card.serial_number??""),side:sideName,sourcePath:x.card.storage_path,sourceHash:x.card.output_sha256,sourceFormat:extOf(x.card.output_format),format:ext,archiveName,validationStatus:x.card.validation_status,templateVersion:x.card.template_version,batchId,studentName:includeNames?nameOf(x.student):undefined};
+      return {cardId:x.card.id,studentId:x.card.student_id,studentRef:createHash("sha256").update(String(x.card.student_id)).digest("hex").slice(0,12),studentIdentifier:String(x.card.student_identifier??x.student?.student_identifier??x.card.serial_number??""),serialNumber:x.card.serial_number??null,side:sideName,sourcePath:x.card.storage_path,sourceHash:x.card.output_sha256,sourceFormat:extOf(x.card.output_format),format:ext,archiveName,validationStatus:x.card.validation_status,templateVersion:x.card.template_version,batchId,studentName:includeNames?nameOf(x.student):undefined};
     });
     const storagePath = `${uid}/${id}/${exportId}/archive.zip`;
     const expiresAt = new Date(now.getTime()+RETENTION_DAYS*24*60*60*1000).toISOString();
@@ -251,7 +251,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{id:
     const allExcluded=Array.isArray(job.excluded_snapshot)?job.excluded_snapshot:[];const runtimeExcluded:any[]=[];
     for(const item of snap){
       const card=fresh.cards.find((c:any)=>c.id===item.cardId);
-      if(!card||card.student_id!==item.studentId||card.storage_path!==item.sourcePath||card.output_sha256!==item.sourceHash){failed++;runtimeExcluded.push({serialNumber:item.serialNumber,side:item.side,reason:"Card record or input fingerprint changed before packaging."});continue;}
+      if(!card||card.student_id!==item.studentId||card.storage_path!==item.sourcePath||card.output_sha256!==item.sourceHash){failed++;runtimeExcluded.push({studentIdentifier:item.studentIdentifier??"",serialNumber:item.serialNumber,side:item.side,reason:"Card record or input fingerprint changed before packaging."});continue;}
       const checked=await checkCard(db,card,fresh,projectFresh,true,true);
       if(checked.reasons.length||sideOf(card)!==item.side||Number(card.template_version)!==Number(item.templateVersion)){failed++;runtimeExcluded.push({serialNumber:item.serialNumber,side:item.side,reason:checked.reasons.join(" ")||"Card side or template version changed."});continue;}
       if(!sourceFormatSupports(card.output_format,job.options?.format??"original")){failed++;continue;}
@@ -272,7 +272,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{id:
     if(job.options?.includeManifest!==false){
       const manifests=buildManifests(actualManifest,exportId,new Date().toISOString());
       const finalExcluded=[...allExcluded,...runtimeExcluded];const jsonObj=JSON.parse(manifests.json);jsonObj.excluded_items=finalExcluded;jsonObj.failed_item_count=failed;
-      const manifestFiles=[["manifest.csv",manifests.csv],["manifest.json",JSON.stringify(jsonObj,null,2)+"\n"],["exclusions.csv",["serial_number,side,reason",...finalExcluded.map((x:any)=>[csvCell(x.serialNumber??""),csvCell(x.side??""),csvCell(x.reason??x.error_summary??"")].join(","))].join("\r\n")+"\r\n"]];
+      const manifestFiles=[["manifest.csv",manifests.csv],["manifest.json",JSON.stringify(jsonObj,null,2)+"\n"],["exclusions.csv",["student_identifier,serial_number,side,reason",...finalExcluded.map((x:any)=>[csvCell(x.studentIdentifier??x.serialNumber??""),csvCell(x.serialNumber??""),csvCell(x.side??""),csvCell(x.reason??x.error_summary??"")].join(","))].join("\r\n")+"\r\n"]];
       for(const [name,content] of manifestFiles){const full=root?root+"/"+name:name;const uniqueName=uniqueArchiveName(full,used);const entry=new ZipPassThrough(uniqueName);zip.add(entry);entry.push(Buffer.from(content,"utf8"),true);expectedNames.push(uniqueName);}
     }
     zip.end();await zipFinished;
