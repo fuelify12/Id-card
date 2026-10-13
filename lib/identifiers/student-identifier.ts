@@ -45,8 +45,14 @@ export function canonicalizeStudentIdentifier(
     value = BigInt(value).toString();
   }
   const key = policy.caseSensitive ? value : value.toLocaleLowerCase("en-US");
-  const legacySerialNumber = /^\d+$/.test(value) && value === String(Number(value)) && Number.isSafeInteger(Number(value)) && Number(value) >= 0 && Number(value) <= 2147483647
-    ? Number(value) : null;
+  // This is only a compatibility projection for the old integer column, never the canonical ID.
+  let legacySerialNumber: number | null = null;
+  if (/^\d+$/.test(value)) {
+    try {
+      const integer = BigInt(value);
+      if (integer <= 2147483647n && integer.toString() === value) legacySerialNumber = Number(integer);
+    } catch { /* text identifier remains valid without a legacy numeric projection */ }
+  }
   return { ok: true, original, value, key, legacySerialNumber };
 }
 
