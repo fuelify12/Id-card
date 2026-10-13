@@ -40,7 +40,7 @@ export function parseWorkbook(buffer: ArrayBuffer, fileName: string, selectedShe
   if (buffer.byteLength > 25 * 1024 * 1024) throw new Error("Spreadsheet exceeds 25 MB.");
   const ext = fileName.toLowerCase().split(".").pop();
   if (!["csv","xlsx","xls"].includes(ext || "")) throw new Error("Upload CSV, XLSX, or XLS files only.");
-  const wb = XLSX.read(buffer, { type: "array", cellDates: true, cellNF: true, dense: true, raw: true });
+  const wb = XLSX.read(buffer, { type: "array", cellDates: true, cellNF: true, raw: true });
   if (!wb.SheetNames.length) throw new Error("Workbook has no worksheets.");
   if (selectedSheetName && !wb.SheetNames.includes(selectedSheetName)) throw new Error("The selected worksheet is not present in this file.");
   const candidates = wb.SheetNames.map((name, order) => {
