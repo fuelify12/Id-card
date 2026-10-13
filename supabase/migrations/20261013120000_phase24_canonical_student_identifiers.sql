@@ -105,17 +105,17 @@ end $phase24$;
 
 drop trigger if exists phase24_students_identifier_compat on public.students;
 create trigger phase24_students_identifier_compat
-before insert or update of serial_number, student_identifier on public.students
+before insert or update on public.students
 for each row execute function public.phase24_fill_legacy_student_identifier();
 
 drop trigger if exists phase24_batch_items_identifier_compat on public.batch_generation_items;
 create trigger phase24_batch_items_identifier_compat
-before insert or update of serial_number, student_identifier on public.batch_generation_items
+before insert or update on public.batch_generation_items
 for each row execute function public.phase24_fill_legacy_student_identifier();
 
 drop trigger if exists phase24_generated_cards_identifier_compat on public.generated_cards;
 create trigger phase24_generated_cards_identifier_compat
-before insert or update of serial_number, student_identifier on public.generated_cards
+before insert or update on public.generated_cards
 for each row execute function public.phase24_fill_legacy_student_identifier();
 
 create or replace function public.phase24_fill_photo_student_identifier()
