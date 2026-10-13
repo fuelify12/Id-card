@@ -105,6 +105,18 @@ begin
       updated_at=now()
   where i.student_id=p_student_id and i.project_id=p_project_id and i.owner_id=auth.uid();
 
+  -- Existing outputs were rendered against the prior identifier snapshot; keep the private files
+  -- for audit/recovery, but make them ineligible for approval/export until regenerated.
+  update public.generated_cards g
+  set status='needs_review',
+      validation_status='failed',
+      approval_status='review_required',
+      validation_errors=coalesce(g.validation_errors,'[]'::jsonb) || jsonb_build_array('Student identifier was corrected or confirmed after this card was rendered; regenerate and revalidate before export.'),
+      validation_fingerprint=null,
+      approved_by=null,
+      approved_at=null
+  where g.student_id=p_student_id and g.project_id=p_project_id and g.owner_id=auth.uid();
+
   update public.processing_jobs j
   set student_identifier=p_student_identifier, serial_number=p_legacy_serial_number, updated_at=now()
   where j.student_id=p_student_id and j.project_id=p_project_id and j.owner_id=auth.uid()
