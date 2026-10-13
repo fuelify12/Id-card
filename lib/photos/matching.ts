@@ -22,6 +22,7 @@ export function parsePhotoFilename(filename:string, configuredPrefix:string|null
   const prefixMatch=stem.match(new RegExp("^("+escaped+"-\\d+)(?:_([A-Za-z][A-Za-z0-9 _-]*))?$","i"));
   if(prefixMatch){candidate=prefixMatch[1];method="filename_prefixed";}
  }
+ if(!candidate && !configuredPrefix && /^[A-Za-z][A-Za-z0-9_]*-\d+(?:_.*)?$/.test(stem)) return {status:"NEEDS_REVIEW",originalSerial:null,normalizedSerial:null,legacySerialNumber:null,reason:"Prefixed identifier requires an explicit project prefix configuration"};
  if(!candidate) {
   const numeric=stem.match(/^(\d+)(?:[_ -]([A-Za-z][A-Za-z0-9 _-]*))?$/);
   if(numeric){candidate=numeric[1];method="filename_numeric";}
