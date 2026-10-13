@@ -68,7 +68,7 @@ export function studentIdentifierPolicyFromConfig(value: unknown): StudentIdenti
     normalization: raw.normalization === "numeric" ? "numeric" : "exact",
     caseSensitive: raw.caseSensitive === false || raw.case_sensitive === false ? false : true,
     edgeWhitespace: raw.edgeWhitespace === "trim" || raw.edge_whitespace === "trim" ? "trim" : "reject",
-    maxLength: Number.isInteger(raw.maxLength) ? Math.max(1, Math.min(64, raw.maxLength as number))
-      : Number.isInteger(raw.max_length) ? Math.max(1, Math.min(64, raw.max_length as number)) : 64,
+    maxLength: typeof raw.maxLength === "number" && Number.isInteger(raw.maxLength) ? Math.max(1, Math.min(64, raw.maxLength))
+      : typeof raw.max_length === "number" && Number.isInteger(raw.max_length) ? Math.max(1, Math.min(64, raw.max_length)) : 64,
   };
 }
