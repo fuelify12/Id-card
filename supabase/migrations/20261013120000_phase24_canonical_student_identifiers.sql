@@ -95,7 +95,7 @@ end;
 $phase24$;
 
 drop trigger if exists phase24_students_identifier_sync on public.students;
-create trigger phase24_students_identifier_sync before insert or update of student_identifier,student_identifier_review_required,serial_number,project_id on public.students for each row execute function public.phase24_sync_student_identifier();
+create trigger phase24_students_identifier_sync before insert or update on public.students for each row execute function public.phase24_sync_student_identifier();
 
 create or replace function public.phase24_fill_legacy_student_identifier()
 returns trigger language plpgsql security invoker set search_path=public as $phase24$
@@ -122,6 +122,6 @@ begin
 end;
 $phase24$;
 drop trigger if exists phase24_photo_identifier_compat on public.student_photos;
-create trigger phase24_photo_identifier_compat before insert or update of student_id,project_id,original_serial_number on public.student_photos for each row execute function public.phase24_fill_photo_student_identifier();
+create trigger phase24_photo_identifier_compat before insert or update on public.student_photos for each row execute function public.phase24_fill_photo_student_identifier();
 
 commit;
