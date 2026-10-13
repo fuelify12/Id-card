@@ -27,7 +27,8 @@
 - Invalid manual crop requests now leave an explicit `NEEDS_REVIEW` state and warning code.
 - Extracted processing action validation and failure-state builders into `lib/photos/processing-state.ts`, with unit tests in `tests/photo-processing-state.test.ts`.
 - Added a searchable, project-local student selector before mobile camera capture. The selected student travels with that queue item; after upload the app saves a manual association proposal, but it remains unapproved until the existing review/approval step. Assignment errors do not turn an already saved upload into a false upload-failure state.
-- Added a Phase 23 CI workflow to run the photo/regression suite, typecheck, lint, and production build.
+- Duplicate-content photos require explicit confirmation before manual assignment. Clearing an assignment preserves duplicate status; explicit confirmation records `manual_duplicate_confirmed` and clears the duplicate block only after user review.
+- Added regression coverage for upload-order-independent matching and duplicate-confirmation requirements, plus a Phase 23 CI workflow.
 
 ## Read-only Supabase schema/security metadata check
 
@@ -41,8 +42,9 @@ A safe full fix requires a planned, backward-compatible student identifier migra
 
 ## Test and acceptance status
 
-The new tests and CI workflow are committed to the feature branch; the results must be read from the actual Phase 23 Actions run after GitHub finishes it. Do not interpret a source edit or a created test as a passing test.
+- GitHub Actions run [38378545986](https://github.com/fuelify12/Id-card/actions/runs/38378545986) passed on commit `c384bf5899d19363abce8e5d644eedbe03daac68`: 12 test files / 81 tests passed, TypeScript passed, lint passed with 12 existing warnings, and production build passed.
+- Vercel preview deployment for the same commit is [READY](https://printforge-id-card-studio-gl7dnfyk0-yash-6966.vercel.app).
+- Safe anonymous browser acceptance completed, but the page title was `Log in to Vercel`; SSO blocked application access. No credentials were entered and no protection was bypassed.
+- Live authenticated upload/persistence, cross-tenant denial, and private-storage access tests remain blocked until an isolated Supabase environment and authorized signed-in browser session are available. Physical Android camera capture is not verified by CI and remains a device-acceptance item.
 
-Live authenticated upload, persistence after reload, cross-tenant storage denial, and private-bucket verification remain blocked unless an isolated Supabase test environment and authorized browser session are available. The known Vercel preview is protected by SSO, and no bypass was attempted. Physical Android camera capture is not claimed as verified by repository CI; browser/device verification remains required.
-
-No production database was modified, no PR was merged, and no Production deployment was requested or performed.
+No student rows or photo objects were changed, no PR was merged, and no Production deployment was performed.
