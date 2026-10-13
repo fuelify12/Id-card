@@ -16,4 +16,17 @@ describe("deterministic photo filename matching",()=>{
  it("checks duplicate hashes and enforces file/archive limits",()=>{expect(hasDuplicateContentHash(["abc","def"],"abc")).toBe(true);expect(hasDuplicateContentHash(["abc"],"zzz")).toBe(false);expect(withinPhotoBatchLimits([100,200])).toBe(true);expect(withinPhotoBatchLimits([10*1024*1024+1])).toBe(false);expect(withinPhotoBatchLimits(Array(501).fill(1))).toBe(false);expect(withinPhotoBatchLimits([500*1024*1024,1])).toBe(false);});
  it("decodes valid images and rejects corrupt image payloads",async()=>{const good=await sharp({create:{width:100,height:120,channels:3,background:{r:90,g:120,b:160}}}).jpeg().toBuffer();const verified=await inspectPhotoBuffer(good);expect(verified.mime).toBe("image/jpeg");expect(verified.width).toBe(100);expect(verified.height).toBe(120);expect(verified.errors).toHaveLength(0);const corrupt=await inspectPhotoBuffer(Buffer.from([255,216,255,0,0,0,0,0]));expect(corrupt.errors.length).toBeGreaterThan(0);});
  it("handles a 300-photo matching batch deterministically",()=>{const students=Array.from({length:300},(_,i)=>({id:String(i+1),serial_number:i+1}));const matches=students.map(s=>proposePhotoMatch(parsePhotoFilename(String(s.serial_number).padStart(3,"0")+"_Student.jpg"),students));expect(matches).toHaveLength(300);expect(matches.every((m,i)=>m.status==="MATCHED"&&m.studentId===String(i+1))).toBe(true);});
+
+ it("produces the same filename-to-student proposals regardless of upload order",()=>{
+  const students=[{id:"a",serial_number:1},{id:"b",serial_number:2},{id:"c",serial_number:3}];
+  const files=["003_Student_C.jpg","001_Student_A.jpg","002_Student_B.jpg"];
+  const run=(names:string[])=>names.map(name=>{const proposal=proposePhotoMatch(parsePhotoFilename(name),students);return{name,studentId:proposal.studentId,status:proposal.status};}).sort((a,b)=>a.name.localeCompare(b.name));
+  expect(run(files)).toEqual(run([...files].reverse()));
+ });
+ it("does not accept a prefixed identifier unless that exact prefix is configured",()=>{
+  expect(parsePhotoFilename("STU-001.jpg").status).toBe("NEEDS_REVIEW");
+  const configured=parsePhotoFilename("STU-001.jpg","STU");
+  expect(configured.status).toBe("EXACT");
+  if(configured.status==="EXACT")expect(configured.originalSerial).toBe("001");
+ });
 });
