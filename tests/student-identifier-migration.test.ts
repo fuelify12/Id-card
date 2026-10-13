@@ -15,7 +15,7 @@ describe("Phase 24 migration safety contract", () => {
     expect(migration).not.toMatch(/drop table|delete from public\.(students|student_photos|generated_cards|batch_generation_items)/i);
   });
   it("enforces project-scoped canonical uniqueness and retains tenant RLS", () => {
-    expect(migration).toMatch(/unique index if not exists students_project_student_identifier_key\s+on public\.students\(project_id, student_identifier\)/i);
+    expect(migration).toMatch(/unique index if not exists students_project_student_identifier_key\s+on public\.students\(project_id\s*,\s*student_identifier\)/i);
     expect(migration).toContain("students_student_identifier_required");
     expect(migration).toContain("student_identifier_settings");
     expect(correctionMigration).toContain("correct_student_identifier");
@@ -29,7 +29,7 @@ describe("Phase 24 migration safety contract", () => {
     expect(migration).toContain("where student_identifier is null");
     expect(workerMigration).toContain("security invoker");
     expect(workerMigration).toContain("interval '5 minutes'");
-    expect(workerMigration).toContain("attempts<i.max_attempts");
-    expect(workerMigration).toContain("order by coalesce(i.student_identifier,i.serial_number::text),i.id");
+    expect(workerMigration).toMatch(/attempts\s*<\s*i\.max_attempts/);
+    expect(workerMigration).toMatch(/order by coalesce\(i\.student_identifier,\s*i\.serial_number::text\),\s*i\.id/i);
   });
 });
