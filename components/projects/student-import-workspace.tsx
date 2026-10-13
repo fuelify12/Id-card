@@ -22,12 +22,13 @@ export function StudentImportWorkspace({projectId,templateId,fields:initialField
  const validRows=useMemo(()=>validated.filter(r=>r.issues.length===0 && requiredFields.every(f=>!!f.source_column && String(r.values[f.source_column]??"").trim()!=="")),[validated,requiredFields]);
  async function onFile(file?:File) {
   if(!file)return;setError("");setNotice("");setPreview(null);setBusy(true);
-  try { const buffer=await file.arrayBuffer();const p=parseWorkbook(buffer,file.name);setWorkbookBuffer(buffer);setWorkbookName(file.name);setPreview(p);setSerialColumn(p.serialColumn??"");setPage(0); }
+  try { const buffer=await file.arrayBuffer();const p=parseWorkbook(buffer,file.name);setWorkbookBuffer(buffer);setWorkbookName(file.name);reconcileMappings(p.headers);setPreview(p);setSerialColumn(p.serialColumn??"");setPage(0); }
   catch(e){setError(e instanceof Error?e.message:"Could not read this spreadsheet.");}
   finally{setBusy(false);}
  }
  function mapField(id:string,column:string){setMappingsSaved(false);setFields(old=>old.map(f=>f.id===id?{...f,source_column:column||null}:f));}
- function selectWorksheet(name:string){if(!workbookBuffer||!workbookName)return;setError("");setNotice("");try{const p=parseWorkbook(workbookBuffer,workbookName,name);setPreview(p);setSerialColumn(p.serialColumn??"");setPage(0);}catch(e){setError(e instanceof Error?e.message:"Could not read this worksheet.");}}
+ function reconcileMappings(headers:string[]){const available=new Set(headers);if(fields.some(f=>f.source_column&&!available.has(f.source_column))){setFields(old=>old.map(f=>f.source_column&&!available.has(f.source_column)?{...f,source_column:null}:f));setMappingsSaved(false);}}
+ function selectWorksheet(name:string){if(!workbookBuffer||!workbookName)return;setError("");setNotice("");try{const p=parseWorkbook(workbookBuffer,workbookName,name);reconcileMappings(p.headers);setPreview(p);setSerialColumn(p.serialColumn??"");setPage(0);}catch(e){setError(e instanceof Error?e.message:"Could not read this worksheet.");}}
  async function saveMappings(){
   if(!templateId){setError("Upload a template and define template fields before saving mappings.");return;}
   setBusy(true);setError("");setNotice("");
