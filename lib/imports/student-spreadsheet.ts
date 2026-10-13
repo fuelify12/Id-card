@@ -6,7 +6,7 @@ export type SpreadsheetPreview = { sheetName: string; sheetNames: string[]; head
 const SERIAL_HEADERS = new Set(["serial","serialno","serialnumber","sno","srno","srnumber","srlno","studentno","studentnumber","क्रमांक","क्रमसंख्या","अनुक्रमांक"]);
 export function normalizeColumnName(value: unknown, index = 0): string {
   const s = String(value ?? "").normalize("NFKC").trim().toLowerCase()
-    .replace(/[.()\\[\\]{}]/g, " ").replace(/[\\s_\\-/\\\\]+/g, " ").replace(/[^\\p{L}\\p{N} ]/gu, "").trim();
+    .replace(/[.()\\[\\]{}]/g, " ").replace(/[\\s_.-]+/g, " ").replace(/[\\/\\\\]+/g, " ").replace(/[^\\p{L}\\p{N} ]/gu, "").trim();
   return s || `column ${index + 1}`;
 }
 export function detectSerialColumn(headers: string[]): string | null {
