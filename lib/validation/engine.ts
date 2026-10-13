@@ -10,7 +10,7 @@ const hash=(v:unknown)=>createHash("sha256").update(JSON.stringify(v)).digest("h
 function make(ruleId:string,severity:Severity,message:string,correctiveAction:string,fingerprint:unknown,more:Partial<Finding>={}):Finding{return{ruleId,ruleVersion:1,severity,status:"OPEN",message,correctiveAction,inputFingerprint:hash(fingerprint),...more}}
 export function validateStudents(students:Student[],requiredFields:string[]=[],options:{admissionNumberUnique?:boolean}={}):Finding[]{
  const out:Finding[]=[],serials=new Map<string,Student[]>(),admissions=new Map<string,Student[]>();
- for(const s of students){const d=s.data??{},serial=String(s.student_identifier??(s.serial_number==null?"":s.serial_number)).trim();
+ for(const s of students){const d=s.data??{},serial=String(s.student_identifier??(s.serial_number==null?"":s.serial_number));
  if(!serial)out.push(make("STUDENT_IDENTIFIER_MISSING","CRITICAL","Student identifier is missing.","Correct the student identifier in the source sheet and verify the imported record.",{id:s.id,serial},{studentId:s.id}));
  else serials.set(serial,[...(serials.get(serial)??[]),s]);
  const nk=Object.keys(d).find(k=>["studentname","name","fullname","pupilname"].includes(norm(k)));
