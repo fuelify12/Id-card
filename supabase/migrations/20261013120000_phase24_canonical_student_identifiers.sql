@@ -45,8 +45,7 @@ where p.student_id = s.id and p.project_id = s.project_id
 -- Canonical identifier uniqueness is project-scoped. The old numeric uniqueness remains in place
 -- for legacy values, while text-only IDs are protected by this new index.
 create unique index if not exists students_project_student_identifier_key
-  on public.students(project_id, student_identifier)
-  where student_identifier is not null;
+  on public.students(project_id, student_identifier);
 
 create index if not exists idx_students_project_identifier
   on public.students(project_id, student_identifier);
@@ -55,12 +54,10 @@ create index if not exists idx_student_photos_project_identifier
   on public.student_photos(project_id, student_identifier);
 
 create unique index if not exists batch_items_batch_student_identifier_key
-  on public.batch_generation_items(batch_id, student_identifier)
-  where student_identifier is not null;
+  on public.batch_generation_items(batch_id, student_identifier);
 
 create unique index if not exists generated_cards_batch_student_identifier_key
-  on public.generated_cards(batch_id, student_identifier)
-  where batch_id is not null and student_identifier is not null;
+  on public.generated_cards(batch_id, student_identifier);
 
 -- Constraints intentionally allow NULL on legacy snapshots while application code rolls forward.
 alter table public.students drop constraint if exists students_student_identifier_length_check;
