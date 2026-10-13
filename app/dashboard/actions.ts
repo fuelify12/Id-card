@@ -259,3 +259,26 @@ export async function processPhotoMatches(projectId:string) {
  for(let i=0;i<updates.length;i+=10){const results=await Promise.all(updates.slice(i,i+10).map(async u=>{const {error}=await s.from("student_photos").update({...u,updated_at:new Date().toISOString()}).eq("id",u.id).eq("project_id",projectId).eq("owner_id",uid);if(error)throw new Error(error.message);return 1;}));processed+=results.length;}
  return {processed,matched,needsReview:review,unmatched,duplicates};
 }
+
+export async function correctStudentIdentifier(input:{projectId:string;studentId:string;identifier:string}) {
+ const {s,uid}=await auth();
+ await enforceActionRateLimit(s,"student_import",30,3600);
+ const {data:project,error:pe}=await s.from("school_projects").select("id,owner_id,student_identifier_settings").eq("id",input.projectId).eq("owner_id",uid).maybeSingle();
+ if(pe) throw new Error(pe.message); if(!project) throw new Error("Project not found or access denied.");
+ const {data:student,error:se}=await s.from("students").select("id,project_id,owner_id,student_identifier,serial_number,student_identifier_review_required,data").eq("id",input.studentId).eq("project_id",input.projectId).eq("owner_id",uid).maybeSingle();
+ if(se) throw new Error(se.message); if(!student) throw new Error("Student not found in this project.");
+ if(!student.student_identifier_review_required) throw new Error("This identifier is not awaiting legacy review.");
+ const policy=studentIdentifierPolicyFromConfig(project.student_identifier_settings); policy.caseSensitive=true;
+ const parsed=canonicalizeStudentIdentifier(input.identifier,policy);
+ if(!parsed.ok) throw new Error(parsed.error);
+ const {data:collision,error:ce}=await s.from("students").select("id").eq("project_id",input.projectId).eq("owner_id",uid).eq("student_identifier",parsed.value).neq("id",student.id).maybeSingle();
+ if(ce) throw new Error(ce.message); if(collision) throw new Error("That identifier already belongs to another student in this project.");
+ const settings=project.student_identifier_settings as Record<string,unknown>|null;
+ const sourceColumn=typeof settings?.identifier_source_column==="string"?settings.identifier_source_column:null;
+ const data=student.data&&typeof student.data==="object"&&!Array.isArray(student.data)?{...(student.data as Record<string,unknown>)}:{};
+ if(sourceColumn) data[sourceColumn]=parsed.value;
+ const {data:saved,error:saveError}=await s.rpc("correct_student_identifier",{p_project_id:input.projectId,p_student_id:student.id,p_student_identifier:parsed.value,p_legacy_serial_number:parsed.legacySerialNumber,p_data:data});
+ if(saveError) throw new Error(saveError.message.includes("cannot correct an identifier while processing is active")?"Wait for the active batch/photo-processing job to finish, then review this identifier again.":saveError.message.includes("student identifier already exists")?"That identifier already belongs to another student in this project.":saveError.message);
+ await s.from("audit_logs").insert({owner_id:uid,project_id:input.projectId,action:student.student_identifier===parsed.value?"student_identifier_confirmed":"student_identifier_corrected",entity_type:"student",entity_id:student.id,metadata:{identifier_source:"owner_review",normalization:policy.normalization}});
+ return {identifier:typeof saved==="string"?saved:parsed.value,corrected:student.student_identifier!==parsed.value};
+}
