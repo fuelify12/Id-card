@@ -14,8 +14,7 @@ describe("Phase 24 migration safety contract", () => {
     expect(migration).not.toMatch(/drop table|delete from public\.(students|student_photos|generated_cards|batch_generation_items)/i);
   });
   it("enforces project-scoped canonical uniqueness and retains tenant RLS", () => {
-    expect(migration).toMatch(/unique index if not exists students_project_student_identifier_key\s+on public\.students\(project_id\s*,\s*student_identifier\)/i);
-    expect(migration).toContain("students_student_identifier_required");
+    expect(migration).toMatch(/unique index if not exists students_project_student_identifier_key\\s+on public\\.students\\(project_id,\\s*student_identifier\\)\\s+where student_identifier_review_required=false/i);\n    expect(migration).toContain("students_student_identifier_required");\n    expect(migration).toContain("where student_identifier_review_required=false");\n    expect(migration).toContain("idx_generated_cards_batch_student_identifier");\n    expect(migration).not.toContain("create unique index if not exists generated_cards_batch_student_identifier_key");
     expect(migration).toContain("student_identifier_settings");
     expect(correctionMigration).toContain("correct_student_identifier");
     expect(correctionMigration).toContain("student identifier already exists in this project");
