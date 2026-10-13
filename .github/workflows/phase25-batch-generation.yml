@@ -9,6 +9,9 @@ on:
       - phase-24-canonical-student-identifiers
     paths:
       - "app/api/projects/**"
+      - "components/auth/**"
+      - "components/projects/create-project-form.tsx"
+      - "postcss.config.mjs"
       - "lib/batch/**"
       - "lib/exports/**"
       - "lib/identifiers/**"
