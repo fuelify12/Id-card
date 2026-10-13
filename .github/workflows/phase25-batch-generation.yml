@@ -46,6 +46,10 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install --legacy-peer-deps --no-audit --no-fund
+      - name: Production dependency vulnerability gate
+        run: npm audit --omit=dev --audit-level=high
+      - name: Repository security checks
+        run: node scripts/security-check.mjs
       - name: Full regression tests
         run: npm test
       - name: TypeScript
