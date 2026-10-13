@@ -26,6 +26,7 @@
 - Invalid/empty/oversized source images, corrupt images, and invalid dimensions now persist a failed processing state with a reason and incremented attempt count rather than leaving the record in `PROCESSING`.
 - Invalid manual crop requests now leave an explicit `NEEDS_REVIEW` state and warning code.
 - Extracted processing action validation and failure-state builders into `lib/photos/processing-state.ts`, with unit tests in `tests/photo-processing-state.test.ts`.
+- Added a searchable, project-local student selector before mobile camera capture. The selected student travels with that queue item; after upload the app saves a manual association proposal, but it remains unapproved until the existing review/approval step. Assignment errors do not turn an already saved upload into a false upload-failure state.
 - Added a Phase 23 CI workflow to run the photo/regression suite, typecheck, lint, and production build.
 
 ## Identifier safety limitation (not silently changed)
