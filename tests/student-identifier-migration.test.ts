@@ -18,7 +18,9 @@ describe("Phase 24 migration safety contract", () => {
   it("enforces project-scoped uniqueness through the generated review-aware key", () => {
     expect(migration).toContain("create unique index if not exists students_project_student_identifier_key");
     expect(migration).toContain("on public.students(project_id,student_identifier_unique)");
-    expect(migration).toContain("generated always as (case when student_identifier_review_required then null else student_identifier end) stored");
+    expect(migration).toContain("add column if not exists student_identifier_unique text");
+    expect(migration).toContain("phase24_sync_student_identifier");
+    expect(migration).toContain("new.student_identifier_unique:=null");
     expect(migration).toContain("students_student_identifier_required");
     expect(migration).toContain("idx_generated_cards_batch_student_identifier");
     expect(migration).not.toContain("create unique index if not exists generated_cards_batch_student_identifier_key");
