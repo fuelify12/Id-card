@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
 import sharp from "sharp";
-import { parseWorkbook } from "@/lib/imports/student-spreadsheet";
+import { parseWorkbook, validateStudentRows } from "@/lib/imports/student-spreadsheet";
+import { DEFAULT_STUDENT_IDENTIFIER_POLICY } from "@/lib/identifiers/student-identifier";
 import { inspectPhotoBuffer } from "@/lib/photos/image-validation";
 import { parsePhotoFilename, proposePhotoMatch } from "@/lib/photos/matching";
 import { auditStudentCardIntegrity, type IntegrityChainRecord, type IntegrityManifestEntry } from "@/lib/acceptance/integrity-audit";
@@ -37,7 +38,7 @@ describe("Phase 16 synthetic final-acceptance fixtures", () => {
     expect(parsed.summary.total).toBe(300);
     expect(parsed.rows.some(row => String(row.values["Student Name"] ?? "").includes("आरव"))).toBe(true);
     expect(parsed.rows.some(row => String(row.values["Student Name"] ?? "").includes("प्रयांशु"))).toBe(true);
-    expect(parsed.summary.duplicates).toBeGreaterThan(0);
+    expect(parsed.summary.duplicates).toBe(0);\n    expect(validateStudentRows(parsed.rows,"Serial Number",{...DEFAULT_STUDENT_IDENTIFIER_POLICY,normalization:"numeric"}).some(row=>row.issues.includes("Duplicate student identifier"))).toBe(true);
     expect(parsed.summary.missingSerial).toBeGreaterThan(0);
     expect(parsed.rows.some(row => row.values["Optional Note"] === "optional")).toBe(true);
   }, 30_000);
@@ -45,7 +46,7 @@ describe("Phase 16 synthetic final-acceptance fixtures", () => {
   it("requires review for ambiguous photo names and detects invalid, low-resolution and duplicate image content", async () => {
     expect(parsePhotoFilename("photo.jpg").status).toBe("NEEDS_REVIEW");
     const ambiguous = proposePhotoMatch(parsePhotoFilename("042_Rahul.jpg"), [
-      { id: "student-a", serial_number: 42 }, { id: "student-b", serial_number: 42 },
+      { id: "student-a", serial_number: 42, student_identifier: "042" }, { id: "student-b", serial_number: 42, student_identifier: "042" },
     ]);
     expect(ambiguous.status).toBe("NEEDS_REVIEW");
     expect(ambiguous.studentId).toBeNull();
