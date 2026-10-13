@@ -44,7 +44,8 @@ export async function importStudentRows(input:{projectId:string;rows:Array<{sour
  if(pe) throw new Error(pe.message); if(!project) throw new Error("Project not found or access denied.");
  const supplied=input.identifierSettings;
  const currentPolicy=studentIdentifierPolicyFromConfig(project.student_identifier_settings);
- const currentIdentifierSourceColumn=typeof project.student_identifier_settings?.identifier_source_column==="string"?project.student_identifier_settings.identifier_source_column:null;
+ const rawIdentifierSettings=project.student_identifier_settings as Record<string,unknown>|null;
+ const currentIdentifierSourceColumn=typeof rawIdentifierSettings?.identifier_source_column==="string"?rawIdentifierSettings.identifier_source_column:null;
  const requestedIdentifierSourceColumn=typeof input.identifierSourceColumn==="string"?input.identifierSourceColumn.slice(0,128):null;
  const policy:StudentIdentifierPolicy = supplied ? studentIdentifierPolicyFromConfig(supplied) : currentPolicy;
  // Case-insensitive uniqueness needs a dedicated persisted comparison-key migration; keep this release exact-case only.
