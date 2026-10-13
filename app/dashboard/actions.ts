@@ -43,11 +43,10 @@ export async function importStudentRows(input:{projectId:string;rows:Array<{sour
  const {data:project,error:pe}=await s.from("school_projects").select("id,owner_id,student_identifier_settings").eq("id",input.projectId).eq("owner_id",uid).maybeSingle();
  if(pe) throw new Error(pe.message); if(!project) throw new Error("Project not found or access denied.");
  const supplied=input.identifierSettings;
- const policy:StudentIdentifierPolicy = supplied ? studentIdentifierPolicyFromConfig(supplied) : studentIdentifierPolicyFromConfig(project.student_identifier_settings);
- if(supplied){
-   const {error:settingsError}=await s.from("school_projects").update({student_identifier_settings:{normalization:policy.normalization,case_sensitive:policy.caseSensitive,edge_whitespace:policy.edgeWhitespace,max_length:policy.maxLength}}).eq("id",input.projectId).eq("owner_id",uid);
-   if(settingsError) throw new Error("Could not save this project's identifier rules. Apply the Phase 24 schema migration before importing.");
- }
+ const currentPolicy=studentIdentifierPolicyFromConfig(project.student_identifier_settings);
+ const policy:StudentIdentifierPolicy = supplied ? studentIdentifierPolicyFromConfig(supplied) : currentPolicy;
+ // Case-insensitive uniqueness needs a dedicated persisted comparison-key migration; keep this release exact-case only.
+ policy.caseSensitive=true;
  const normalized=input.rows.map(r=>{
    const parsed=canonicalizeStudentIdentifier(r.serialNumber,policy);
    if(!parsed.ok) throw new Error(`Spreadsheet row ${r.sourceRow}: ${parsed.error}`);
@@ -61,6 +60,16 @@ export async function importStudentRows(input:{projectId:string;rows:Array<{sour
  }
  const {data:existing,error:ee}=await s.from("students").select("student_identifier,serial_number").eq("project_id",input.projectId).eq("owner_id",uid);
  if(ee) throw new Error(ee.message);
+ if(supplied && (existing??[]).length && (
+   currentPolicy.normalization!==policy.normalization ||
+   currentPolicy.edgeWhitespace!==policy.edgeWhitespace ||
+   currentPolicy.maxLength!==policy.maxLength ||
+   currentPolicy.caseSensitive!==policy.caseSensitive
+ )) throw new Error("Identifier rules are locked after the first student import to protect existing photo, batch, and export associations. Create a new project to use different identifier rules.");
+ if(supplied && !(existing??[]).length){
+   const {error:settingsError}=await s.from("school_projects").update({student_identifier_settings:{normalization:policy.normalization,case_sensitive:policy.caseSensitive,edge_whitespace:policy.edgeWhitespace,max_length:policy.maxLength}}).eq("id",input.projectId).eq("owner_id",uid);
+   if(settingsError) throw new Error("Could not save this project's identifier rules. Apply the Phase 24 schema migration before importing.");
+ }
  const existingKeys=new Set((existing??[]).map((r:any)=>{const raw=String(r.student_identifier??r.serial_number);const parsed=canonicalizeStudentIdentifier(raw,policy);return parsed.ok?parsed.key:raw;}));
  const collisions=normalized.filter(r=>{const parsed=canonicalizeStudentIdentifier(r.student_identifier,policy);return parsed.ok&&existingKeys.has(parsed.key);});
  if(collisions.length && !input.replaceExisting) throw new Error(`${collisions.length} student identifier(s) already exist in this project. Remove them from the import or explicitly choose replace existing records.`);
