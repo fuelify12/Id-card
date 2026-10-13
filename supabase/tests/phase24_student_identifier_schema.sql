@@ -21,6 +21,12 @@ begin
     raise exception 'generated card canonical identifier unique index is missing';
   end if;
   if not exists (
+    select 1 from information_schema.columns where table_schema='public' and table_name='processing_jobs' and column_name='student_identifier' and data_type='text'
+  ) then raise exception 'processing_jobs.student_identifier must exist'; end if;
+  if not exists (select 1 from pg_indexes where schemaname='public' and indexname='processing_jobs_batch_student_identifier_key') then
+    raise exception 'processing job canonical identifier unique index is missing';
+  end if;
+  if not exists (
     select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace
     where n.nspname='public' and c.relname='students' and c.relrowsecurity
   ) then raise exception 'student row-level security must remain enabled'; end if;
