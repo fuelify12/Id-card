@@ -158,7 +158,7 @@ export async function registerStudentPhoto(input:{projectId:string;batchId:strin
  const filenameMatch=parsePhotoFilename(input.originalFilename,project.photo_serial_prefix,identifierPolicy);
  const students: {id:string;serial_number:number|null;student_identifier:string|null}[]=[];
  for(let from=0;from<15000;from+=1000){const {data,error}=await s.from("students").select("id,serial_number,student_identifier").eq("project_id",input.projectId).eq("owner_id",uid).range(from,from+999);if(error)throw new Error(error.message);students.push(...(data??[]));if((data??[]).length<1000)break;}
- const proposal=proposePhotoMatch(filenameMatch,students,duplicateRows.length>0);
+ const proposal=proposePhotoMatch(filenameMatch,students,duplicateRows.length>0,identifierPolicy);
  let status=proposal.status,studentId=proposal.studentId;
  const errors=proposal.reason?[proposal.reason]:[];
  if(status==="MATCHED"&&studentId){
@@ -249,7 +249,7 @@ export async function processPhotoMatches(projectId:string) {
  const updates=eligible.map(p=>{
   const fm=parsePhotoFilename(p.original_filename,project.photo_serial_prefix,identifierPolicy);
   const duplicate=(assigned??[]).some(other=>other.id!==p.id&&p.content_sha256&&other.content_sha256===p.content_sha256);
-  const proposal=proposePhotoMatch(fm,students,duplicate);
+  const proposal=proposePhotoMatch(fm,students,duplicate,identifierPolicy);
   let status=proposal.status,studentId=proposal.studentId;const errors=proposal.reason?[proposal.reason]:[];
   if(status==="MATCHED"&&studentId&&(assigned??[]).some(other=>other.id!==p.id&&other.student_id===studentId&&["MATCHED","APPROVED"].includes(other.match_status))){status="NEEDS_REVIEW";errors.push("Another photo is already proposed or approved for this student; choose the correct photo manually.");}
   if(status==="MATCHED")matched++;else if(status==="NEEDS_REVIEW")review++;else if(status==="UNMATCHED")unmatched++;else if(status==="DUPLICATE")duplicates++;
