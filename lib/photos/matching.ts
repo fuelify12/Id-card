@@ -38,6 +38,7 @@ export function parsePhotoFilename(filename:string, configuredPrefix:string|null
    if(stem.includes("_") && !/^\d+_[A-Za-z][A-Za-z0-9 _-]*$/.test(stem)) {
     const groups=stem.match(/\d+/g)??[];
     if(groups.length>1) return {status:"NEEDS_REVIEW",originalSerial:null,normalizedSerial:null,legacySerialNumber:null,reason:"Filename contains multiple possible identifier/serial groups"};
+    if(groups.length===0 && /^([\p{L}\p{N}.-]+)_([A-Za-z][A-Za-z0-9 _-]*)$/u.test(stem)) return {status:"NEEDS_REVIEW",originalSerial:null,normalizedSerial:null,legacySerialNumber:null,reason:"Underscore may separate an identifier from a descriptive name"};
     if(!/^[\p{L}\p{N}][\p{L}\p{N}._/-]*$/u.test(stem)) return {status:"NEEDS_REVIEW",originalSerial:null,normalizedSerial:null,legacySerialNumber:null,reason:"Filename identifier is ambiguous or contains unsupported characters"};
    }
    candidate=stem;method=/^\d+$/.test(stem)?"filename_numeric":"filename_text";
