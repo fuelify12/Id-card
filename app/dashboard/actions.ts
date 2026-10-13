@@ -83,7 +83,7 @@ export async function importStudentRows(input:{projectId:string;rows:Array<{sour
    if(settingsError) throw new Error("Could not save this project's identifier rules. Apply the Phase 24 schema migration before importing.");
  }
  if(input.replaceExisting) {
-   for(let i=0;i<normalized.length;i+=500) { const {error}=await s.from("students").upsert(normalized.slice(i,i+500),{onConflict:"project_id,student_identifier"}); if(error) throw new Error(error.message); }
+   for(let i=0;i<normalized.length;i+=500) { const {error}=await s.from("students").upsert(normalized.slice(i,i+500),{onConflict:"project_id,student_identifier_unique"}); if(error) throw new Error(error.message); }
  } else {
    for(let i=0;i<normalized.length;i+=500) { const {error}=await s.from("students").insert(normalized.slice(i,i+500)); if(error) throw new Error(error.message); }
  }
