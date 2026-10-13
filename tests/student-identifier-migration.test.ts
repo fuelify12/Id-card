@@ -21,5 +21,9 @@ describe("Phase 24 migration safety contract", () => {
     expect(migration).toContain("drop trigger if exists");
     expect(migration).toContain("drop constraint if exists");
     expect(migration).toContain("where student_identifier is null");
+    expect(migration).toContain("security invoker");
+    expect(migration).toContain("interval '5 minutes'");
+    expect(migration).toContain("attempts < i.max_attempts");
+    expect(migration).toContain("order by coalesce(i.student_identifier, i.serial_number::text), i.id");
   });
 });
