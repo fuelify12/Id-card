@@ -259,7 +259,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
             const artifactIssues = validatePersistedBatchArtifact(item, card, batch);
             if (artifactIssues.length) {
               await db.from("batch_generation_items").update({
-                status: "NEEDS_REVIEW", output_card_id: result.cardId,
+                status: "NEEDS_REVIEW", output_card_id: card ? result.cardId : null,
                 error_category: "integrity", error_summary: artifactIssues.join(" ").slice(0, 500),
                 completed_at: new Date().toISOString(), claimed_by: null, claimed_at: null,
                 heartbeat_at: new Date().toISOString(),
