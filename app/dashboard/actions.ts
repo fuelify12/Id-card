@@ -35,7 +35,7 @@ export async function createTemplatePreview(input:{bucket:StorageBucket;path:str
 export async function uploadProjectFile(input:{projectId:string;bucket:StorageBucket;file:File}){const{s,uid}=await auth();if(!Object.values(STORAGE_BUCKETS).includes(input.bucket))throw new Error("Invalid storage bucket");if(!input.file.size||input.file.size>LIMITS[input.bucket])throw new Error("File exceeds the allowed size");if(!TYPES[input.bucket].includes(input.file.type))throw new Error("File type is not allowed");const{data:project,error:pe}=await s.from("school_projects").select("id").eq("id",input.projectId).maybeSingle();if(pe)throw new Error(pe.message);if(!project)throw new Error("Project not found");const path=projectObjectPath(uid,input.projectId,input.file.name);const{error}=await s.storage.from(input.bucket).upload(path,input.file,{contentType:input.file.type,upsert:false});if(error)throw new Error(error.message);return{bucket:input.bucket,path}}
 export async function createProjectDownload(input:{bucket:StorageBucket;path:string;expiresIn?:number}){const{s}=await auth();if(!Object.values(STORAGE_BUCKETS).includes(input.bucket))throw new Error("Invalid storage bucket");const{data,error}=await s.storage.from(input.bucket).createSignedUrl(input.path,Math.min(Math.max(input.expiresIn??300,30),3600));if(error)throw new Error(error.message);return data.signedUrl}
 export async function saveTemplateFields(input:{projectId:string;templateId:string;fields:Array<{id?:string;key:string;label:string;field_type:string;required:boolean;x:number;y:number;width:number;height:number;font_family:string|null;font_size:number|null;font_weight:string|null;color:string|null;alignment:string|null;fit_mode:string|null;source_column:string|null;confidence:number|null}>}){const{s,uid}=await auth();const{data:t}=await s.from("templates").select("id").eq("id",input.templateId).eq("project_id",input.projectId).maybeSingle();if(!t)throw new Error("Template not found.");const fields=input.fields.slice(0,100).map((f,i)=>({...f,id:undefined,template_id:input.templateId,owner_id:uid,sort_order:i,x:Math.max(0,f.x),y:Math.max(0,f.y),width:Math.max(1,f.width),height:Math.max(1,f.height),confidence:f.confidence==null?1:Math.min(1,Math.max(0,f.confidence)),render_options:(f as any).render_options??{}}));const{error:de}=await s.from("template_fields").delete().eq("template_id",input.templateId);if(de)throw new Error(de.message);if(fields.length){const{error:ie}=await s.from("template_fields").insert(fields);if(ie)throw new Error(ie.message)}return{saved:fields.length}}
-export async function importStudentRows(input:{projectId:string;rows:Array<{sourceRow:number;serialNumber:string;values:Record<string,string|number|boolean|null>}>;replaceExisting?:boolean;identifierSettings?:StudentIdentifierPolicy}) {
+export async function importStudentRows(input:{projectId:string;rows:Array<{sourceRow:number;serialNumber:string;values:Record<string,string|number|boolean|null>}>;replaceExisting?:boolean;identifierSettings?:StudentIdentifierPolicy;identifierSourceColumn?:string}) {
  const {s,uid}=await auth();
  await enforceActionRateLimit(s,"student_import",20,3600);
  if(!input.rows.length) throw new Error("There are no valid student rows to import.");
@@ -44,13 +44,15 @@ export async function importStudentRows(input:{projectId:string;rows:Array<{sour
  if(pe) throw new Error(pe.message); if(!project) throw new Error("Project not found or access denied.");
  const supplied=input.identifierSettings;
  const currentPolicy=studentIdentifierPolicyFromConfig(project.student_identifier_settings);
+ const currentIdentifierSourceColumn=typeof project.student_identifier_settings?.identifier_source_column==="string"?project.student_identifier_settings.identifier_source_column:null;
+ const requestedIdentifierSourceColumn=typeof input.identifierSourceColumn==="string"?input.identifierSourceColumn.slice(0,128):null;
  const policy:StudentIdentifierPolicy = supplied ? studentIdentifierPolicyFromConfig(supplied) : currentPolicy;
  // Case-insensitive uniqueness needs a dedicated persisted comparison-key migration; keep this release exact-case only.
  policy.caseSensitive=true;
  const normalized=input.rows.map(r=>{
    const parsed=canonicalizeStudentIdentifier(r.serialNumber,policy);
    if(!parsed.ok) throw new Error(`Spreadsheet row ${r.sourceRow}: ${parsed.error}`);
-   return {source_row:r.sourceRow,student_identifier:parsed.value,serial_number:parsed.legacySerialNumber,data:r.values,owner_id:uid,project_id:input.projectId};
+   return {source_row:r.sourceRow,student_identifier:parsed.value,serial_number:parsed.legacySerialNumber,student_identifier_source:"spreadsheet",student_identifier_review_required:false,data:r.values,owner_id:uid,project_id:input.projectId};
  });
  const seen=new Set<string>();
  for(const row of normalized){
@@ -69,15 +71,16 @@ export async function importStudentRows(input:{projectId:string;rows:Array<{sour
    currentPolicy.normalization!==policy.normalization ||
    currentPolicy.edgeWhitespace!==policy.edgeWhitespace ||
    currentPolicy.maxLength!==policy.maxLength ||
-   currentPolicy.caseSensitive!==policy.caseSensitive
- )) throw new Error("Identifier rules are locked after the first student import to protect existing photo, batch, and export associations. Create a new project to use different identifier rules.");
- if(supplied && !(existing??[]).length){
-   const {error:settingsError}=await s.from("school_projects").update({student_identifier_settings:{normalization:policy.normalization,case_sensitive:policy.caseSensitive,edge_whitespace:policy.edgeWhitespace,max_length:policy.maxLength}}).eq("id",input.projectId).eq("owner_id",uid);
-   if(settingsError) throw new Error("Could not save this project's identifier rules. Apply the Phase 24 schema migration before importing.");
- }
+   currentPolicy.caseSensitive!==policy.caseSensitive ||
+   (currentIdentifierSourceColumn && requestedIdentifierSourceColumn && currentIdentifierSourceColumn!==requestedIdentifierSourceColumn)
+ )) throw new Error("Identifier rules/source column are locked after the first student import to protect existing photo, batch, and export associations. Create a new project to use different rules.");
  const existingKeys=new Set(existing.map((r:any)=>{const raw=String(r.student_identifier??r.serial_number);const parsed=canonicalizeStudentIdentifier(raw,policy);return parsed.ok?parsed.key:raw;}));
  const collisions=normalized.filter(r=>{const parsed=canonicalizeStudentIdentifier(r.student_identifier,policy);return parsed.ok&&existingKeys.has(parsed.key);});
  if(collisions.length && !input.replaceExisting) throw new Error(`${collisions.length} student identifier(s) already exist in this project. Remove them from the import or explicitly choose replace existing records.`);
+ if(supplied && (!existing.length || !currentIdentifierSourceColumn)){
+   const {error:settingsError}=await s.from("school_projects").update({student_identifier_settings:{normalization:policy.normalization,case_sensitive:policy.caseSensitive,edge_whitespace:policy.edgeWhitespace,max_length:policy.maxLength,identifier_source_column:requestedIdentifierSourceColumn}}).eq("id",input.projectId).eq("owner_id",uid);
+   if(settingsError) throw new Error("Could not save this project's identifier rules. Apply the Phase 24 schema migration before importing.");
+ }
  if(input.replaceExisting) {
    for(let i=0;i<normalized.length;i+=500) { const {error}=await s.from("students").upsert(normalized.slice(i,i+500),{onConflict:"project_id,student_identifier"}); if(error) throw new Error(error.message); }
  } else {
