@@ -72,6 +72,16 @@ alter table public.students add constraint students_student_identifier_length_ch
   check (student_identifier is null or (length(student_identifier) between 1 and 64))
   not valid;
 
+alter table public.students drop constraint if exists students_student_identifier_required;
+alter table public.students add constraint students_student_identifier_required
+  check (student_identifier is not null) not valid;
+alter table public.batch_generation_items drop constraint if exists batch_items_student_identifier_required;
+alter table public.batch_generation_items add constraint batch_items_student_identifier_required
+  check (student_identifier is not null) not valid;
+alter table public.generated_cards drop constraint if exists generated_cards_student_identifier_required;
+alter table public.generated_cards add constraint generated_cards_student_identifier_required
+  check (student_identifier is not null) not valid;
+
 alter table public.school_projects drop constraint if exists school_projects_identifier_settings_check;
 alter table public.school_projects add constraint school_projects_identifier_settings_check
   check (
