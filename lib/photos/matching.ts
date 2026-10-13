@@ -15,6 +15,7 @@ export function parsePhotoFilename(filename:string, configuredPrefix:string|null
  if(dot<=0) return {status:"NEEDS_REVIEW",originalSerial:null,normalizedSerial:null,legacySerialNumber:null,reason:"Missing or unsupported file extension"};
  const stem=base.slice(0,dot);
  if(!stem) return {status:"NEEDS_REVIEW",originalSerial:null,normalizedSerial:null,legacySerialNumber:null,reason:"Empty filename"};
+ if(["photo","image","img","student","unknown","untitled"].includes(stem.toLocaleLowerCase("en-US"))) return {status:"NEEDS_REVIEW",originalSerial:null,normalizedSerial:null,legacySerialNumber:null,reason:"Filename is generic and does not identify a student"};
  let candidate:string|null=null;
  let method:"filename_numeric"|"filename_prefixed"|"filename_text"="filename_text";
  if(configuredPrefix && /^[A-Za-z][A-Za-z0-9_-]{0,15}$/.test(configuredPrefix)) {
