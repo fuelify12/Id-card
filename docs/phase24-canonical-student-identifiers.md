@@ -19,7 +19,7 @@
 3. **Photo filename parsing/matching:** `lib/photos/matching.ts`, `app/dashboard/actions.ts`, `components/projects/student-photo-workspace.tsx`, `public.student_photos`.
 4. **Validation and preflight:** `lib/validation/engine.ts`, `app/api/projects/[id]/validation/route.ts`, `app/api/projects/[id]/batch/route.ts`.
 5. **Rendering:** `lib/rendering/types.ts`, `lib/rendering/engine.ts`, `app/api/projects/[id]/render/route.ts`.
-6. **Batch snapshots and retries:** `public.batch_generation_items`, `app/api/projects/[id]/batch/route.ts`, `public.claim_batch_generation_items(...)`.
+6. **Batch snapshots and retries:** `public.batch_generation_items`, `public.processing_jobs`, `app/api/projects/[id]/batch/route.ts`, `public.claim_batch_generation_items(...)`.
 7. **Card metadata and export:** `public.generated_cards`, `app/api/projects/[id]/exports/route.ts`, `app/api/projects/[id]/exports/card/[cardId]/route.ts`, `lib/exports/archive.ts`.
 
 ## Migration design
@@ -32,7 +32,7 @@ Migration: `supabase/migrations/20261013120000_phase24_canonical_student_identif
 - Legacy integer columns remain as compatibility projections. They become nullable so `001` and alphanumeric IDs can exist without a lossy numeric cast. The application stores a legacy integer projection only when the exact canonical ID is an unpadded integer within the legacy range.
 - Unique indexes are scoped to project/batch: `(project_id, student_identifier)`, `(batch_id, student_identifier)`. The existing integer indexes remain for old readers.
 - Compatibility triggers fill missing text snapshots from existing integer values for old numeric writers; they never infer lost zero padding.
-- Batch worker ordering now uses the text identifier snapshot for deterministic processing.
+- Batch item, processing-job, and generated-card snapshots carry the canonical text identifier. The worker-claim function keeps its original invoker-security checks, lease-expiry recovery, maximum-attempt handling, and row locking; only the deterministic order key changes to the canonical text snapshot.
 - Check constraints are added `NOT VALID` to enforce new writes without forcing a production data rewrite during migration.
 - The migration is transactional and rerunnable for columns, indexes, constraints, and triggers.
 
