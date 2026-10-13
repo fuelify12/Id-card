@@ -18,6 +18,7 @@ declare
   v_settings jsonb;
   v_old_identifier text;
   v_review_required boolean;
+  v_identifier_unique text;
   v_expected_legacy integer := null;
 begin
   if auth.uid() is null then raise exception 'unauthorized'; end if;
@@ -52,13 +53,14 @@ begin
       end if;
     end if;
   end if;
+  v_identifier_unique:=case when coalesce(v_settings->>'case_sensitive','true')='false' then lower(p_student_identifier) else p_student_identifier end;
   if p_legacy_serial_number is distinct from v_expected_legacy
   then raise exception 'legacy integer projection does not match canonical identifier'; end if;
 
   if exists (
     select 1 from public.students other
     where other.project_id=p_project_id and other.owner_id=auth.uid()
-      and other.id<>p_student_id and other.student_identifier=p_student_identifier
+      and other.id<>p_student_id and other.student_identifier_unique=v_identifier_unique
   ) then raise exception 'student identifier already exists in this project'; end if;
 
   if exists (
@@ -75,6 +77,7 @@ begin
 
   update public.students s
   set student_identifier=p_student_identifier,
+      student_identifier_unique=v_identifier_unique,
       serial_number=p_legacy_serial_number,
       data=coalesce(p_data,s.data),
       student_identifier_source=case when v_old_identifier is distinct from p_student_identifier then 'owner_corrected' else 'owner_confirmed' end,
