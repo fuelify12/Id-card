@@ -11,7 +11,7 @@ function make(ruleId:string,severity:Severity,message:string,correctiveAction:st
 export function validateStudents(students:Student[],requiredFields:string[]=[],options:{admissionNumberUnique?:boolean}={}):Finding[]{
  const out:Finding[]=[],serials=new Map<string,Student[]>(),admissions=new Map<string,Student[]>();
  for(const s of students){const d=s.data??{},serial=String(s.student_identifier??(s.serial_number==null?"":s.serial_number));
- if(!serial)out.push(make("STUDENT_IDENTIFIER_MISSING","CRITICAL","Student identifier is missing.","Correct the student identifier in the source sheet and verify the imported record.",{id:s.id,serial},{studentId:s.id}));
+ if(!serial)out.push(make("STUDENT_SERIAL_MISSING","CRITICAL","Student identifier is missing.","Correct the student identifier in the source sheet and verify the imported record.",{id:s.id,serial},{studentId:s.id}));
  else serials.set(serial,[...(serials.get(serial)??[]),s]);
  const nk=Object.keys(d).find(k=>["studentname","name","fullname","pupilname"].includes(norm(k)));
  const nameValue=nk?d[nk]:undefined;if(!nk||empty(nameValue))out.push(make("STUDENT_NAME_MISSING","ERROR","Required student name is missing.","Map the correct name column and verify this student record.",{id:s.id,key:nk,value:nameValue},{studentId:s.id,fieldRef:nk??"student_name"}));
@@ -25,7 +25,7 @@ export function validateStudents(students:Student[],requiredFields:string[]=[],o
  const ak=Object.keys(d).find(k=>["admissionnumber","admissionno","admissionid","enrollmentnumber","enrollmentno"].includes(norm(k)));
  if(ak&&!empty(d[ak])){const a=String(d[ak]).normalize("NFKC").trim().toLocaleLowerCase("en-IN");admissions.set(a,[...(admissions.get(a)??[]),s])}
  }
- for(const [serial,rows]of serials)if(rows.length>1)for(const s of rows)out.push(make("STUDENT_IDENTIFIER_DUPLICATE","CRITICAL","More than one student record uses the same canonical identifier.","Resolve duplicate student identifiers before matching photos or generating cards.",{serial,ids:rows.map(r=>r.id).sort()},{studentId:s.id,fieldRef:"student_identifier"}));
+ for(const [serial,rows]of serials)if(rows.length>1)for(const s of rows)out.push(make("STUDENT_SERIAL_DUPLICATE","CRITICAL","More than one student record uses the same canonical identifier.","Resolve duplicate student identifiers before matching photos or generating cards.",{serial,ids:rows.map(r=>r.id).sort()},{studentId:s.id,fieldRef:"student_identifier"}));
  for(const [admission,rows]of admissions)if(options.admissionNumberUnique!==false&&rows.length>1)for(const s of rows)out.push(make("STUDENT_ADMISSION_DUPLICATE","ERROR","Admission number is duplicated within this project.","Confirm the school's uniqueness policy and correct the source record if needed.",{admission,ids:rows.map(r=>r.id).sort()},{studentId:s.id,fieldRef:"admission_number"}));
  return out;
 }
