@@ -61,3 +61,14 @@ export function identifierMatches(left: unknown, right: unknown, policy: Student
   const b = canonicalizeStudentIdentifier(right, policy);
   return a.ok && b.ok && a.key === b.key;
 }
+
+export function studentIdentifierPolicyFromConfig(value: unknown): StudentIdentifierPolicy {
+  const raw = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  return {
+    normalization: raw.normalization === "numeric" ? "numeric" : "exact",
+    caseSensitive: raw.caseSensitive === false || raw.case_sensitive === false ? false : true,
+    edgeWhitespace: raw.edgeWhitespace === "trim" || raw.edge_whitespace === "trim" ? "trim" : "reject",
+    maxLength: Number.isInteger(raw.maxLength) ? Math.max(1, Math.min(64, raw.maxLength as number))
+      : Number.isInteger(raw.max_length) ? Math.max(1, Math.min(64, raw.max_length as number)) : 64,
+  };
+}
