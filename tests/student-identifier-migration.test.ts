@@ -19,6 +19,8 @@ describe("Phase 24 migration safety contract", () => {
     expect(migration).toContain("students_student_identifier_required");
     expect(migration).toContain("student_identifier_settings");
     expect(correctionMigration).toContain("correct_student_identifier");
+    expect(correctionMigration).toContain("student identifier already exists in this project");
+    expect(correctionMigration).toContain("cannot correct an identifier while processing is active");
     expect(correctionMigration).toContain("security invoker");
   });
   it("is rerunnable for columns, indexes, constraints, and triggers", () => {
@@ -28,6 +30,7 @@ describe("Phase 24 migration safety contract", () => {
     expect(migration).toContain("drop constraint if exists");
     expect(migration).toContain("where student_identifier is null");
     expect(workerMigration).toContain("security invoker");
+    expect(workerMigration).toContain("for update skip locked");
     expect(workerMigration).toContain("interval '5 minutes'");
     expect(workerMigration).toMatch(/attempts\s*<\s*i\.max_attempts/);
     expect(workerMigration).toMatch(/order by coalesce\(i\.student_identifier,\s*i\.serial_number::text\),\s*i\.id/i);
