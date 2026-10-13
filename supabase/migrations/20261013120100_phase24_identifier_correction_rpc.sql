@@ -125,6 +125,12 @@ begin
   where j.student_id=p_student_id and j.project_id=p_project_id and j.owner_id=auth.uid()
     and lower(j.status) not in ('succeeded','completed','done');
 
+  -- Keep historical identifier snapshots intact, but make their outputs ineligible for download/export.
+  update public.generated_cards g
+  set status='needs_review', approval_status='pending'
+  where g.student_id=p_student_id and g.project_id=p_project_id and g.owner_id=auth.uid()
+    and g.status='generated';
+
   return p_student_identifier;
 end;
 $phase24corr$;
