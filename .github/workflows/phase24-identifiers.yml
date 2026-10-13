@@ -1,0 +1,57 @@
+name: Phase 24 canonical student identifier checks
+
+on:
+  push:
+    branches:
+      - phase-24-canonical-student-identifiers
+  pull_request:
+    branches:
+      - phase-23-student-photo-workflow
+    paths:
+      - "app/api/projects/**"
+      - "app/dashboard/**"
+      - "components/projects/**"
+      - "lib/identifiers/**"
+      - "lib/imports/**"
+      - "lib/photos/**"
+      - "lib/rendering/**"
+      - "lib/validation/**"
+      - "lib/exports/**"
+      - "supabase/migrations/**"
+      - "supabase/tests/**"
+      - "tests/**"
+      - ".github/workflows/phase24-identifiers.yml"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase24-identifiers-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Identifier regressions, typecheck, lint, and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps --no-audit --no-fund
+      - name: Full regression tests
+        run: npm test
+      - name: TypeScript
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Production build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+        run: npm run build
