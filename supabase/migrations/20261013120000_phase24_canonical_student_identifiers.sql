@@ -77,4 +77,65 @@ alter table public.school_projects add constraint school_projects_identifier_set
     and coalesce((student_identifier_settings->>'max_length')::integer,64) between 1 and 64
   ) not valid;
 
+-- Preserve compatibility for old numeric writers: only fill a missing text snapshot from
+-- the numeric value they actually supplied. This cannot and does not invent leading zeroes.
+create or replace function public.phase24_fill_legacy_student_identifier()
+returns trigger language plpgsql set search_path=public as $
+begin
+  if new.student_identifier is null and new.serial_number is not null then
+    new.student_identifier := new.serial_number::text;
+  end if;
+  return new;
+end $;
+
+drop trigger if exists phase24_students_identifier_compat on public.students;
+create trigger phase24_students_identifier_compat
+before insert or update of serial_number, student_identifier on public.students
+for each row execute function public.phase24_fill_legacy_student_identifier();
+
+drop trigger if exists phase24_batch_items_identifier_compat on public.batch_generation_items;
+create trigger phase24_batch_items_identifier_compat
+before insert or update of serial_number, student_identifier on public.batch_generation_items
+for each row execute function public.phase24_fill_legacy_student_identifier();
+
+drop trigger if exists phase24_generated_cards_identifier_compat on public.generated_cards;
+create trigger phase24_generated_cards_identifier_compat
+before insert or update of serial_number, student_identifier on public.generated_cards
+for each row execute function public.phase24_fill_legacy_student_identifier();
+
+create or replace function public.phase24_fill_photo_student_identifier()
+returns trigger language plpgsql set search_path=public as $
+begin
+  if new.student_identifier is null and new.student_id is not null then
+    select s.student_identifier into new.student_identifier
+    from public.students s
+    where s.id=new.student_id and s.project_id=new.project_id;
+  end if;
+  if new.student_identifier is null then
+    new.student_identifier := coalesce(new.original_serial_number,new.normalized_serial_number);
+  end if;
+  return new;
+end $;
+
+drop trigger if exists phase24_photo_identifier_compat on public.student_photos;
+create trigger phase24_photo_identifier_compat
+before insert or update of student_id, project_id, student_identifier, original_serial_number, normalized_serial_number
+on public.student_photos for each row execute function public.phase24_fill_photo_student_identifier();
+
+-- Batch worker ordering must remain deterministic when text-only identifiers have no legacy integer.
+create or replace function public.claim_batch_generation_items(p_batch_id uuid,p_worker_id text,p_limit integer default 3)
+returns setof public.batch_generation_items language plpgsql security definer set search_path=public as $
+begin
+ if auth.uid() is null then raise exception 'unauthorized'; end if;
+ if not exists(select 1 from public.batches b join public.school_projects p on p.id=b.project_id where b.id=p_batch_id and b.owner_id=auth.uid() and p.owner_id=auth.uid() and lower(b.status) in ('queued','running')) then raise exception 'batch access denied'; end if;
+ return query with eligible as (
+  select i.id from public.batch_generation_items i where i.batch_id=p_batch_id and i.owner_id=auth.uid() and i.status='PENDING' and i.available_at<=now()
+  order by coalesce(i.student_identifier,i.serial_number::text),i.id for update skip locked limit greatest(1,least(coalesce(p_limit,3),8))
+ ) update public.batch_generation_items i set status='PROCESSING',claimed_at=now(),claimed_by=left(p_worker_id,100),heartbeat_at=now(),attempts=i.attempts+1,last_attempt_at=now(),updated_at=now()
+ from eligible e where i.id=e.id returning i.*;
+end $;
+revoke all on function public.claim_batch_generation_items(uuid,text,integer) from public,anon;
+grant execute on function public.claim_batch_generation_items(uuid,text,integer) to authenticated,service_role;
+
+
 commit;
