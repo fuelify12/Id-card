@@ -27,6 +27,7 @@ describe("Phase 24 migration safety contract", () => {
     expect(correctionMigration).toContain("correct_student_identifier");
     expect(correctionMigration).toContain("student identifier already exists in this project");
     expect(correctionMigration).toContain("student_identifier_unique=v_identifier_unique");
+    expect(correctionMigration).toContain("set status='needs_review', approval_status='pending'");
     expect(correctionMigration).toContain("cannot correct an identifier while processing is active");
     expect(correctionMigration).toContain("security invoker");
   });
