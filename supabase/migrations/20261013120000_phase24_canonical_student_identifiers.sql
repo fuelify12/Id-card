@@ -34,15 +34,19 @@ update public.student_photos
 set student_identifier=coalesce(original_serial_number,normalized_serial_number)
 where student_identifier is null and coalesce(original_serial_number,normalized_serial_number) is not null;
 
+-- Historical rows are all marked review-required. Enforce uniqueness for confirmed/new canonical identifiers;
+-- unresolved legacy duplicates remain visible for owner review instead of aborting the migration.
 create unique index if not exists students_project_student_identifier_key
-  on public.students(project_id,student_identifier);
+  on public.students(project_id,student_identifier)
+  where student_identifier_review_required=false;
 create index if not exists idx_students_project_identifier
   on public.students(project_id,student_identifier);
 create index if not exists idx_student_photos_project_identifier
   on public.student_photos(project_id,student_identifier);
-create unique index if not exists batch_items_batch_student_identifier_key
+create index if not exists idx_batch_items_batch_student_identifier
   on public.batch_generation_items(batch_id,student_identifier);
-create unique index if not exists generated_cards_batch_student_identifier_key
+-- A student can have separate front/back card rows, so this is intentionally not unique.
+create index if not exists idx_generated_cards_batch_student_identifier
   on public.generated_cards(batch_id,student_identifier);
 create index if not exists idx_processing_jobs_batch_identifier
   on public.processing_jobs(batch_id,student_identifier);
