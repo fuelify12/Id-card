@@ -29,6 +29,10 @@ alter table public.batch_generation_items
 alter table public.generated_cards
   add column if not exists student_identifier text;
 
+alter table public.processing_jobs
+  add column if not exists student_identifier text;
+alter table public.processing_jobs alter column serial_number drop not null;
+
 -- Existing batch/card snapshots are backfilled from the existing numeric snapshot, without padding.
 update public.batch_generation_items
 set student_identifier = serial_number::text
@@ -37,6 +41,14 @@ where student_identifier is null;
 update public.generated_cards
 set student_identifier = serial_number::text
 where student_identifier is null;
+
+update public.processing_jobs j
+set student_identifier = s.student_identifier
+from public.students s
+where j.student_id = s.id and j.project_id = s.project_id and j.student_identifier is null;
+update public.processing_jobs
+set student_identifier = serial_number::text
+where student_identifier is null and serial_number is not null;
 
 update public.student_photos p
 set student_identifier = s.student_identifier
@@ -66,6 +78,9 @@ create unique index if not exists batch_items_batch_student_identifier_key
 create unique index if not exists generated_cards_batch_student_identifier_key
   on public.generated_cards(batch_id, student_identifier);
 
+create unique index if not exists processing_jobs_batch_student_identifier_key
+  on public.processing_jobs(batch_id, student_identifier);
+
 -- Constraints intentionally allow NULL on legacy snapshots while application code rolls forward.
 alter table public.students drop constraint if exists students_student_identifier_length_check;
 alter table public.students add constraint students_student_identifier_length_check
@@ -80,6 +95,9 @@ alter table public.batch_generation_items add constraint batch_items_student_ide
   check (student_identifier is not null) not valid;
 alter table public.generated_cards drop constraint if exists generated_cards_student_identifier_required;
 alter table public.generated_cards add constraint generated_cards_student_identifier_required
+  check (student_identifier is not null) not valid;
+alter table public.processing_jobs drop constraint if exists processing_jobs_student_identifier_required;
+alter table public.processing_jobs add constraint processing_jobs_student_identifier_required
   check (student_identifier is not null) not valid;
 
 alter table public.school_projects drop constraint if exists school_projects_identifier_settings_check;
@@ -116,6 +134,11 @@ for each row execute function public.phase24_fill_legacy_student_identifier();
 drop trigger if exists phase24_generated_cards_identifier_compat on public.generated_cards;
 create trigger phase24_generated_cards_identifier_compat
 before insert or update on public.generated_cards
+for each row execute function public.phase24_fill_legacy_student_identifier();
+
+drop trigger if exists phase24_processing_jobs_identifier_compat on public.processing_jobs;
+create trigger phase24_processing_jobs_identifier_compat
+before insert or update on public.processing_jobs
 for each row execute function public.phase24_fill_legacy_student_identifier();
 
 create or replace function public.phase24_fill_photo_student_identifier()
