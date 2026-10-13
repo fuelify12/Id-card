@@ -1,17 +1,17 @@
 "use client";
 import {useMemo,useState} from "react";
 import {parseWorkbook,validateStudentRows,type SpreadsheetPreview,type ParsedStudentRow} from "@/lib/imports/student-spreadsheet";
-import { DEFAULT_STUDENT_IDENTIFIER_POLICY, type StudentIdentifierPolicy } from "@/lib/identifiers/student-identifier";
+import { DEFAULT_STUDENT_IDENTIFIER_POLICY, studentIdentifierPolicyFromConfig, type StudentIdentifierPolicy } from "@/lib/identifiers/student-identifier";
 import {importStudentRows,saveTemplateFields} from "@/app/dashboard/actions";
 
 type Field={id:string;key:string;label:string;field_type:string;required:boolean;x:number;y:number;width:number;height:number;font_family:string|null;font_size:number|null;font_weight:string|null;color:string|null;alignment:string|null;fit_mode:string|null;source_column:string|null;confidence:number|null};
-export function StudentImportWorkspace({projectId,templateId,fields:initialFields}:{projectId:string;templateId:string|null;fields:Field[]}) {
+export function StudentImportWorkspace({projectId,templateId,fields:initialFields,initialIdentifierSettings}:{projectId:string;templateId:string|null;fields:Field[];initialIdentifierSettings?:unknown}) {
  const [preview,setPreview]=useState<SpreadsheetPreview|null>(null);
  const [workbookBuffer,setWorkbookBuffer]=useState<ArrayBuffer|null>(null);
  const [workbookName,setWorkbookName]=useState("");
  const [fields,setFields]=useState(initialFields);
  const [serialColumn,setSerialColumn]=useState("");
- const [identifierPolicy,setIdentifierPolicy]=useState<StudentIdentifierPolicy>({...DEFAULT_STUDENT_IDENTIFIER_POLICY});
+ const [identifierPolicy,setIdentifierPolicy]=useState<StudentIdentifierPolicy>(studentIdentifierPolicyFromConfig(initialIdentifierSettings??DEFAULT_STUDENT_IDENTIFIER_POLICY));
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState("");
  const [notice,setNotice]=useState("");
