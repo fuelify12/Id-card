@@ -104,15 +104,28 @@ begin
   update public.batch_generation_items i
   set student_identifier=p_student_identifier,
       serial_number=p_legacy_serial_number,
-      status=case when i.status='SUCCEEDED' then 'NEEDS_REVIEW' else i.status end,
-      error_category=case when i.status='SUCCEEDED' then 'validation' else i.error_category end,
-      error_summary=case when i.status='SUCCEEDED' then 'Student identifier was corrected after rendering; regenerate and revalidate this card.' else i.error_summary end,
+      status=case when i.status='SUCCEEDED' then 'PENDING' else i.status end,
+      attempts=case when i.status='SUCCEEDED' then 0 else i.attempts end,
+      available_at=case when i.status='SUCCEEDED' then now() else i.available_at end,
+      error_category=case when i.status='SUCCEEDED' then null else i.error_category end,
+      error_summary=case when i.status='SUCCEEDED' then 'Student identifier was corrected; this batch item is queued for regeneration.' else i.error_summary end,
       output_card_id=case when i.status='SUCCEEDED' then null else i.output_card_id end,
       output_storage_path=case when i.status='SUCCEEDED' then null else i.output_storage_path end,
       input_fingerprint=case when i.status='SUCCEEDED' then null else i.input_fingerprint end,
+      claimed_at=case when i.status='SUCCEEDED' then null else i.claimed_at end,
+      claimed_by=case when i.status='SUCCEEDED' then null else i.claimed_by end,
+      heartbeat_at=case when i.status='SUCCEEDED' then null else i.heartbeat_at end,
       completed_at=case when i.status='SUCCEEDED' then null else i.completed_at end,
       updated_at=now()
   where i.student_id=p_student_id and i.project_id=p_project_id and i.owner_id=auth.uid();
+
+  update public.batches b
+  set status='queued',completed_at=null,cancelled_at=null,paused_at=null,last_error=null,heartbeat_at=now()
+  where b.id in (
+    select i.batch_id from public.batch_generation_items i
+    where i.student_id=p_student_id and i.project_id=p_project_id and i.owner_id=auth.uid()
+  ) and b.project_id=p_project_id and b.owner_id=auth.uid()
+    and lower(b.status) in ('completed','completed_with_errors','failed');
 
   update public.processing_jobs j
   set student_identifier=p_student_identifier,serial_number=p_legacy_serial_number,updated_at=now()
