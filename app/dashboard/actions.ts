@@ -4,7 +4,7 @@ import { PDFDocument } from "pdf-lib";
 import { sanitizeSvg } from "@/lib/rendering/engine";
 import { STORAGE_BUCKETS, type StorageBucket, projectObjectPath } from "@/lib/supabase/storage";
 import { consumeRateLimit, type RateLimitAction } from "@/lib/security/rate-limit";
-import { canonicalizeStudentIdentifier, DEFAULT_STUDENT_IDENTIFIER_POLICY, type StudentIdentifierPolicy } from "@/lib/identifiers/student-identifier";
+import { canonicalizeStudentIdentifier, DEFAULT_STUDENT_IDENTIFIER_POLICY, studentIdentifierPolicyFromConfig, type StudentIdentifierPolicy } from "@/lib/identifiers/student-identifier";
 const LIMITS:Record<StorageBucket,number>={[STORAGE_BUCKETS.templates]:20*1024*1024,[STORAGE_BUCKETS.studentPhotos]:10*1024*1024,[STORAGE_BUCKETS.generatedCards]:20*1024*1024,[STORAGE_BUCKETS.exports]:100*1024*1024};
 const TYPES:Record<StorageBucket,string[]>={[STORAGE_BUCKETS.templates]:["image/png","image/jpeg","image/svg+xml","application/pdf"],[STORAGE_BUCKETS.studentPhotos]:["image/jpeg","image/png","image/webp"],[STORAGE_BUCKETS.generatedCards]:["image/png","image/jpeg","application/pdf"],[STORAGE_BUCKETS.exports]:["application/zip","application/pdf"]};
 function pngDimensions(b:Uint8Array){if(b.length<24||b[0]!==137||b[1]!==80||b[2]!==78||b[3]!==71)return null;const d=new DataView(b.buffer,b.byteOffset,b.byteLength);const w=d.getUint32(16),h=d.getUint32(20);return w&&h?{width:w,height:h}:null}
@@ -43,14 +43,9 @@ export async function importStudentRows(input:{projectId:string;rows:Array<{sour
  const {data:project,error:pe}=await s.from("school_projects").select("id,owner_id,student_identifier_settings").eq("id",input.projectId).eq("owner_id",uid).maybeSingle();
  if(pe) throw new Error(pe.message); if(!project) throw new Error("Project not found or access denied.");
  const supplied=input.identifierSettings;
- const policy:StudentIdentifierPolicy = supplied ? {
-   normalization:supplied.normalization==="numeric"?"numeric":"exact",
-   caseSensitive:supplied.caseSensitive!==false,
-   edgeWhitespace:supplied.edgeWhitespace==="trim"?"trim":"reject",
-   maxLength:Number.isInteger(supplied.maxLength)?Math.max(1,Math.min(64,supplied.maxLength)):64
- } : { ...DEFAULT_STUDENT_IDENTIFIER_POLICY, ...(project.student_identifier_settings??{}) };
+ const policy:StudentIdentifierPolicy = supplied ? studentIdentifierPolicyFromConfig(supplied) : studentIdentifierPolicyFromConfig(project.student_identifier_settings);
  if(supplied){
-   const {error:settingsError}=await s.from("school_projects").update({student_identifier_settings:policy}).eq("id",input.projectId).eq("owner_id",uid);
+   const {error:settingsError}=await s.from("school_projects").update({student_identifier_settings:{normalization:policy.normalization,case_sensitive:policy.caseSensitive,edge_whitespace:policy.edgeWhitespace,max_length:policy.maxLength}}).eq("id",input.projectId).eq("owner_id",uid);
    if(settingsError) throw new Error("Could not save this project's identifier rules. Apply the Phase 24 schema migration before importing.");
  }
  const normalized=input.rows.map(r=>{
@@ -66,8 +61,8 @@ export async function importStudentRows(input:{projectId:string;rows:Array<{sour
  }
  const {data:existing,error:ee}=await s.from("students").select("student_identifier,serial_number").eq("project_id",input.projectId).eq("owner_id",uid);
  if(ee) throw new Error(ee.message);
- const existingKeys=new Set((existing??[]).map((r:any)=>String(r.student_identifier??r.serial_number)));
- const collisions=normalized.filter(r=>existingKeys.has(r.student_identifier));
+ const existingKeys=new Set((existing??[]).map((r:any)=>{const raw=String(r.student_identifier??r.serial_number);const parsed=canonicalizeStudentIdentifier(raw,policy);return parsed.ok?parsed.key:raw;}));
+ const collisions=normalized.filter(r=>{const parsed=canonicalizeStudentIdentifier(r.student_identifier,policy);return parsed.ok&&existingKeys.has(parsed.key);});
  if(collisions.length && !input.replaceExisting) throw new Error(`${collisions.length} student identifier(s) already exist in this project. Remove them from the import or explicitly choose replace existing records.`);
  if(input.replaceExisting) {
    for(let i=0;i<normalized.length;i+=500) { const {error}=await s.from("students").upsert(normalized.slice(i,i+500),{onConflict:"project_id,student_identifier"}); if(error) throw new Error(error.message); }
