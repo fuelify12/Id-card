@@ -15,7 +15,7 @@ describe("Phase 24 migration safety contract", () => {
     expect(migration).not.toMatch(/padStart|lpad\s*\(/i);
     expect(migration).not.toMatch(/drop table|delete from public\.(students|student_photos|generated_cards|batch_generation_items)/i);
   });
-  it("enforces project-scoped uniqueness through the generated review-aware key", () => {
+  it("enforces project-scoped uniqueness through the persisted review-aware key", () => {
     expect(migration).toContain("create unique index if not exists students_project_student_identifier_key");
     expect(migration).toContain("on public.students(project_id,student_identifier_unique)");
     expect(migration).toContain("add column if not exists student_identifier_unique text");
@@ -27,7 +27,8 @@ describe("Phase 24 migration safety contract", () => {
     expect(correctionMigration).toContain("correct_student_identifier");
     expect(correctionMigration).toContain("student identifier already exists in this project");
     expect(correctionMigration).toContain("student_identifier_unique=v_identifier_unique");
-    expect(correctionMigration).toContain("set status='needs_review', approval_status='pending'");
+    expect(correctionMigration).toContain("status='needs_review',validation_status='failed',approval_status='review_required'");
+    expect(correctionMigration).toContain("status='queued',completed_at=null");
     expect(correctionMigration).toContain("cannot correct an identifier while processing is active");
     expect(correctionMigration).toContain("security invoker");
   });
@@ -39,7 +40,7 @@ describe("Phase 24 migration safety contract", () => {
     expect(workerMigration).toContain("order by coalesce(i.student_identifier,i.serial_number::text),i.id");
   });
   it("keeps migrations atomic and does not mutate production as part of tests", () => {
-    expect(migration.trim().startsWith("begin;")).toBe(true);
+    expect(migration).toMatch(/\nbegin;\s/);
     expect(migration.trim().endsWith("commit;")).toBe(true);
     expect(correctionMigration.trim().endsWith("commit;")).toBe(true);
     expect(workerMigration.trim().endsWith("commit;")).toBe(true);
