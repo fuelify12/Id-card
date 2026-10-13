@@ -31,12 +31,12 @@ Migration: `supabase/migrations/20261013120000_phase24_canonical_student_identif
 - Every row present at migration time is tagged `legacy_numeric_backfill` and `student_identifier_review_required=true`. Card/batch validation blocks these rows until the owner explicitly confirms the shown identifier or enters a corrected one in the project workspace.
 - Existing student IDs, photo associations, batch item foreign keys, card foreign keys, and storage paths are not deleted or rewritten.
 - Legacy integer columns remain as compatibility projections. They become nullable so `001` and alphanumeric IDs can exist without a lossy numeric cast. The application stores a legacy integer projection only when the exact canonical ID is an unpadded integer within the legacy range.
-- Unique indexes are scoped to project/batch: `(project_id, student_identifier)`, `(batch_id, student_identifier)`. The existing integer indexes remain for old readers.
+- Unique indexes are scoped to project/batch: `(project_id, student_identifier)`, `(project_id, student_identifier_unique)`, `(batch_id, student_identifier)`. The persisted uniqueness key applies the project policy consistently for case and numeric normalization; the existing integer indexes remain for old readers.
 - Compatibility triggers fill missing text snapshots from existing integer values for old numeric writers; they never infer lost zero padding. New spreadsheet imports are tagged `spreadsheet` and do not require legacy review.
 - The `correct_student_identifier` RPC runs as the authenticated invoker, checks project ownership, validates uniqueness and normalization, refuses changes during active processing, updates the student and its associated photo identifier snapshots in one transaction, refreshes pending batch/job snapshots, and invalidates previously succeeded batch items for regeneration. Historical generated-card metadata remains a snapshot and is not silently rewritten.
-- Batch item, processing-job, and generated-card snapshots carry the canonical text identifier. The worker-claim function keeps its original invoker-security checks, lease-expiry recovery, maximum-attempt handling, and row locking; only the deterministic order key changes to the canonical text snapshot.
+- Batch item, processing-job, and generated-card snapshots carry the canonical text identifier. The existing worker-claim function was intentionally left unchanged to avoid replacing unverified retry/lease logic; its numeric sort order remains a non-identity presentation detail.
 - Check constraints are added `NOT VALID` to enforce new writes without forcing a production data rewrite during migration.
-- The migration is transactional and rerunnable for columns, indexes, constraints, and triggers. The batch worker function retains the existing invoker-security checks, lease recovery, maximum-attempt handling, and row locking; only the sort key changes.
+- The migration is transactional and rerunnable for columns, indexes, constraints, and triggers. The worker-claim function is not replaced by this phase.
 
 ### Rollout and rollback
 
@@ -52,7 +52,7 @@ Migration: `supabase/migrations/20261013120000_phase24_canonical_student_identif
 - `001` and `1` remain distinct by default.
 - Numeric normalization is opt-in and turns digit-only strings into a canonical decimal string using BigInt, not Number-based identity matching.
 - Identifier settings are locked after the first student import to prevent existing photo, batch, and export relationships from being reinterpreted.
-- Case-insensitive mode is not exposed in this release because it requires a separately persisted comparison-key strategy; the import action forces case-sensitive semantics.
+- Case-insensitive mode is supported through the persisted `student_identifier_unique` comparison key; default configuration remains case-sensitive.
 - Prefix-style filename IDs such as `STU-001.jpg` require the project prefix configuration. Ambiguous and generic names are routed to manual review.
 - Student UUID remains the authoritative foreign-key association. Text identifiers are scoped lookup/display keys, never a replacement for project authorization or the student UUID.
 
