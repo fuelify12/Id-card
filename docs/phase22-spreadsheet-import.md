@@ -1,20 +1,28 @@
-# Phase 22 — Spreadsheet preview and mapping safety
+# Phase 22 — Project spreadsheet import, preview, and template mapping
 
-This phase adds a reusable, bounded spreadsheet preview and deterministic field-mapping utility at `lib/import/student-spreadsheet.ts`.
+## Implemented in the existing project workflow
 
-## Supported file formats
+The project page's existing `StudentImportWorkspace` now supports CSV, XLSX, and XLS through the repository's existing SheetJS parser. This is integrated into the authenticated project workflow rather than a separate demo screen.
 
-- CSV, XLSX, and XLS are accepted by the parser through the existing SheetJS dependency.
-- XLSM and other formats are rejected. Formula values are treated as cell data; macros are not executed.
-- The parser caps input at 15 MiB, 15,000 data rows, and 200 columns.
-- Blank rows are skipped and do not count as student records. Nonblank rows retain their original one-based spreadsheet row number for error reporting.
-- Duplicate normalized headers are rejected rather than silently overwriting values.
-- For numeric Excel identifiers, the parser uses the cell's number format when available (for example, `000` renders the value `1` as `001`). If formatting has been stripped from a numeric cell, original leading zeros are unrecoverable; the operator must correct the source file or explicitly normalize identifiers before import. Text-formatted IDs such as `001` are preserved.
+- Select a worksheet explicitly; changing the worksheet reparses the file before any write.
+- Detect a likely header row in the first 30 rows and show the source row number for each student.
+- Preview all named columns, including extra columns; blank rows are excluded from the student list.
+- Reject duplicate normalized headers rather than silently renaming or overwriting them.
+- Preserve text identifiers such as `001`; preserve Excel numeric zero-padding when the cell number format is available.
+- Flag missing and duplicate identifiers. Numeric identifiers with and without leading zeros are canonicalized for collision detection (so `001` and `1` are not treated as two different students).
+- Allow explicit, per-template-field column mapping; only mapped fields are used for rendering.
+- Require all required template fields to be mapped and populated on every importable row.
+- Require changed mappings to be saved to the active template version before import.
+- Preview is paginated at 100 rows, with mobile and desktop presentations.
+- Student persistence remains in the existing authenticated `importStudentRows` server action, which validates project access under Supabase RLS, rejects invalid/duplicate serials, enforces a 15,000-row limit, and requires explicit confirmation to replace colliding records.
+- Added branch CI to run unit tests, TypeScript, lint, and the production build.
 
-## Mapping safety
+## Identifier contract and known limit
 
-`suggestFieldMappings` only proposes a mapping when exactly one header equals the normalized field key or label. Ambiguous matches remain unmapped. `validateMappedRows` returns template-keyed values and row-level required-field errors. Extra columns remain available for preview but are not included in the mapped output unless the user explicitly maps them.
+The existing `students.serial_number` database column is numeric. The original spreadsheet values remain in the student's `data` JSON (so a mapped card field can still print a source value like `001`), but the database matching key is numeric and cannot distinguish `001` from `1`. The import preview blocks these as duplicate identifiers. This is deliberately fail-closed rather than silently assigning the same identity to two students. A schema-wide change to textual serial identifiers would affect photo matching, batch generation, exports, and existing records, so it must be handled as a separately planned migration and regression-tested across those systems.
 
-## Integration status and limits
+## Validation boundaries
 
-This utility is intended to be called by an authenticated project import workflow. It does not itself persist students, authorize project access, create templates, or provide a UI. The existing `importStudentRows` server action remains the persistence boundary and currently normalizes serial numbers to integers; therefore leading-zero identity preservation is not end-to-end complete until the identifier contract/schema is reconciled. Live database acceptance remains blocked by the Phase 21 isolated Supabase environment issue. No production database or deployment was modified by this change.
+The new CI workflow uses a placeholder Supabase URL/key and does not mutate a real Supabase project. Passing unit/type/lint/build checks does not prove live authenticated persistence, cross-tenant authorization, private-storage behavior, or browser acceptance. The Phase 21 isolated Supabase test project was not available due to the Supabase project-limit restriction, so those checks must remain explicitly blocked until an isolated environment and authorized test account are available.
+
+No pull request was merged and no Vercel deployment or production database was modified by Phase 22.
