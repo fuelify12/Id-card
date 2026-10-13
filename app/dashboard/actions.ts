@@ -4,6 +4,7 @@ import { PDFDocument } from "pdf-lib";
 import { sanitizeSvg } from "@/lib/rendering/engine";
 import { STORAGE_BUCKETS, type StorageBucket, projectObjectPath } from "@/lib/supabase/storage";
 import { consumeRateLimit, type RateLimitAction } from "@/lib/security/rate-limit";
+import { canonicalizeStudentIdentifier, DEFAULT_STUDENT_IDENTIFIER_POLICY, type StudentIdentifierPolicy } from "@/lib/identifiers/student-identifier";
 const LIMITS:Record<StorageBucket,number>={[STORAGE_BUCKETS.templates]:20*1024*1024,[STORAGE_BUCKETS.studentPhotos]:10*1024*1024,[STORAGE_BUCKETS.generatedCards]:20*1024*1024,[STORAGE_BUCKETS.exports]:100*1024*1024};
 const TYPES:Record<StorageBucket,string[]>={[STORAGE_BUCKETS.templates]:["image/png","image/jpeg","image/svg+xml","application/pdf"],[STORAGE_BUCKETS.studentPhotos]:["image/jpeg","image/png","image/webp"],[STORAGE_BUCKETS.generatedCards]:["image/png","image/jpeg","application/pdf"],[STORAGE_BUCKETS.exports]:["application/zip","application/pdf"]};
 function pngDimensions(b:Uint8Array){if(b.length<24||b[0]!==137||b[1]!==80||b[2]!==78||b[3]!==71)return null;const d=new DataView(b.buffer,b.byteOffset,b.byteLength);const w=d.getUint32(16),h=d.getUint32(20);return w&&h?{width:w,height:h}:null}
@@ -34,27 +35,46 @@ export async function createTemplatePreview(input:{bucket:StorageBucket;path:str
 export async function uploadProjectFile(input:{projectId:string;bucket:StorageBucket;file:File}){const{s,uid}=await auth();if(!Object.values(STORAGE_BUCKETS).includes(input.bucket))throw new Error("Invalid storage bucket");if(!input.file.size||input.file.size>LIMITS[input.bucket])throw new Error("File exceeds the allowed size");if(!TYPES[input.bucket].includes(input.file.type))throw new Error("File type is not allowed");const{data:project,error:pe}=await s.from("school_projects").select("id").eq("id",input.projectId).maybeSingle();if(pe)throw new Error(pe.message);if(!project)throw new Error("Project not found");const path=projectObjectPath(uid,input.projectId,input.file.name);const{error}=await s.storage.from(input.bucket).upload(path,input.file,{contentType:input.file.type,upsert:false});if(error)throw new Error(error.message);return{bucket:input.bucket,path}}
 export async function createProjectDownload(input:{bucket:StorageBucket;path:string;expiresIn?:number}){const{s}=await auth();if(!Object.values(STORAGE_BUCKETS).includes(input.bucket))throw new Error("Invalid storage bucket");const{data,error}=await s.storage.from(input.bucket).createSignedUrl(input.path,Math.min(Math.max(input.expiresIn??300,30),3600));if(error)throw new Error(error.message);return data.signedUrl}
 export async function saveTemplateFields(input:{projectId:string;templateId:string;fields:Array<{id?:string;key:string;label:string;field_type:string;required:boolean;x:number;y:number;width:number;height:number;font_family:string|null;font_size:number|null;font_weight:string|null;color:string|null;alignment:string|null;fit_mode:string|null;source_column:string|null;confidence:number|null}>}){const{s,uid}=await auth();const{data:t}=await s.from("templates").select("id").eq("id",input.templateId).eq("project_id",input.projectId).maybeSingle();if(!t)throw new Error("Template not found.");const fields=input.fields.slice(0,100).map((f,i)=>({...f,id:undefined,template_id:input.templateId,owner_id:uid,sort_order:i,x:Math.max(0,f.x),y:Math.max(0,f.y),width:Math.max(1,f.width),height:Math.max(1,f.height),confidence:f.confidence==null?1:Math.min(1,Math.max(0,f.confidence)),render_options:(f as any).render_options??{}}));const{error:de}=await s.from("template_fields").delete().eq("template_id",input.templateId);if(de)throw new Error(de.message);if(fields.length){const{error:ie}=await s.from("template_fields").insert(fields);if(ie)throw new Error(ie.message)}return{saved:fields.length}}
-export async function importStudentRows(input:{projectId:string;rows:Array<{sourceRow:number;serialNumber:string;values:Record<string,string|number|boolean|null>}>;replaceExisting?:boolean}) {
+export async function importStudentRows(input:{projectId:string;rows:Array<{sourceRow:number;serialNumber:string;values:Record<string,string|number|boolean|null>}>;replaceExisting?:boolean;identifierSettings?:StudentIdentifierPolicy}) {
  const {s,uid}=await auth();
  await enforceActionRateLimit(s,"student_import",20,3600);
  if(!input.rows.length) throw new Error("There are no valid student rows to import.");
  if(input.rows.length>15000) throw new Error("Import is limited to 15,000 rows per batch.");
- const {data:project,error:pe}=await s.from("school_projects").select("id").eq("id",input.projectId).maybeSingle();
- if(pe) throw new Error(pe.message); if(!project) throw new Error("Project not found.");
- const normalized=input.rows.map(r=>({source_row:r.sourceRow,serial_number:Number(r.serialNumber),data:r.values,owner_id:uid,project_id:input.projectId}));
- if(normalized.some(r=>!Number.isSafeInteger(r.serial_number)||r.serial_number<0||r.serial_number>2147483647)) throw new Error("Serial numbers must be whole numbers from 0 to 2,147,483,647. Fix invalid rows before importing.");
- const seen=new Set<number>(); for(const r of normalized){if(seen.has(r.serial_number)) throw new Error("Duplicate serial numbers are not allowed. Fix duplicates before importing.");seen.add(r.serial_number);}
- const {data:existing,error:ee}=await s.from("students").select("serial_number").eq("project_id",input.projectId);
+ const {data:project,error:pe}=await s.from("school_projects").select("id,owner_id,student_identifier_settings").eq("id",input.projectId).eq("owner_id",uid).maybeSingle();
+ if(pe) throw new Error(pe.message); if(!project) throw new Error("Project not found or access denied.");
+ const supplied=input.identifierSettings;
+ const policy:StudentIdentifierPolicy = supplied ? {
+   normalization:supplied.normalization==="numeric"?"numeric":"exact",
+   caseSensitive:supplied.caseSensitive!==false,
+   edgeWhitespace:supplied.edgeWhitespace==="trim"?"trim":"reject",
+   maxLength:Number.isInteger(supplied.maxLength)?Math.max(1,Math.min(64,supplied.maxLength)):64
+ } : { ...DEFAULT_STUDENT_IDENTIFIER_POLICY, ...(project.student_identifier_settings??{}) };
+ if(supplied){
+   const {error:settingsError}=await s.from("school_projects").update({student_identifier_settings:policy}).eq("id",input.projectId).eq("owner_id",uid);
+   if(settingsError) throw new Error("Could not save this project's identifier rules. Apply the Phase 24 schema migration before importing.");
+ }
+ const normalized=input.rows.map(r=>{
+   const parsed=canonicalizeStudentIdentifier(r.serialNumber,policy);
+   if(!parsed.ok) throw new Error(`Spreadsheet row ${r.sourceRow}: ${parsed.error}`);
+   return {source_row:r.sourceRow,student_identifier:parsed.value,serial_number:parsed.legacySerialNumber,data:r.values,owner_id:uid,project_id:input.projectId};
+ });
+ const seen=new Set<string>();
+ for(const row of normalized){
+   const key=policy.caseSensitive?row.student_identifier:row.student_identifier.toLocaleLowerCase("en-US");
+   if(seen.has(key)) throw new Error("Duplicate student identifiers are not allowed under this project's configured rules.");
+   seen.add(key);
+ }
+ const {data:existing,error:ee}=await s.from("students").select("student_identifier,serial_number").eq("project_id",input.projectId).eq("owner_id",uid);
  if(ee) throw new Error(ee.message);
- const incoming=new Set(normalized.map(r=>r.serial_number));
- const collisions=(existing??[]).filter(r=>incoming.has(r.serial_number));
- if(collisions.length && !input.replaceExisting) throw new Error(`${collisions.length} serial number(s) already exist in this project. Remove them from the import or explicitly choose replace existing records.`);
+ const existingKeys=new Set((existing??[]).map((r:any)=>String(r.student_identifier??r.serial_number)));
+ const collisions=normalized.filter(r=>existingKeys.has(r.student_identifier));
+ if(collisions.length && !input.replaceExisting) throw new Error(`${collisions.length} student identifier(s) already exist in this project. Remove them from the import or explicitly choose replace existing records.`);
  if(input.replaceExisting) {
-   for(let i=0;i<normalized.length;i+=500) { const {error}=await s.from("students").upsert(normalized.slice(i,i+500),{onConflict:"project_id,serial_number"}); if(error) throw new Error(error.message); }
+   for(let i=0;i<normalized.length;i+=500) { const {error}=await s.from("students").upsert(normalized.slice(i,i+500),{onConflict:"project_id,student_identifier"}); if(error) throw new Error(error.message); }
  } else {
    for(let i=0;i<normalized.length;i+=500) { const {error}=await s.from("students").insert(normalized.slice(i,i+500)); if(error) throw new Error(error.message); }
  }
- await s.from("audit_logs").insert({owner_id:uid,project_id:input.projectId,action:"student_spreadsheet_imported",entity_type:"students",metadata:{count:normalized.length,source:"spreadsheet",replaced:!!input.replaceExisting}});
+ await s.from("audit_logs").insert({owner_id:uid,project_id:input.projectId,action:"student_spreadsheet_imported",entity_type:"students",metadata:{count:normalized.length,source:"spreadsheet",replaced:!!input.replaceExisting,identifier_normalization:policy.normalization}});
  return {imported:normalized.length};
 }
 
