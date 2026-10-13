@@ -18,17 +18,18 @@ begin
   ) then raise exception 'transactional identifier correction RPC is missing'; end if;
   if not exists (
     select 1 from pg_indexes where schemaname='public' and indexname='students_project_student_identifier_key'
-      and replace(indexdef,' ','') like '%(project_id,student_identifier)%'
+      and replace(indexdef,' ','') like '%(project_id,student_identifier_unique)%'
   ) then raise exception 'project-scoped canonical identifier unique index is missing'; end if;
-  if not exists (select 1 from pg_indexes where schemaname='public' and indexname='batch_items_batch_student_identifier_key') then
-    raise exception 'batch item canonical identifier unique index is missing';
+  if not exists (select 1 from pg_indexes where schemaname='public' and indexname='idx_batch_items_batch_student_identifier') then
+    raise exception 'batch item canonical identifier lookup index is missing';
   end if;
-  if not exists (select 1 from pg_indexes where schemaname='public' and indexname='generated_cards_batch_student_identifier_key') then
-    raise exception 'generated card canonical identifier unique index is missing';
+  if not exists (select 1 from pg_indexes where schemaname='public' and indexname='idx_generated_cards_batch_student_identifier') then
+    raise exception 'generated card canonical identifier lookup index is missing';
   end if;
   if not exists (
     select 1 from information_schema.columns where table_schema='public' and table_name='processing_jobs' and column_name='student_identifier' and data_type='text'
   ) then raise exception 'processing_jobs.student_identifier must exist'; end if;
+  if exists (select 1 from pg_indexes where schemaname='public' and indexname='idx_generated_cards_batch_student_identifier' and indexdef ilike 'create unique index%') then raise exception 'generated-card lookup index must allow separate front/back rows'; end if;
   if not exists (select 1 from pg_indexes where schemaname='public' and indexname='idx_processing_jobs_batch_identifier') then
     raise exception 'processing job canonical identifier lookup index is missing';
   end if;
