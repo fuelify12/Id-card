@@ -34,9 +34,9 @@ Migration: `supabase/migrations/20261013120000_phase24_canonical_student_identif
 - Canonical uniqueness is enforced by the project-scoped unique index `(project_id, student_identifier_unique)`. Batch-item, generated-card, photo, and job identifier columns have non-unique lookup indexes because retries and front/back card rows can legitimately share an identifier. The persisted comparison key applies each project's case and numeric-normalization policy; existing integer indexes remain for old readers.
 - Compatibility triggers fill missing text snapshots from existing integer values for old numeric writers; they never infer lost zero padding. New spreadsheet imports are tagged `spreadsheet` and do not require legacy review.
 - The `correct_student_identifier` RPC runs as the authenticated invoker, checks project ownership, validates uniqueness and normalization, refuses changes during active processing, updates the student and its associated photo identifier snapshots in one transaction, refreshes pending batch/job snapshots, and invalidates previously succeeded batch items for regeneration. Historical generated-card metadata remains a snapshot and is not silently rewritten.
-- Batch item, processing-job, and generated-card snapshots carry the canonical text identifier. The existing worker-claim function was intentionally left unchanged to avoid replacing unverified retry/lease logic; its numeric sort order remains a non-identity presentation detail.
+- Batch item, processing-job, and generated-card snapshots carry the canonical text identifier. A separate worker migration preserves the existing invoker-security checks, batch ownership checks, five-minute lease recovery, maximum-attempt handling, and row locking; it changes only deterministic claim ordering to prefer the canonical text identifier with the legacy integer as fallback.
 - Check constraints are added `NOT VALID` to enforce new writes without forcing a production data rewrite during migration.
-- The migration is transactional and rerunnable for columns, indexes, constraints, and triggers. The worker-claim function is not replaced by this phase.
+- Each migration is transactional and rerunnable where appropriate. The worker-claim migration is limited to the existing claim function and retains its lease-recovery and retry behavior.
 
 ### Rollout and rollback
 
