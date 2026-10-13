@@ -61,11 +61,12 @@ export async function importStudentRows(input:{projectId:string;rows:Array<{sour
  }
  const existing:any[]=[];
  for(let from=0;from<15000;from+=1000){
-   const {data,error}=await s.from("students").select("student_identifier,serial_number").eq("project_id",input.projectId).eq("owner_id",uid).range(from,from+999);
+   const {data,error}=await s.from("students").select("student_identifier,student_identifier_review_required,serial_number").eq("project_id",input.projectId).eq("owner_id",uid).range(from,from+999);
    if(error) throw new Error(error.message);
    existing.push(...(data??[]));
    if((data??[]).length<1000) break;
  }
+ if(existing.some((r:any)=>r.student_identifier_review_required)) throw new Error("Review or correct the existing legacy student identifiers in this project before importing more rows. This prevents a recovered leading-zero identifier from creating a second student record.");
  if(supplied && existing.length && (
    currentPolicy.normalization!==policy.normalization ||
    currentPolicy.edgeWhitespace!==policy.edgeWhitespace ||
