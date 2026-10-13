@@ -59,7 +59,7 @@ export async function importStudentRows(input:{projectId:string;rows:Array<{sour
 }
 
 
-import { assertPhotoAssignmentProject, parsePhotoFilename, proposePhotoMatch } from "@/lib/photos/matching";
+import { assertDuplicatePhotoAssignment, assertPhotoAssignmentProject, parsePhotoFilename, proposePhotoMatch } from "@/lib/photos/matching";
 import { inspectPhotoBuffer } from "@/lib/photos/image-validation";
 const PHOTO_MAX_BYTES = 10 * 1024 * 1024;
 const PHOTO_MAX_FILES = 500;
@@ -180,16 +180,17 @@ export async function setPhotoSerialPrefix(input:{projectId:string;prefix:string
  if(prefix&&!/^[A-Z][A-Z0-9_-]{0,15}$/.test(prefix))throw new Error("Prefix must start with a letter and contain only letters, digits, _ or - (maximum 16 characters).");
  const {error}=await s.from("school_projects").update({photo_serial_prefix:prefix,updated_at:new Date().toISOString()}).eq("id",input.projectId).eq("owner_id",uid);if(error)throw new Error(error.message);return {prefix};
 }
-export async function assignStudentPhoto(input:{projectId:string;photoId:string;studentId:string|null;replaceApproved?:boolean}) {
+export async function assignStudentPhoto(input:{projectId:string;photoId:string;studentId:string|null;replaceApproved?:boolean;confirmDuplicate?:boolean}) {
  const {s,uid}=await auth();await getOwnedProject(s,input.projectId,uid);
- const {data:photo,error:pe}=await s.from("student_photos").select("id,project_id,student_id,match_status,storage_path").eq("id",input.photoId).eq("project_id",input.projectId).eq("owner_id",uid).maybeSingle();if(pe)throw new Error(pe.message);if(!photo)throw new Error("Photo not found.");
- if(input.studentId===null){const {error}=await s.from("student_photos").update({student_id:null,serial_number:null,match_status:"UNMATCHED",approved_at:null,approved_by:null,matching_method:"manual_clear",updated_at:new Date().toISOString()}).eq("id",photo.id).eq("project_id",input.projectId);if(error)throw new Error(error.message);return {status:"UNMATCHED"};}
+ const {data:photo,error:pe}=await s.from("student_photos").select("id,project_id,student_id,match_status,storage_path,duplicate_of_id").eq("id",input.photoId).eq("project_id",input.projectId).eq("owner_id",uid).maybeSingle();if(pe)throw new Error(pe.message);if(!photo)throw new Error("Photo not found.");
+ if(input.studentId===null){const {error}=await s.from("student_photos").update({student_id:null,serial_number:null,match_status:(photo.match_status==="DUPLICATE"||photo.duplicate_of_id)?"DUPLICATE":"UNMATCHED",approved_at:null,approved_by:null,matching_method:"manual_clear",updated_at:new Date().toISOString()}).eq("id",photo.id).eq("project_id",input.projectId);if(error)throw new Error(error.message);return {status:"UNMATCHED"};}
+ assertDuplicatePhotoAssignment(photo.match_status,photo.duplicate_of_id,input.confirmDuplicate===true);
  const {data:student,error:se}=await s.from("students").select("id,project_id,serial_number").eq("id",input.studentId).eq("project_id",input.projectId).eq("owner_id",uid).maybeSingle();if(se)throw new Error(se.message);if(!student)throw new Error("Student does not belong to this school project.");assertPhotoAssignmentProject(input.projectId,photo.project_id,student.project_id);
  const {data:approved,error:ae}=await s.from("student_photos").select("id").eq("project_id",input.projectId).eq("student_id",student.id).eq("match_status","APPROVED").neq("id",photo.id).limit(1);if(ae)throw new Error(ae.message);
  if((approved??[]).length&&!input.replaceApproved)throw new Error("This student already has an approved photo. Confirm replacement to continue.");
  if((approved??[]).length&&input.replaceApproved){const {error}=await s.from("student_photos").update({student_id:null,serial_number:null,match_status:"NEEDS_REVIEW",approved_at:null,approved_by:null,validation_errors:["Previously approved photo replaced by user confirmation."],updated_at:new Date().toISOString()}).eq("id",approved![0].id).eq("project_id",input.projectId);if(error)throw new Error(error.message);}
  const status=input.replaceApproved?"APPROVED":"MATCHED";
- const {error}=await s.from("student_photos").update({student_id:student.id,serial_number:student.serial_number,normalized_serial_number:String(student.serial_number),match_status:status,matching_method:"manual",approved_at:status==="APPROVED"?new Date().toISOString():null,approved_by:status==="APPROVED"?uid:null,updated_at:new Date().toISOString()}).eq("id",photo.id).eq("project_id",input.projectId);if(error)throw new Error(error.message);return {status};
+ const {error}=await s.from("student_photos").update({student_id:student.id,serial_number:student.serial_number,normalized_serial_number:String(student.serial_number),match_status:status,matching_method:input.confirmDuplicate?"manual_duplicate_confirmed":"manual",duplicate_of_id:input.confirmDuplicate?null:photo.duplicate_of_id,validation_errors:input.confirmDuplicate?["Duplicate file content explicitly reviewed and accepted by the user."]:[],approved_at:status==="APPROVED"?new Date().toISOString():null,approved_by:status==="APPROVED"?uid:null,updated_at:new Date().toISOString()}).eq("id",photo.id).eq("project_id",input.projectId);if(error)throw new Error(error.message);return {status};
 }
 export async function approveStudentPhoto(input:{projectId:string;photoId:string;replaceApproved?:boolean}) {
  const {s,uid}=await auth();await getOwnedProject(s,input.projectId,uid);
