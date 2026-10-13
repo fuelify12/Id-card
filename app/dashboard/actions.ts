@@ -86,7 +86,7 @@ function safePhotoFilename(name:string) {
  return base.slice(0,180).replace(/[^a-zA-Z0-9._ -]/g,"_")||"photo";
 }
 async function getOwnedProject(s:Awaited<ReturnType<typeof createClient>>, projectId:string, uid:string) {
- const {data,error}=await s.from("school_projects").select("id,photo_serial_prefix").eq("id",projectId).eq("owner_id",uid).maybeSingle();
+ const {data,error}=await s.from("school_projects").select("id,photo_serial_prefix,student_identifier_settings").eq("id",projectId).eq("owner_id",uid).maybeSingle();
  if(error) throw new Error(error.message);
  if(!data) throw new Error("Project not found or access denied.");
  return data;
@@ -137,9 +137,10 @@ export async function registerStudentPhoto(input:{projectId:string;batchId:strin
  const {data:dupes,error:he}=await s.from("student_photos").select("id,match_status").eq("project_id",input.projectId).eq("content_sha256",hash).limit(10);
  if(he) throw new Error(he.message);
  const duplicateRows=(dupes??[]).filter(d=>!["INVALID_FILE","UPLOAD_FAILED"].includes(d.match_status));
- const filenameMatch=parsePhotoFilename(input.originalFilename,project.photo_serial_prefix);
- const students: {id:string;serial_number:number}[]=[];
- for(let from=0;from<15000;from+=1000){const {data,error}=await s.from("students").select("id,serial_number").eq("project_id",input.projectId).eq("owner_id",uid).range(from,from+999);if(error)throw new Error(error.message);students.push(...(data??[]));if((data??[]).length<1000)break;}
+ const identifierPolicy=studentIdentifierPolicyFromConfig(project.student_identifier_settings);
+ const filenameMatch=parsePhotoFilename(input.originalFilename,project.photo_serial_prefix,identifierPolicy);
+ const students: {id:string;serial_number:number|null;student_identifier:string|null}[]=[];
+ for(let from=0;from<15000;from+=1000){const {data,error}=await s.from("students").select("id,serial_number,student_identifier").eq("project_id",input.projectId).eq("owner_id",uid).range(from,from+999);if(error)throw new Error(error.message);students.push(...(data??[]));if((data??[]).length<1000)break;}
  const proposal=proposePhotoMatch(filenameMatch,students,duplicateRows.length>0);
  let status=proposal.status,studentId=proposal.studentId;
  const errors=proposal.reason?[proposal.reason]:[];
@@ -148,7 +149,7 @@ export async function registerStudentPhoto(input:{projectId:string;batchId:strin
   if(error) throw new Error(error.message);
   if((existing??[]).length){status="NEEDS_REVIEW";errors.push("Another photo is already proposed or approved for this student; choose the correct photo manually.");}
  }
- const {data:photo,error:ie}=await s.from("student_photos").insert({owner_id:uid,project_id:input.projectId,batch_id:input.batchId,student_id:studentId,serial_number:proposal.serialNumber,original_filename:displayPhotoFilename(input.originalFilename),original_serial_number:filenameMatch.status==="EXACT"?filenameMatch.originalSerial:filenameMatch.originalSerial,normalized_serial_number:proposal.normalizedSerial,storage_path:input.storagePath,mime_type:mime!,width_px:width,height_px:height,file_size_bytes:bytes.length,content_sha256:hash,matching_method:proposal.matchingMethod,match_status:status,validation_errors:errors,crop_settings:{},duplicate_of_id:duplicateRows[0]?.id??null}).select("id,match_status").single();
+ const {data:photo,error:ie}=await s.from("student_photos").insert({owner_id:uid,project_id:input.projectId,batch_id:input.batchId,student_id:studentId,serial_number:proposal.serialNumber,student_identifier:proposal.studentIdentifier,original_filename:displayPhotoFilename(input.originalFilename),original_serial_number:filenameMatch.originalSerial,normalized_serial_number:proposal.normalizedSerial,storage_path:input.storagePath,mime_type:mime!,width_px:width,height_px:height,file_size_bytes:bytes.length,content_sha256:hash,matching_method:proposal.matchingMethod,match_status:status,validation_errors:errors,crop_settings:{},duplicate_of_id:duplicateRows[0]?.id??null}).select("id,match_status").single();
  if(ie) throw new Error(ie.message);
  const {data:hashRows,error:hre}=await s.from("student_photos").select("id,match_status,created_at").eq("project_id",input.projectId).eq("content_sha256",hash).order("created_at",{ascending:true}).order("id",{ascending:true}).limit(20);
  if(hre) throw new Error(hre.message);
@@ -178,8 +179,8 @@ export async function finishPhotoBatch(input:{projectId:string;batchId:string;fa
 }
 export async function loadPhotoWorkspace(projectId:string) {
  const {s,uid}=await auth();await getOwnedProject(s,projectId,uid);
- const students: {id:string;serial_number:number;data:Record<string,unknown>}[]=[];
- for(let from=0;from<15000;from+=1000){const {data,error}=await s.from("students").select("id,serial_number,data").eq("project_id",projectId).eq("owner_id",uid).order("serial_number").range(from,from+999);if(error)throw new Error(error.message);students.push(...((data??[]) as typeof students));if((data??[]).length<1000)break;}
+ const students: {id:string;serial_number:number|null;student_identifier:string|null;data:Record<string,unknown>}[]=[];
+ for(let from=0;from<15000;from+=1000){const {data,error}=await s.from("students").select("id,serial_number,student_identifier,data").eq("project_id",projectId).eq("owner_id",uid).order("student_identifier").range(from,from+999);if(error)throw new Error(error.message);students.push(...((data??[]) as typeof students));if((data??[]).length<1000)break;}
  const {data:photos,error:pe}=await s.from("student_photos").select("id,student_id,serial_number,original_filename,original_serial_number,normalized_serial_number,storage_path,processed_storage_path,processing_status,processing_warnings,crop_coordinates,original_width_px,original_height_px,output_width_px,output_height_px,face_count,processing_error_code,mime_type,width_px,height_px,file_size_bytes,content_sha256,matching_method,match_status,validation_errors,duplicate_of_id,batch_id,approved_at,created_at").eq("project_id",projectId).eq("owner_id",uid).order("created_at",{ascending:false}).limit(1000);if(pe)throw new Error(pe.message);
  const rows=photos??[];
  const paths=rows.filter(p=>!["INVALID_FILE","UPLOAD_FAILED"].includes(p.match_status)).flatMap(p=>[p.storage_path,...(p.processed_storage_path?[p.processed_storage_path]:[])]);
@@ -198,14 +199,14 @@ export async function setPhotoSerialPrefix(input:{projectId:string;prefix:string
 export async function assignStudentPhoto(input:{projectId:string;photoId:string;studentId:string|null;replaceApproved?:boolean;confirmDuplicate?:boolean}) {
  const {s,uid}=await auth();await getOwnedProject(s,input.projectId,uid);
  const {data:photo,error:pe}=await s.from("student_photos").select("id,project_id,student_id,match_status,storage_path,duplicate_of_id").eq("id",input.photoId).eq("project_id",input.projectId).eq("owner_id",uid).maybeSingle();if(pe)throw new Error(pe.message);if(!photo)throw new Error("Photo not found.");
- if(input.studentId===null){const {error}=await s.from("student_photos").update({student_id:null,serial_number:null,match_status:(photo.match_status==="DUPLICATE"||photo.duplicate_of_id)?"DUPLICATE":"UNMATCHED",approved_at:null,approved_by:null,matching_method:"manual_clear",updated_at:new Date().toISOString()}).eq("id",photo.id).eq("project_id",input.projectId);if(error)throw new Error(error.message);return {status:"UNMATCHED"};}
+ if(input.studentId===null){const {error}=await s.from("student_photos").update({student_id:null,serial_number:null,student_identifier:null,match_status:(photo.match_status==="DUPLICATE"||photo.duplicate_of_id)?"DUPLICATE":"UNMATCHED",approved_at:null,approved_by:null,matching_method:"manual_clear",updated_at:new Date().toISOString()}).eq("id",photo.id).eq("project_id",input.projectId);if(error)throw new Error(error.message);return {status:"UNMATCHED"};}
  assertDuplicatePhotoAssignment(photo.match_status,photo.duplicate_of_id,input.confirmDuplicate===true);
- const {data:student,error:se}=await s.from("students").select("id,project_id,serial_number").eq("id",input.studentId).eq("project_id",input.projectId).eq("owner_id",uid).maybeSingle();if(se)throw new Error(se.message);if(!student)throw new Error("Student does not belong to this school project.");assertPhotoAssignmentProject(input.projectId,photo.project_id,student.project_id);
+ const {data:student,error:se}=await s.from("students").select("id,project_id,serial_number,student_identifier").eq("id",input.studentId).eq("project_id",input.projectId).eq("owner_id",uid).maybeSingle();if(se)throw new Error(se.message);if(!student)throw new Error("Student does not belong to this school project.");assertPhotoAssignmentProject(input.projectId,photo.project_id,student.project_id);
  const {data:approved,error:ae}=await s.from("student_photos").select("id").eq("project_id",input.projectId).eq("student_id",student.id).eq("match_status","APPROVED").neq("id",photo.id).limit(1);if(ae)throw new Error(ae.message);
  if((approved??[]).length&&!input.replaceApproved)throw new Error("This student already has an approved photo. Confirm replacement to continue.");
  if((approved??[]).length&&input.replaceApproved){const {error}=await s.from("student_photos").update({student_id:null,serial_number:null,match_status:"NEEDS_REVIEW",approved_at:null,approved_by:null,validation_errors:["Previously approved photo replaced by user confirmation."],updated_at:new Date().toISOString()}).eq("id",approved![0].id).eq("project_id",input.projectId);if(error)throw new Error(error.message);}
  const status=input.replaceApproved?"APPROVED":"MATCHED";
- const {error}=await s.from("student_photos").update({student_id:student.id,serial_number:student.serial_number,normalized_serial_number:String(student.serial_number),match_status:status,matching_method:input.confirmDuplicate?"manual_duplicate_confirmed":"manual",duplicate_of_id:input.confirmDuplicate?null:photo.duplicate_of_id,validation_errors:input.confirmDuplicate?["Duplicate file content explicitly reviewed and accepted by the user."]:[],approved_at:status==="APPROVED"?new Date().toISOString():null,approved_by:status==="APPROVED"?uid:null,updated_at:new Date().toISOString()}).eq("id",photo.id).eq("project_id",input.projectId);if(error)throw new Error(error.message);return {status};
+ const {error}=await s.from("student_photos").update({student_id:student.id,serial_number:student.serial_number,student_identifier:student.student_identifier??String(student.serial_number),normalized_serial_number:student.student_identifier??String(student.serial_number),match_status:status,matching_method:input.confirmDuplicate?"manual_duplicate_confirmed":"manual",duplicate_of_id:input.confirmDuplicate?null:photo.duplicate_of_id,validation_errors:input.confirmDuplicate?["Duplicate file content explicitly reviewed and accepted by the user."]:[],approved_at:status==="APPROVED"?new Date().toISOString():null,approved_by:status==="APPROVED"?uid:null,updated_at:new Date().toISOString()}).eq("id",photo.id).eq("project_id",input.projectId);if(error)throw new Error(error.message);return {status};
 }
 export async function approveStudentPhoto(input:{projectId:string;photoId:string;replaceApproved?:boolean}) {
  const {s,uid}=await auth();await getOwnedProject(s,input.projectId,uid);
@@ -219,8 +220,9 @@ export async function approveStudentPhoto(input:{projectId:string;photoId:string
 
 export async function processPhotoMatches(projectId:string) {
  const {s,uid}=await auth();const project=await getOwnedProject(s,projectId,uid);
- const students:{id:string;serial_number:number}[]=[];
- for(let from=0;from<15000;from+=1000){const {data,error}=await s.from("students").select("id,serial_number").eq("project_id",projectId).eq("owner_id",uid).range(from,from+999);if(error)throw new Error(error.message);students.push(...(data??[]));if((data??[]).length<1000)break;}
+ const students:{id:string;serial_number:number|null;student_identifier:string|null}[]=[];
+ const identifierPolicy=studentIdentifierPolicyFromConfig(project.student_identifier_settings);
+ for(let from=0;from<15000;from+=1000){const {data,error}=await s.from("students").select("id,serial_number,student_identifier").eq("project_id",projectId).eq("owner_id",uid).range(from,from+999);if(error)throw new Error(error.message);students.push(...(data??[]));if((data??[]).length<1000)break;}
  const {data:photos,error:pe}=await s.from("student_photos").select("id,student_id,serial_number,original_filename,normalized_serial_number,content_sha256,matching_method,match_status").eq("project_id",projectId).eq("owner_id",uid).in("match_status",["UPLOADED","NEEDS_REVIEW","UNMATCHED"]).order("created_at",{ascending:true}).limit(PHOTO_MAX_FILES);
  if(pe)throw new Error(pe.message);
  const {data:assigned,error:ae}=await s.from("student_photos").select("id,student_id,content_sha256,match_status").eq("project_id",projectId).eq("owner_id",uid).in("match_status",["MATCHED","APPROVED"]).limit(PHOTO_MAX_FILES);
@@ -228,13 +230,13 @@ export async function processPhotoMatches(projectId:string) {
  const eligible=(photos??[]).filter(p=>p.matching_method!=="manual");
  let matched=0,review=0,unmatched=0,duplicates=0,processed=0;
  const updates=eligible.map(p=>{
-  const fm=parsePhotoFilename(p.original_filename,project.photo_serial_prefix);
+  const fm=parsePhotoFilename(p.original_filename,project.photo_serial_prefix,identifierPolicy);
   const duplicate=(assigned??[]).some(other=>other.id!==p.id&&p.content_sha256&&other.content_sha256===p.content_sha256);
   const proposal=proposePhotoMatch(fm,students,duplicate);
   let status=proposal.status,studentId=proposal.studentId;const errors=proposal.reason?[proposal.reason]:[];
   if(status==="MATCHED"&&studentId&&(assigned??[]).some(other=>other.id!==p.id&&other.student_id===studentId&&["MATCHED","APPROVED"].includes(other.match_status))){status="NEEDS_REVIEW";errors.push("Another photo is already proposed or approved for this student; choose the correct photo manually.");}
   if(status==="MATCHED")matched++;else if(status==="NEEDS_REVIEW")review++;else if(status==="UNMATCHED")unmatched++;else if(status==="DUPLICATE")duplicates++;
-  return {id:p.id,student_id:studentId,serial_number:proposal.serialNumber,normalized_serial_number:proposal.normalizedSerial,matching_method:proposal.matchingMethod,match_status:status,validation_errors:errors};
+  return {id:p.id,student_id:studentId,serial_number:proposal.serialNumber,student_identifier:proposal.studentIdentifier,normalized_serial_number:proposal.normalizedSerial,matching_method:proposal.matchingMethod,match_status:status,validation_errors:errors};
  });
  for(let i=0;i<updates.length;i+=10){const results=await Promise.all(updates.slice(i,i+10).map(async u=>{const {error}=await s.from("student_photos").update({...u,updated_at:new Date().toISOString()}).eq("id",u.id).eq("project_id",projectId).eq("owner_id",uid);if(error)throw new Error(error.message);return 1;}));processed+=results.length;}
  return {processed,matched,needsReview:review,unmatched,duplicates};
