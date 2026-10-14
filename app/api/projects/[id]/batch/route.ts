@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { validateStudents, validateTemplateConfiguration } from "@/lib/validation/engine";
 import { consumeRateLimit } from "@/lib/security/rate-limit";
-import { reconcileBatchItemStatuses, retryDelayMs } from "@/lib/batch/recovery";
+import { reconcileBatchItemStatuses, retryDelayMs, validatePersistedBatchArtifact } from "@/lib/batch/recovery";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -254,8 +254,18 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
             const retry = !permanent && Number(item.attempts) < Number(item.max_attempts);
             await db.from("batch_generation_items").update({ status: retry ? "PENDING" : permanent ? "NEEDS_REVIEW" : "FAILED", available_at: new Date(Date.now() + retryDelayMs(Number(item.attempts))).toISOString(), error_category: permanent ? "validation" : renderResponse.status === 413 ? "resource_limit" : "rendering", error_summary: String(result.error ?? "Card renderer returned an invalid result.").slice(0, 500), claimed_by: null, claimed_at: null, heartbeat_at: new Date().toISOString(), ...(retry ? {} : { completed_at: new Date().toISOString() }) }).eq("id", item.id).eq("status", "PROCESSING");
           } else {
-            const { data: card } = await db.from("generated_cards").select("storage_path,render_input_hash,status,validation_status,output_sha256,output_width_px,output_height_px,template_id,template_version,photo_id,photo_version").eq("id", result.cardId).eq("project_id", projectId).eq("student_id", item.student_id).maybeSingle();
-            if (!card?.storage_path || !card.render_input_hash || !card.output_sha256 || card.status !== "generated" || card.template_id !== batch.template_id || Number(card.template_version) !== Number(batch.template_version)) throw new Error("Renderer output record failed persisted-output validation.");
+            const { data: card, error: cardError } = await db.from("generated_cards").select("student_id,serial_number,student_identifier,storage_path,render_input_hash,status,validation_status,output_sha256,output_width_px,output_height_px,template_id,template_version,photo_id,photo_version").eq("id", result.cardId).eq("project_id", projectId).eq("student_id", item.student_id).maybeSingle();
+            if (cardError) throw new Error("Could not verify the persisted renderer output.");
+            const artifactIssues = validatePersistedBatchArtifact(item, card, batch);
+            if (artifactIssues.length) {
+              await db.from("batch_generation_items").update({
+                status: "NEEDS_REVIEW", output_card_id: card ? result.cardId : null,
+                error_category: "integrity", error_summary: artifactIssues.join(" ").slice(0, 500),
+                completed_at: new Date().toISOString(), claimed_by: null, claimed_at: null,
+                heartbeat_at: new Date().toISOString(),
+              }).eq("id", item.id).eq("status", "PROCESSING");
+              return;
+            }
             if (card.validation_status === "failed") {
               await db.from("batch_generation_items").update({ status: "FAILED", output_card_id: result.cardId, output_storage_path: card.storage_path, input_fingerprint: card.render_input_hash, error_category: "validation", error_summary: "Critical or error-level validation findings block production.", completed_at: new Date().toISOString(), claimed_by: null, claimed_at: null, heartbeat_at: new Date().toISOString() }).eq("id", item.id).eq("status", "PROCESSING");
               return;

@@ -91,6 +91,77 @@ export function reconcileBatchItemStatuses(
   return { ...counts, status };
 }
 
+export type PersistedBatchArtifact = {
+  student_id?: string | null;
+  serial_number?: number | string | null;
+  student_identifier?: string | null;
+  storage_path?: string | null;
+  render_input_hash?: string | null;
+  status?: string | null;
+  output_sha256?: string | null;
+  output_width_px?: number | null;
+  output_height_px?: number | null;
+  template_id?: string | null;
+  template_version?: number | string | null;
+  photo_id?: string | null;
+  photo_version?: number | null;
+};
+export type BatchArtifactExpectation = {
+  student_id: string;
+  serial_number?: number | string | null;
+  student_identifier?: string | null;
+};
+export type BatchTemplateExpectation = { template_id: string; template_version: number | string };
+
+/**
+ * Validate the persisted renderer result before marking a work item successful.
+ * This is intentionally strict: an identity/template/hash mismatch is a review
+ * outcome, not a success that can leak into an export.
+ */
+export function validatePersistedBatchArtifact(
+  item: BatchArtifactExpectation,
+  card: PersistedBatchArtifact | null | undefined,
+  batch: BatchTemplateExpectation,
+): string[] {
+  const reasons: string[] = [];
+  if (!card) return ["The renderer did not persist a generated-card record."];
+  const expectedIdentifier = String(item.student_identifier ?? item.serial_number ?? "");
+  const actualIdentifier = String(card.student_identifier ?? card.serial_number ?? "");
+  if (!expectedIdentifier || actualIdentifier !== expectedIdentifier) {
+    reasons.push("The persisted card identifier does not exactly match the batch item.");
+  }
+  if (!card.student_id || card.student_id !== item.student_id) {
+    reasons.push("The persisted card is not associated with the expected student.");
+  }
+  if (card.status !== "generated") reasons.push("The persisted card is not in generated state.");
+  if (!card.storage_path || card.storage_path.startsWith("/") || card.storage_path.includes("\\") ||
+      card.storage_path.split("/").some((part) => part === "." || part === "..") ||
+      /^[a-z]+:\/\//i.test(card.storage_path)) {
+    reasons.push("The persisted card storage path is missing or unsafe.");
+  }
+  if (!card.render_input_hash || !/^[a-f0-9]{64}$/i.test(card.render_input_hash)) {
+    reasons.push("The persisted render-input fingerprint is missing or invalid.");
+  }
+  if (!card.output_sha256 || !/^[a-f0-9]{64}$/i.test(card.output_sha256)) {
+    reasons.push("The persisted output SHA-256 is missing or invalid.");
+  }
+  if (!Number.isFinite(Number(card.output_width_px)) || Number(card.output_width_px) <= 0 ||
+      !Number.isFinite(Number(card.output_height_px)) || Number(card.output_height_px) <= 0) {
+    reasons.push("The persisted card dimensions are missing or invalid.");
+  }
+  if (card.template_id !== batch.template_id ||
+      Number(card.template_version) !== Number(batch.template_version)) {
+    reasons.push("The persisted card does not match the selected template version.");
+  }
+  if (card.photo_id && (!Number.isInteger(Number(card.photo_version)) || Number(card.photo_version) < 1)) {
+    reasons.push("The persisted photo association has no valid photo version.");
+  }
+  if (!card.photo_id && card.photo_version != null) {
+    reasons.push("A photo version exists without a persisted photo association.");
+  }
+  return reasons;
+}
+
 /** Exponential retry delay, capped at one minute. Attempt 1 waits one second. */
 export function retryDelayMs(attempts: number): number {
   const normalized = Number.isFinite(attempts) ? Math.max(1, Math.floor(attempts)) : 1;

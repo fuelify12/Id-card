@@ -1,0 +1,65 @@
+name: Phase 25 batch integrity and full regression
+
+on:
+  push:
+    branches:
+      - phase-25-batch-generation-acceptance
+  pull_request:
+    branches:
+      - phase-24-canonical-student-identifiers
+    paths:
+      - "app/api/projects/**"
+      - "components/auth/**"
+      - "components/projects/create-project-form.tsx"
+      - "postcss.config.mjs"
+      - "lib/batch/**"
+      - "lib/exports/**"
+      - "lib/identifiers/**"
+      - "lib/photos/**"
+      - "lib/rendering/**"
+      - "lib/validation/**"
+      - "supabase/migrations/**"
+      - "supabase/tests/**"
+      - "tests/**"
+      - "docs/phase25-batch-generation-acceptance.md"
+      - ".github/workflows/phase25-batch-generation.yml"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase25-batch-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Full regression, artifact integrity, types, lint, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps --no-audit --no-fund
+      - name: Production dependency vulnerability gate
+        run: npm audit --omit=dev --audit-level=high
+      - name: Repository security checks
+        run: node scripts/security-check.mjs
+      - name: Full regression tests
+        run: npm test
+      - name: TypeScript
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Production build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_only_placeholder
+        run: npm run build
+      - name: Client bundle secret exposure check
+        run: node scripts/client-bundle-security-check.mjs
