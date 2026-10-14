@@ -32,7 +32,7 @@ The snapshot is sourced from current read-only catalogs: 15 public tables, 285 p
 - All tracked files under `supabase/migrations` have a timestamped `YYYYMMDDHHMMSS_name.sql` form and are checked for strictly increasing, unique versions by `scripts/phase28-migration-contract-check.mjs`.
 - The authoritative Phase 1 baseline is absent.
 - Several foundational changes exist as `supabase/phase*.sql` files outside the canonical migration directory, so a fresh `supabase migration up` from an empty database is not a complete replay of historical Phases 1–24.
-- The isolated clone was made usable from the current-schema snapshot rather than pretending the historical migration chain had been replayed.
+- The isolated clone was made usable from the current-schema snapshot rather than pretending the historical migration chain had been replayed. The custom `ensure_rls` DDL event trigger was also restored and verified in the isolated project; it enables RLS on future public tables.
 - Applied next on the isolated clone: `phase19_export_download_audit_rpc`, `phase24_canonical_student_identifiers`, `phase24_identifier_correction_rpc`, and `phase24_worker_identifier_ordering`. Each individual migration returned success.
 
 CI now checks migration filename/order conventions, schema-snapshot object counts, index-before-FK ordering, RLS/bucket statements, policy/trigger counts, and the snapshot's explicit non-original provenance. Default strict mode fails when the original baseline is missing; CI's documented `--allow-recovery-snapshot` mode permits the alternative path while keeping the warning visible.

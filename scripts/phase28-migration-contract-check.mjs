@@ -88,8 +88,8 @@ const chunkEventTrigger = read(join(chunkDir, "07_rls_event_trigger.sql"), "cust
 requireThat(count(chunkTables, /^\s*create table public\./gim) === 15, "Recovery tables chunk must define exactly 15 public tables.");
 requireThat(count(chunkIndexes, /^\s*create (?:unique )?index if not exists /gim) === 67, "Recovery index chunk must preserve all 67 source index definitions.");
 requireThat(count(chunkIndexes, /^\s*alter table public\..* add constraint .* foreign key /gim) === 64, "Recovery constraint chunk must preserve all 64 source foreign keys.");
-const firstIndexStatement = chunkIndexes.search(/^\\s*create (?:unique )?index if not exists /im);
-const firstForeignKey = chunkIndexes.search(/^\\s*alter table public\\..* add constraint .* foreign key /im);
+const firstIndexStatement = chunkIndexes.search(/^\s*create (?:unique )?index if not exists /im);
+const firstForeignKey = chunkIndexes.search(/^\s*alter table public\..* add constraint .* foreign key /im);
 requireThat(firstIndexStatement >= 0 && firstForeignKey >= 0 && firstIndexStatement < firstForeignKey,
   "All indexes must be created before dependent foreign keys on a fresh database.");
 requireThat(count(chunkFunctions, /^\s*create or replace function public\./gim) === 14, "Recovery routine chunk must define all 14 source routines.");
@@ -99,7 +99,7 @@ requireThat(count(chunkRls, /^\s*insert into storage\.buckets /gim) === 5, "Reco
 requireThat(count(chunkPolicies, /^\s*create policy /gim) === 27, "Recovery must preserve all 27 current policies.");
 requireThat(count(chunkPolicies, /^\s*create trigger /gim) === 15, "Recovery must preserve all 15 current triggers.");
 requireThat(count(chunkEventTrigger, /^\s*create event trigger ensure_rls/gim) === 1, "Recovery must restore the custom ensure_rls event trigger.");
-requireThat(/public\.security_rate_limits/i.test(chunkTables), "Rate-limit table is missing from the recovered schema.");
+requireThat(/create table public\."?security_rate_limits"?/i.test(chunkTables), "Rate-limit table is missing from the recovered schema.");
 requireThat(/printforge-exports[^\n]*false|\('printforge-exports'[^\n]*false/i.test(chunkRls),
   "Export bucket must remain private in the recovered schema.");
 
