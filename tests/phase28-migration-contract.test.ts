@@ -54,4 +54,17 @@ describe("Phase 28 migration-recovery contract", () => {
     expect(result.stdout + result.stderr).toMatch(/historical.*baseline|Phase 1/i);
     expect(result.stdout + result.stderr).toMatch(/Phase 28 migration contract checks: PASS/i);
   });
+  it("ships repeatable isolated SQL assertions for tenant, anonymous, and RLS-trigger behavior", () => {
+    const tenant = read("supabase/recovery/tests/phase28_tenant_isolation.sql");
+    const anonymous = read("supabase/recovery/tests/phase28_anonymous_access.sql");
+    const eventTrigger = read("supabase/recovery/tests/phase28_ensure_rls_event_trigger.sql");
+    expect(tenant).toMatch(/set local role authenticated/i);
+    expect(tenant).toMatch(/request\.jwt\.claim\.sub/i);
+    expect(tenant).toMatch(/rollback;/i);
+    expect(anonymous).toMatch(/set local role anon/i);
+    expect(anonymous).toMatch(/rollback;/i);
+    expect(eventTrigger).toMatch(/create table public\.phase28_rls_event_trigger_probe/i);
+    expect(eventTrigger).toMatch(/rollback;/i);
+  });
+
 });

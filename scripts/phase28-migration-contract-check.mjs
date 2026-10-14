@@ -86,6 +86,9 @@ requireThat(count(chunkPrivileges, /^\s*grant .* on table public\./gim) === 29, 
 const chunkRls = read(join(chunkDir, "05_rls_and_private_buckets.sql"), "RLS/buckets chunk");
 const chunkPolicies = read(join(chunkDir, "06_policies_and_triggers.sql"), "policies/triggers chunk");
 const chunkEventTrigger = read(join(chunkDir, "07_rls_event_trigger.sql"), "custom RLS event trigger chunk");
+const tenantIsolationSql = read(join(recoveryDir, "tests/phase28_tenant_isolation.sql"), "Tenant A/B RLS acceptance SQL");
+const anonymousAccessSql = read(join(recoveryDir, "tests/phase28_anonymous_access.sql"), "anonymous-access denial SQL");
+const eventTriggerSql = read(join(recoveryDir, "tests/phase28_ensure_rls_event_trigger.sql"), "DDL event-trigger acceptance SQL");
 requireThat(count(chunkTables, /^\s*create table public\./gim) === 15, "Recovery tables chunk must define exactly 15 public tables.");
 requireThat(count(chunkIndexes, /^\s*create (?:unique )?index if not exists /gim) === 67, "Recovery index chunk must preserve all 67 source index definitions.");
 requireThat(count(chunkIndexes, /^\s*alter table public\..* add constraint .* foreign key /gim) === 64, "Recovery constraint chunk must preserve all 64 source foreign keys.");
@@ -100,6 +103,9 @@ requireThat(count(chunkRls, /^\s*insert into storage\.buckets /gim) === 5, "Reco
 requireThat(count(chunkPolicies, /^\s*create policy /gim) === 27, "Recovery must preserve all 27 current policies.");
 requireThat(count(chunkPolicies, /^\s*create trigger /gim) === 15, "Recovery must preserve all 15 current triggers.");
 requireThat(count(chunkEventTrigger, /^\s*create event trigger ensure_rls/gim) === 1, "Recovery must restore the custom ensure_rls event trigger.");
+requireThat(/set local role authenticated/i.test(tenantIsolationSql) && /set_config\('request.jwt.claim.sub'/i.test(tenantIsolationSql) && /rollback;/i.test(tenantIsolationSql), "Tenant-isolation SQL must test authenticated-role RLS and rollback its synthetic fixtures.");
+requireThat(/set local role anon/i.test(anonymousAccessSql) && /rollback;/i.test(anonymousAccessSql), "Anonymous-access SQL must run as anon and roll back its synthetic fixtures.");
+requireThat(/create table public\.phase28_rls_event_trigger_probe/i.test(eventTriggerSql) && /rollback;/i.test(eventTriggerSql), "Event-trigger smoke test must create a temporary probe and roll back.");
 requireThat(/create table public\."?security_rate_limits"?/i.test(chunkTables), "Rate-limit table is missing from the recovered schema.");
 requireThat(/printforge-exports[^\n]*false|\('printforge-exports'[^\n]*false/i.test(chunkRls),
   "Export bucket must remain private in the recovered schema.");
