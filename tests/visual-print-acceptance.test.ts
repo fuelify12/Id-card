@@ -28,7 +28,7 @@ const fields: RenderField[] = [
   },
 ];
 const templatePromise = sharp({ create: { width: 1012, height: 638, channels: 4, background: { r: 250, g: 250, b: 246, alpha: 1 } } }).png().toBuffer();
-async function render(format: "png" | "pdf", renderFields: RenderField[]) {
+async function render(format: "png" | "jpeg" | "pdf", renderFields: RenderField[]) {
   return renderIdCard({
     template: await templatePromise, templateType: "image/png", templateId: "synthetic-visual-fixture",
     templateVersion: 3, fields: renderFields, student, schoolName: "विद्यालय नमूना स्कूल",
@@ -74,11 +74,26 @@ describe("Phase 27 visual and print acceptance fixtures", () => {
     expect(metadata.format).toBe("png");
     expect(metadata.width).toBe(1011);
     expect(metadata.height).toBe(638);
+    // Pixel dimensions alone do not define physical print size; density metadata must match.
+    expect(metadata.density).toBeCloseTo(CARD.dpi, 0);
     const diff = await differenceRatio(baseline.bytes, first.bytes);
     // The synthetic template is intentionally static; only mapped text should change.
     // Bounds catch blank rendering (<0.02%) and unexpectedly broad output changes (>20%).
     expect(diff).toBeGreaterThan(0.0002);
     expect(diff).toBeLessThan(0.2);
+  });
+
+  it("writes the configured print density into JPEG metadata", async () => {
+    const result = await render("jpeg", fields);
+    expect(result.mimeType).toBe("image/jpeg");
+    expect(result.widthPx).toBe(1011);
+    expect(result.heightPx).toBe(638);
+    const metadata = await sharp(result.bytes).metadata();
+    expect(metadata.format).toBe("jpeg");
+    expect(metadata.width).toBe(1011);
+    expect(metadata.height).toBe(638);
+    expect(metadata.density).toBeCloseTo(CARD.dpi, 0);
+    await saveVisualArtifact("phase27-card-rendered.jpg", result.bytes);
   });
 
   it("embeds the requested physical page size in PDF output", async () => {
