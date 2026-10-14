@@ -19,7 +19,7 @@ const SCRIPT_FONTS:[RegExp,string,string][]=[
  [/[\u0d00-\u0d7f]/,"@fontsource/noto-sans-malayalam/files/noto-sans-malayalam-malayalam-400-normal.woff2","@fontsource/noto-sans-malayalam/files/noto-sans-malayalam-malayalam-700-normal.woff2"]
 ];
 const LATIN_FONT="@fontsource/noto-sans/files/noto-sans-latin-400-normal.woff2";
-function fontPathFor(text:string,bold:boolean,family="Noto Sans"){if(family==="Noto Sans Devanagari")return resolve(process.cwd(),"node_modules","@fontsource/noto-sans-devanagari/files/noto-sans-devanagari-devanagari-"+(bold?"700":"400")+"-normal.woff2");const match=SCRIPT_FONTS.find(([pattern])=>pattern.test(text));return resolve(process.cwd(),"node_modules",match?(bold?match[2]:match[1]):LATIN_FONT)}
+function fontPathFor(text:string,bold:boolean){const match=SCRIPT_FONTS.find(([pattern])=>pattern.test(text));return resolve(process.cwd(),"node_modules",match?(bold?match[2]:match[1]):LATIN_FONT)}
 import type { RenderField, RenderOptions, RenderResult, RenderIssue, RenderStudent } from "./types";
 export const RENDERER_VERSION = "printforge-renderer/1.0.0";
 const MAX_BYTES=20*1024*1024, MAX_PIXELS=24_000_000, MAX_DPI=1200;
@@ -37,14 +37,32 @@ function formatValue(v:unknown,f:RenderField){if(v===undefined||v===null)return"
 function textWidth(s:string,size:number){let n=0;for(const c of s)n+=/\p{Mark}/u.test(c)?0:/\s/u.test(c)?0.28:/[ilI.,'|!]/u.test(c)?0.28:/[MW@#%]/u.test(c)?0.9:/[\u0900-\u0D7F]/u.test(c)?0.95:0.56;return n*size}
 function layoutText(text:string,f:RenderField,scale:number,warnings:RenderIssue[],errors:RenderIssue[]){const o=f.render_options??{},maxLines=Math.max(1,Math.min(12,Number(o.maxLines??1))),lh=Math.max(.8,Math.min(2.5,Number(o.lineHeight??1.2))),min=Math.max(6,Number(o.minFontSize??6))*scale;let size=Math.max(min,Number(f.font_size??18)*scale);const maxWidth=f.width*scale,maxHeight=f.height*scale,policy=String(o.overflowPolicy??"warn"),wrap=o.wrap===true||maxLines>1;const split=(sz:number)=>{if(!wrap)return text.split(/\r?\n/).slice(0,maxLines);const lines:string[]=[];for(const para of text.split(/\r?\n/)){let line="";for(const word of para.split(/\s+/)){const next=line?line+" "+word:word;if(line&&textWidth(next,sz)>maxWidth){lines.push(line);line=word}else line=next}if(line||!para)lines.push(line)}return lines};let lines=split(size);const fits=(sz:number,a:string[])=>a.length<=maxLines&&a.every(l=>textWidth(l,sz)<=maxWidth)&&a.length*sz*lh<=maxHeight;if(policy==="shrink")while(size>min&&!fits(size,lines)){size=Math.max(min,size-.5*scale);lines=split(size)}if(!fits(size,lines)){const i:RenderIssue={code:"TEXT_OVERFLOW",message:'Text in "'+f.label+'" does not fit its configured box at the allowed font size.',fieldId:f.id,severity:policy==="error"?"error":"warning"};(policy==="error"?errors:warnings).push(i);if(policy==="clip")lines=lines.slice(0,maxLines)}return{lines,size,lh,policy}}
 async function textSvg(fields:RenderField[],student:RenderStudent,schoolName:string,sw:number,sh:number,ow:number,oh:number,warnings:RenderIssue[],errors:RenderIssue[]){
- const sx=ow/sw,sy=oh/sh,nodes:string[]=[],clipDefs:string[]=[],fontkitAny=fontkit as any;
+ const sx=ow/sw,sy=oh/sh,nodes:string[]=[],clipDefs:string[]=[],fontkitAny=fontkit as any,fontCache=new Map<string,any>();
+ async function shapeRuns(value:string,bold:boolean){
+  const runs:{path:string;text:string}[]=[];
+  for(const ch of [...value]){
+   const inherit=/\\p{Mark}/u.test(ch)||ch==="\\u200c"||ch==="\\u200d"||/[\\ufe00-\\ufe0f]/u.test(ch);
+   const path=inherit&&runs.length?runs[runs.length-1].path:fontPathFor(ch,bold);
+   const last=runs[runs.length-1];if(last&&last.path===path)last.text+=ch;else runs.push({path,text:ch});
+  }
+  return runs.map(run=>{let font=fontCache.get(run.path);if(!font){font=fontkitAny.create(Buffer.from([]));}return {run,font};});
+ }
+ async function shapedRuns(value:string,bold:boolean){
+  const runs:{path:string;text:string}[]=[];
+  for(const ch of [...value]){
+   const inherit=/\\p{Mark}/u.test(ch)||ch==="\\u200c"||ch==="\\u200d"||/[\\ufe00-\\ufe0f]/u.test(ch);
+   const path=inherit&&runs.length?runs[runs.length-1].path:fontPathFor(ch,bold);
+   const last=runs[runs.length-1];if(last&&last.path===path)last.text+=ch;else runs.push({path,text:ch});
+  }
+  const result=[];for(const run of runs){let font=fontCache.get(run.path);if(!font){font=fontkitAny.create(await readFile(run.path));fontCache.set(run.path,font)}result.push({text:run.text,font,shaped:font.layout(run.text)})}return result;
+ }
  for(const f of fields){const o=f.render_options??{};if(o.visible===false||isPhoto(f)||isCodeField(f))continue;const raw=resolveFieldValue(f,student,schoolName);if(raw===undefined||raw===null||String(raw).trim()==="")continue;
- const text=formatValue(raw,f),font=fontkitAny.create(await readFile(fontPathFor(text,/^(bold|600|700|800|900)$/.test(String(f.font_weight)),String(f.font_family??"Noto Sans")))),missing=[...text].filter(ch=>{const cp=ch.codePointAt(0);return cp!==undefined&&!font.characterSet.includes(cp)});
+ const text=formatValue(raw,f),bold=/^(bold|600|700|800|900)$/.test(String(f.font_weight)),runs=await shapedRuns(text,bold),missing=runs.flatMap(run=>[...run.text].filter(ch=>{const cp=ch.codePointAt(0);return cp!==undefined&&!run.font.characterSet.includes(cp)}));
  if(missing.length){const issue:RenderIssue={code:"MISSING_GLYPH",message:'The configured font does not contain every glyph in "'+f.label+'". Unsupported characters were not silently replaced.',fieldId:f.id,severity:f.required?"error":"warning"};(f.required?errors:warnings).push(issue);continue}
  const x=f.x*sx,y=f.y*sy,w=f.width*sx,h=f.height*sy,rotation=Math.max(-360,Math.min(360,Number(o.rotation??0))),layout=layoutText(text,f,Math.min(sx,sy),warnings,errors),color=/^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(f.color??"")?f.color:"#111111",total=layout.lines.length*layout.size*layout.lh,vertical=String(o.verticalAlign??"middle");let baseline=vertical==="top"?y+layout.size:vertical==="bottom"?y+h-total+layout.size:y+(h-total)/2+layout.size;
  const fieldNodes:string[]=[];
- for(const line of layout.lines){const shaped=font.layout(line),scale=layout.size/font.unitsPerEm,measured=shaped.advanceWidth*scale,anchor=f.alignment==="center"?"middle":f.alignment==="right"?"end":"start";let cursor=anchor==="middle"?x+(w-measured)/2:anchor==="end"?x+w-measured-2:x+2;
- for(let i=0;i<shaped.glyphs.length;i++){const glyph=shaped.glyphs[i],pos=shaped.positions[i];if(glyph.path&&glyph.path.toSVG())fieldNodes.push('<path d="'+glyph.path.toSVG()+'" transform="translate('+(cursor+pos.xOffset*scale)+' '+(baseline-pos.yOffset*scale)+') scale('+scale+' '+(-scale)+')" fill="'+color+'"/>');cursor+=pos.xAdvance*scale}baseline+=layout.size*layout.lh}
+ for(const line of layout.lines){const shaped=await shapedRuns(line,bold),scale=layout.size/fontkitAny.create?layout.size:layout.size,measured=shaped.reduce((sum,run)=>sum+run.shaped.advanceWidth*(layout.size/run.font.unitsPerEm),0),anchor=f.alignment==="center"?"middle":f.alignment==="right"?"end":"start";let cursor=anchor==="middle"?x+(w-measured)/2:anchor==="end"?x+w-measured-2:x+2;
+ for(const run of shaped){const runScale=layout.size/run.font.unitsPerEm;for(let i=0;i<run.shaped.glyphs.length;i++){const glyph=run.shaped.glyphs[i],pos=run.shaped.positions[i];if(glyph.path&&glyph.path.toSVG())fieldNodes.push('<path d="'+glyph.path.toSVG()+'" transform="translate('+(cursor+pos.xOffset*runScale)+' '+(baseline-pos.yOffset*runScale)+') scale('+runScale+' '+(-runScale)+')" fill="'+color+'"/>');cursor+=pos.xAdvance*runScale}}baseline+=layout.size*layout.lh}
  const clipId="clip-"+String(f.id).replace(/[^a-zA-Z0-9_-]/g,"").slice(0,40);if(layout.policy==="clip")clipDefs.push('<clipPath id="'+clipId+'"><rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'"/></clipPath>');const inner=fieldNodes.join(""),clipped=layout.policy==="clip"?' clip-path="url(#'+clipId+')"':"";nodes.push('<g transform="'+(rotation?'rotate('+rotation+' '+(x+w/2)+' '+(y+h/2)+')':"")+'"'+clipped+'>'+inner+'</g>');
  }
  return Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="'+ow+'" height="'+oh+'" viewBox="0 0 '+ow+' '+oh+'"><defs>'+clipDefs.join("")+'</defs>'+nodes.join("")+'</svg>');
