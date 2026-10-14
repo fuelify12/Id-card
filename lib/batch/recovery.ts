@@ -57,6 +57,15 @@ export function reconcileBatchItemStatuses(
 
   counts.eligible_count = counts.total_count - counts.skipped_count;
 
+  // An empty/corrupt batch is never a successful generation. Creation preflight
+  // rejects zero eligible students; reconciliation remains fail-closed if an
+  // empty item set appears because of a partial write or unexpected deletion.
+  if (counts.total_count === 0) {
+    const current = String(existingStatus ?? "").toLowerCase();
+    const preserved = new Set(["completed", "completed_with_errors", "failed", "cancelled", "paused", "pausing"]);
+    return { ...counts, status: preserved.has(current) ? current : "queued" };
+  }
+
   const terminalCount =
     counts.completed_count +
     counts.failed_count +
