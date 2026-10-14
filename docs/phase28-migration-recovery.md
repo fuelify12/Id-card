@@ -82,6 +82,12 @@ The TinyFish Default profile has no signed-in sites. Earlier non-authenticated P
 
 Phase 27's 300-card render timing is in-process renderer evidence only and is not reused as evidence of a persisted Supabase worker batch.
 
+## Additional schema compatibility defect discovered during Phase 28
+
+The expanded isolated fixture exposed a real mismatch in the actual catalog snapshot: `public.exports_status_check` accepted only `queued`, `ready`, and `failed`, while the current export route transitions rows through `running`, `verifying`, `completed`, `completed_with_errors`, and `expired`. That constraint would reject the normal export worker lifecycle even when authorization and file generation succeed.
+
+Added forward-only migration `supabase/migrations/20261014182500_phase28_export_status_transitions.sql` to preserve existing states and allow the application lifecycle. It does not rewrite or impersonate the missing Phase 1 migration. It is to be applied and exercised only on the isolated Supabase project; Production remains untouched.
+
 ## Task H — export/tenant authorization
 
 **Status: PASS WITH WARNINGS for database-level policy simulation; live HTTP/application authorization remains BLOCKED.**

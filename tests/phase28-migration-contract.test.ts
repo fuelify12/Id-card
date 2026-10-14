@@ -45,6 +45,20 @@ describe("Phase 28 migration-recovery contract", () => {
     expect(rls).toMatch(/printforge-exports[^\n]*false|\('printforge-exports'[^\n]*false/i);
   });
 
+  it("aligns the exports status constraint with every state used by the worker lifecycle", () => {
+    const migration = read("supabase/migrations/20261014182500_phase28_export_status_transitions.sql");
+    for (const status of [
+      "pending", "queued", "running", "verifying", "ready",
+      "completed", "completed_with_errors", "failed", "cancelled", "expired",
+    ]) expect(migration).toContain(`'${status}'`);
+    expect(migration).toMatch(/drop constraint if exists exports_status_check/i);
+    expect(migration).toMatch(/add constraint exports_status_check/i);
+    const tenant = read("supabase/recovery/tests/phase28_tenant_isolation.sql");
+    expect(tenant).toMatch(/foreach s in array array\[/i);
+    expect(tenant).toMatch(/record_export_download_link_issued/i);
+    expect(tenant).toMatch(/Tenant A invoked Tenant B export download-audit RPC/i);
+  });
+
   it("fails closed in strict mode when the original Phase 1 baseline is missing", () => {
     const baseline = "supabase/migrations/20261008173336_phase1_foundation.sql";
     if (!existsSync(join(root, baseline))) {
