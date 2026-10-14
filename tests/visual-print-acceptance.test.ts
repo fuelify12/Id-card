@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
 import { renderIdCard, validatePhysicalSize } from "@/lib/rendering/engine";
@@ -44,6 +46,14 @@ async function differenceRatio(a: Buffer, b: Buffer) {
   return changed / (aa.length / 4);
 }
 
+
+async function saveVisualArtifact(name: string, bytes: Buffer) {
+  const directory = process.env.PRINTFORGE_VISUAL_ARTIFACT_DIR;
+  if (!directory) return;
+  await mkdir(directory, { recursive: true });
+  await writeFile(join(directory, name), bytes);
+}
+
 describe("Phase 27 visual and print acceptance fixtures", () => {
   it("computes standard ID-card raster geometry at 300 DPI", () => {
     expect(validatePhysicalSize(CARD.widthMm, CARD.heightMm, CARD.dpi)).toEqual({ widthPx: 1011, heightPx: 638 });
@@ -53,6 +63,8 @@ describe("Phase 27 visual and print acceptance fixtures", () => {
     const baseline = await render("png", []);
     const first = await render("png", fields);
     const second = await render("png", fields);
+    await saveVisualArtifact("phase27-card-baseline.png", baseline.bytes);
+    await saveVisualArtifact("phase27-card-rendered.png", first.bytes);
     expect(first.mimeType).toBe("image/png");
     expect(first.widthPx).toBe(1011);
     expect(first.heightPx).toBe(638);
@@ -71,6 +83,7 @@ describe("Phase 27 visual and print acceptance fixtures", () => {
 
   it("embeds the requested physical page size in PDF output", async () => {
     const result = await render("pdf", fields);
+    await saveVisualArtifact("phase27-card-print.pdf", result.bytes);
     expect(result.mimeType).toBe("application/pdf");
     const pdf = await PDFDocument.load(result.bytes);
     expect(pdf.getPageCount()).toBe(1);

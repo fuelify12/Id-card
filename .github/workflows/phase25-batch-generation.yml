@@ -58,6 +58,8 @@ jobs:
       - name: Repository security checks
         run: node scripts/security-check.mjs
       - name: Full regression tests
+        env:
+          PRINTFORGE_VISUAL_ARTIFACT_DIR: artifacts/phase27-visual-print
         run: npm test
       - name: TypeScript
         run: npm run typecheck
@@ -70,3 +72,11 @@ jobs:
         run: npm run build
       - name: Client bundle secret exposure check
         run: node scripts/client-bundle-security-check.mjs
+      - name: Upload synthetic visual and print artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase27-visual-print-${{ github.sha }}
+          path: artifacts/phase27-visual-print/
+          if-no-files-found: warn
+          retention-days: 7
