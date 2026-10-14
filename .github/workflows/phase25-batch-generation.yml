@@ -5,10 +5,13 @@ on:
     branches:
       - phase-25-batch-generation-acceptance
       - phase-26-blocker-resolution
+      - phase-27-visual-print-acceptance
   pull_request:
     branches:
       - phase-24-canonical-student-identifiers
       - phase-25-batch-generation-acceptance
+      - phase-26-blocker-resolution
+      - phase-27-visual-print-acceptance
     paths:
       - "app/api/projects/**"
       - "components/auth/**"
@@ -25,6 +28,7 @@ on:
       - "tests/**"
       - "docs/phase25-batch-generation-acceptance.md"
       - "docs/phase26-blocker-resolution.md"
+      - "docs/phase27-visual-print-acceptance.md"
       - ".github/workflows/phase25-batch-generation.yml"
       - "package.json"
       - "package-lock.json"
@@ -54,6 +58,8 @@ jobs:
       - name: Repository security checks
         run: node scripts/security-check.mjs
       - name: Full regression tests
+        env:
+          PRINTFORGE_VISUAL_ARTIFACT_DIR: artifacts/phase27-visual-print
         run: npm test
       - name: TypeScript
         run: npm run typecheck
@@ -66,3 +72,11 @@ jobs:
         run: npm run build
       - name: Client bundle secret exposure check
         run: node scripts/client-bundle-security-check.mjs
+      - name: Upload synthetic visual and print artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase27-visual-print-${{ github.sha }}
+          path: artifacts/phase27-visual-print/
+          if-no-files-found: warn
+          retention-days: 7
