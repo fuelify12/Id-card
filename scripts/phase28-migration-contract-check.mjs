@@ -88,8 +88,10 @@ const chunkEventTrigger = read(join(chunkDir, "07_rls_event_trigger.sql"), "cust
 requireThat(count(chunkTables, /^\s*create table public\./gim) === 15, "Recovery tables chunk must define exactly 15 public tables.");
 requireThat(count(chunkIndexes, /^\s*create (?:unique )?index if not exists /gim) === 67, "Recovery index chunk must preserve all 67 source index definitions.");
 requireThat(count(chunkIndexes, /^\s*alter table public\..* add constraint .* foreign key /gim) === 64, "Recovery constraint chunk must preserve all 64 source foreign keys.");
-requireThat(chunkIndexes.indexOf("CREATE UNIQUE INDEX IF NOT EXISTS") < chunkIndexes.indexOf("ALTER TABLE"),
-  "Unique indexes must be created before dependent foreign keys on a fresh database.");
+const firstIndexStatement = chunkIndexes.search(/^\\s*create (?:unique )?index if not exists /im);
+const firstForeignKey = chunkIndexes.search(/^\\s*alter table public\\..* add constraint .* foreign key /im);
+requireThat(firstIndexStatement >= 0 && firstForeignKey >= 0 && firstIndexStatement < firstForeignKey,
+  "All indexes must be created before dependent foreign keys on a fresh database.");
 requireThat(count(chunkFunctions, /^\s*create or replace function public\./gim) === 14, "Recovery routine chunk must define all 14 source routines.");
 requireThat(count(chunkPrivileges, /^\s*revoke all on function /gim) >= 14, "Routine privileges must be explicitly reset before restoring source grants.");
 requireThat(count(chunkRls, /^\s*alter table public\..* enable row level security;/gim) === 15, "Recovery must enable RLS on all 15 public tables.");
