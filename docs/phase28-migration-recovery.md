@@ -21,9 +21,8 @@ Searched reachable branches including `main`, `phase-20-isolated-acceptance`, Ph
 
 Created:
 - `supabase/recovery/phase28_current_production_schema_snapshot.sql`
-- Six ordered chunks under `supabase/recovery/phase28_snapshot/`
-
-The snapshot is sourced from current read-only catalogs: 15 public tables, 285 pre-Phase-24 columns, 130 constraints, 67 non-constraint index definitions, 14 public routines, 15 table triggers, the custom `ensure_rls` DDL event trigger, 23 public policies and four PrintForge storage-object policies, five private PrintForge buckets and their allow-lists. The original schema's current state is a justified starting point for the isolated clone, but it cannot reconstruct the exact historical order, intent, comments, or one-time data transformations of the missing original migration.
+- Eight bootstrap/recovery files under `supabase/recovery/phase28_snapshot/` (chunks 01–08; chunk 08 is the isolated table-grant repair)
+- Three repeatable SQL checks under `supabase/recovery/tests/`: Tenant A/B RLS isolation, anonymous-access denial, and `ensure_rls` event-trigger smoke test.
 
 ## Task B — canonical migration-chain validation
 
@@ -49,25 +48,30 @@ Target identity was rechecked before remote changes:
 - Initial state: 0 public application tables; 0 recorded migrations
 - Known Production ref `xdoenkusrakuyyxnnkff` was not the target
 
-Seven snapshot steps and four source migrations were applied successfully after the initial artifact-generation defects were fixed in the isolated project; a separate isolated-only repair restores 29 table GRANT statements omitted by the first ACL chunk generator. Repeatable Tenant A/B, anonymous-access, and `ensure_rls` SQL tests now live under `supabase/recovery/tests/`. The failures were in the first proposed recovery artifact, not in application code: unique indexes referenced by composite foreign keys were missing from the initial index ordering, and policy extraction truncated multiline RLS predicates. The chunk SQL was corrected before retrying. A subsequent transaction-scoped RLS assertion exposed that the first privileges-chunk generator had accidentally filtered out comma-separated table GRANT statements; the complete 29 source GRANT statements are now retained verbatim in the recovery chunk and a supplemental isolated-only grant repair. No Production mutation was used for retries.
+Eight schema-snapshot/bootstrap steps and four subsequent tracked migrations were successfully applied only on the verified isolated Supabase project. Early iterations exposed and fixed three generator defects: indexes needed by composite foreign keys were omitted from the first index chunk, multiline RLS expressions were truncated by the first policy extractor, and comma-separated table GRANT statements were dropped by the first ACL filter. The corrected ACL chunk preserves all 29 catalog-derived table GRANTs, and chunk 08 reapplied those grants to the isolated project only. No Production mutation was used for retries.
 
-Post-bootstrap read-only integrity checks:
-- 15 public tables / 294 columns
-- 136 constraints / 95 indexes / 19 public routines
-- 23 public policies; 0 public tables with RLS disabled
-- 5 PrintForge buckets, all `public=false`
-- 0 rows in every application table, including projects, students, templates, photos, batches, generated cards, validation findings, audit logs and exports
-- Auth user creation and tenant seeding were not performed because no authorized signed-in test profile or dedicated secure Auth-user setup tool was available
+Post-bootstrap exact read-only verification:
+- 15 public tables / 294 columns / 136 constraints / 95 indexes / 19 routines
+- 23 public policies plus four PrintForge storage-object policies; zero public tables with RLS disabled
+- custom `ensure_rls` event trigger enabled
+- all five PrintForge Storage buckets private
+- exact dynamic row counts returned zero rows in each of the 15 public application tables
+- zero synthetic Auth users, zero fixture-owned Storage objects, and zero RLS probe tables remained after rollback
+
+Three stored SQL security checks under `supabase/recovery/tests/` were executed, each using synthetic fixtures in a transaction followed by `ROLLBACK`:
+- Tenant A/B: under PostgreSQL role `authenticated`, simulated `request.jwt.claim.sub` values. Each tenant saw only its own project/student; cross-tenant update/delete affected zero rows; a forged project insert was denied; cross-tenant private-object metadata select/update/insert was denied. **PASS**.
+- Anonymous role: project-table SELECT privilege denied, private object metadata invisible. **PASS**.
+- `ensure_rls`: a new public table automatically had RLS enabled; probe DDL rolled back. **PASS**.
+
+These tests validate PostgreSQL policies, not a real GoTrue sign-in or authenticated HTTP request. No persistent synthetic account or fixture row was created.
 
 ## Task E — Vercel Preview
 
-**Status: PARTIAL / current deployment rebuild required.**
+**Status: PASS WITH WARNINGS for configuration; authenticated application acceptance remains BLOCKED.**
 
-Branch-scoped Preview-only variables were created for:
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+Branch-scoped Preview variables `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` are configured only for `phase-28-authoritative-schema-recovery`, and source from isolated project `zzecjgauhkaxyptsurlw`. No Production URL or service-role key was added. Vercel project `printforge-phase27-acceptance` is non-production (`live=false`); SSO protection remains enabled.
 
-Their source is the isolated project `zzecjgauhkaxyptsurlw`; no Production ref or service-role key was added. The acceptance project's SSO protection remains enabled. A deployment launched before the Preview environment variables existed failed at Next.js prerender with `Supabase URL and publishable key must be configured in the deployment environment.` This does not prove the corrected branch configuration fails; a fresh deployment on the latest Phase 28 head is required and will be checked separately.
+An early deployment launched before these variables existed failed during prerender with `Supabase URL and publishable key must be configured in the deployment environment.` A later deployment on code/test head `da7032d0622be4a5abbe652ad68111f8e82aeb76` entered the Next.js production build with those variables present. The exact latest deployment READY/ERROR state is determined from Vercel metadata. Even a READY Preview does not unblock authenticated acceptance without a signed-in browser profile.
 
 ## Task F/G — browser acceptance and 300-record persisted batch
 
@@ -79,9 +83,16 @@ Phase 27's 300-card render timing is in-process renderer evidence only and is no
 
 ## Task H — export/tenant authorization
 
-**Status: PARTIAL.**
+**Status: PASS WITH WARNINGS for database-level policy simulation; live HTTP/application authorization remains BLOCKED.**
 
-The isolated schema contains owner-scoped RLS policies, private object policies, the Phase 19 owner-checked download-link audit RPC and the Phase 24 identifier rules. Catalog checks confirm RLS is enabled on all 15 public tables and buckets are private. These are policy/schema checks—not negative live queries from authenticated Tenant A against Tenant B. No authenticated download, short-lived signed URL, byte hash or audit event was exercised through the browser because the required signed-in test session is unavailable.
+The isolated schema contains owner-scoped RLS policies, private object policies, the Phase 19 owner-checked download-link audit RPC and Phase 24 identifier rules. Catalog checks confirm RLS is enabled across all 15 public tables and PrintForge buckets are private.
+
+Three stored SQL checks under `supabase/recovery/tests/` were executed on the isolated project:
+- `phase28_tenant_isolation.sql`: **PASS**. Under PostgreSQL role `authenticated`, simulated JWT subject claims for synthetic A and B. Each tenant saw only its own project/student; cross-tenant SELECT was filtered, UPDATE/DELETE affected zero rows, forged tenant project creation was denied, and foreign private object metadata was not visible or modifiable.
+- `phase28_anonymous_access.sql`: **PASS**. The `anon` role lacked project-table SELECT privilege and could not see private object metadata.
+- `phase28_ensure_rls_event_trigger.sql`: **PASS**. A newly created public test table had RLS automatically enabled by `ensure_rls`.
+
+All test fixtures were rolled back. A subsequent exact count query confirmed no application rows, no synthetic Auth users, no fixture-owned objects, and no probe tables remain. This was a database-role/JWT-claim simulation, **not** a real GoTrue sign-in, authenticated browser session or API-level denial test. No authenticated export link was issued or downloaded and no export-audit event was exercised, because the TinyFish Default profile has no signed-in sites and SSO was not bypassed.
 
 ## Task I — dependencies and current Supabase advisors
 
@@ -99,7 +110,7 @@ The performance advisor reports 28 foreign keys without covering indexes. These 
 
 **Status: PARTIAL / NOT VERIFIED.**
 
-The full Phase 27 CI previously passed on SHA `108586cccdf8a8b606dc3073e8859849d11f7d24` (19 Vitest files, 115 tests, TypeScript, lint, build and security steps). Phase 28 adds migration contract coverage; its results must be taken from the workflow on the final Phase 28 head. No backup or restore operation was performed, no physical Android camera test was run, and no physical printer was available. Do not interpret schema bootstrap or a successful Preview build as those acceptance checks.
+The Phase 28 push and PR workflows passed on code/test head `da7032d0622be4a5abbe652ad68111f8e82aeb76`: **20 test files / 120 tests passed**, migration contract check passed, TypeScript passed, lint had zero errors and eight existing `<img>` warnings, production build passed, dependency audit gate and repository security checks passed, client-bundle secret scan passed for 18 static files, and four synthetic visual/print artifact files uploaded successfully. Earlier runs failed on defects in the new contract guard and generated ACL chunk; these were corrected and retested. Push run: `https://github.com/fuelify12/Id-card/actions/runs/38612710107`; PR run: `https://github.com/fuelify12/Id-card/actions/runs/38612719432`. No backup or restore operation was performed, no physical Android camera test was run, and no physical printer was available. Do not interpret schema bootstrap or a successful Preview build as those acceptance checks.
 
 ## Phase-by-phase / task acceptance matrix
 
@@ -108,12 +119,12 @@ The full Phase 27 CI previously passed on SHA `108586cccdf8a8b606dc3073e8859849d
 | Original historical Phase 1 SQL recovered | BLOCKED | No reachable historical copy; no fabrication |
 | Separate current-schema snapshot generated | PASS WITH WARNINGS | Catalog-derived, explicitly not original, no row data |
 | Canonical migration-dir replay from empty DB | BLOCKED | Missing baseline and several early-phase migration files |
-| Isolated snapshot bootstrap | PASS WITH WARNINGS | 6 snapshot chunks applied; schema verification passed |
+| Isolated snapshot bootstrap | PASS WITH WARNINGS | 8 schema/bootstrap steps plus four tracked migrations; 15 tables, 136 constraints, 95 indexes, 19 routines; all 15 tables have RLS |
 | Existing Phase 19 and Phase 24 migrations | PASS | Four tracked migration files applied on isolated project |
-| Migration order/count contract in CI | PARTIAL until final run | New script/test added; final-head CI evidence required |
-| Preview URL/publishable-key alignment | PARTIAL | Branch vars set; fresh deployment after vars required |
-| Authenticated browser workflow | BLOCKED | No pre-authorized TinyFish session; SSO maintained |
-| Synthetic tenant A/B and RLS denial tests | BLOCKED | No authorized test accounts/seed yet |
+| Migration order/count contract in CI | PASS WITH WARNINGS | Contract check and all 120 tests passed on code/test head da7032d; missing historical baseline remains an explicit warning |
+| Preview URL/publishable-key alignment | PASS WITH WARNINGS | Branch-scoped Preview variables point to isolated project and SSO stays on; exact deployment state must be rechecked against final head |
+| Authenticated browser workflow | BLOCKED | TinyFish Default profile has no signed-in sites; SSO maintained and no bypass used |
+| Synthetic tenant A/B database RLS denial | PASS WITH WARNINGS | SQL policy simulation under authenticated DB role passed with rolled-back fixtures; actual authenticated HTTP/API denial remains BLOCKED |
 | Persisted 300-student batch & worker recovery | BLOCKED | Requires live authenticated app workflow |
 | Actual ZIP download/manifest/hash check | BLOCKED | Requires generated isolated export and authenticated user |
 | Dependency audit/reproducibility | PARTIAL | No lockfile; moderate advisories remain |
