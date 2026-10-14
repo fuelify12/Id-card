@@ -17,6 +17,7 @@
 
 - `tests/visual-print-acceptance.test.ts` uses the real renderer and Sharp pixel data to verify 85.6 × 54 mm / 300 DPI geometry, deterministic output hashes, nonblank Devanagari/leading-zero rendering, bounded pixel difference against an empty synthetic template render, and one-page PDF physical dimensions.
 - `tests/batch-render-300.test.ts` runs 300 synthetic student records through the real renderer using bounded concurrency of four, checks output dimensions, nonempty artifacts, zero renderer errors, and unique hashes, and logs actual elapsed time in CI. This is an in-process render workload—not the database-backed persisted worker/storage/download workflow.
+- `lib/rendering/engine.ts` now segments mixed-script text into script-aware font runs so Devanagari names containing Latin digits or text do not fail just because the subset Devanagari font lacks Latin glyphs. The first 300-card CI run exposed this real mixed-script defect; it was fixed on the branch and the complete CI suite is rerunning.
 - `.github/workflows/phase25-batch-generation.yml` now runs on the Phase 27 branch and includes the full existing suite, typecheck, lint, production build, dependency audit, repository security check, and client-bundle secret scan.
 - Synthetic names include Devanagari, Latin text, and leading-zero identifiers. No real student data is used.
 
@@ -29,7 +30,7 @@ The new pixel-difference test compares a generated text-bearing card to a same-t
 | Requirement | Implementation / test | Evidence status | Remaining limitation |
 |---|---|---|---|
 | Exact text identifier policy, including leading zeros | `lib/identifiers/student-identifier.ts`; identifier/import/photo/batch tests | Automated regression exists; Phase 24 CI was reported green | Live DB migration and constraint behavior not executed in isolated app schema |
-| Required field mapping and Unicode values | `lib/rendering/engine.ts`; `tests/rendering-engine.test.ts`; new visual fixture | Renderer tests + Phase 27 visual test | No OCR/human review of every glyph/placement |
+| Required field mapping and Unicode values | `lib/rendering/engine.ts`; `tests/rendering-engine.test.ts`; new visual fixture and mixed-script 300-card fixture | CI rerun pending after mixed-script font fallback fix | No OCR/human review of every glyph/placement |
 | Physical raster dimensions at 300 DPI | `validatePhysicalSize`; `tests/visual-print-acceptance.test.ts` | CI pending on this commit | Actual printer not available |
 | PDF page geometry | `pdf-lib`; `tests/visual-print-acceptance.test.ts` | CI pending on this commit | Font/output behavior on target print hardware not verified |
 | Deterministic artifact and content changes | Renderer input/output hashes; existing renderer tests | Existing unit coverage plus new hash check | No approved image golden baseline yet |
