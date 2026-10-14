@@ -45,6 +45,18 @@ describe("Phase 28 migration-recovery contract", () => {
     expect(rls).toMatch(/printforge-exports[^\n]*false|\('printforge-exports'[^\n]*false/i);
   });
 
+  it("fails closed in strict mode when the original Phase 1 baseline is missing", () => {
+    const baseline = "supabase/migrations/20261008173336_phase1_foundation.sql";
+    if (!existsSync(join(root, baseline))) {
+      const result = spawnSync(process.execPath, [
+        join(root, "scripts/phase28-migration-contract-check.mjs"),
+        "--strict",
+      ], { cwd: root, encoding: "utf8" });
+      expect(result.status).not.toBe(0);
+      expect(result.stdout + result.stderr).toMatch(/Strict mode refuses an absent original Phase 1 baseline/i);
+    }
+  });
+
   it("makes canonical migration gaps visible and supports a deliberately non-strict recovery path", () => {
     const result = spawnSync(process.execPath, [
       join(root, "scripts/phase28-migration-contract-check.mjs"),

@@ -56,6 +56,7 @@ Post-bootstrap exact read-only verification:
 - custom `ensure_rls` event trigger enabled
 - all five PrintForge Storage buckets private
 - exact dynamic row counts returned zero rows in each of the 15 public application tables
+- Regenerated `lib/supabase/database.types.ts` from the isolated schema after detecting drift in the checked-in definitions: the `batch_generation_items` table was missing and newer Phase 24/rendering fields were absent from some tables. The CI TypeScript/build gates will validate application compilation against the refreshed generated contract.
 - zero synthetic Auth users, zero fixture-owned Storage objects, and zero RLS probe tables remained after rollback
 
 Three stored SQL security checks under `supabase/recovery/tests/` were executed, each using synthetic fixtures in a transaction followed by `ROLLBACK`:
