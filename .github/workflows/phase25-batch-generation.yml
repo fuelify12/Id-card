@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - phase-25-batch-generation-acceptance
+      - phase-26-blocker-resolution
   pull_request:
     branches:
       - phase-24-canonical-student-identifiers
+      - phase-25-batch-generation-acceptance
     paths:
       - "app/api/projects/**"
       - "components/auth/**"
@@ -22,6 +24,7 @@ on:
       - "supabase/tests/**"
       - "tests/**"
       - "docs/phase25-batch-generation-acceptance.md"
+      - "docs/phase26-blocker-resolution.md"
       - ".github/workflows/phase25-batch-generation.yml"
       - "package.json"
       - "package-lock.json"
