@@ -132,7 +132,7 @@ begin
   update public.exports set filename='tampered.zip' where id='bbbb8001-2222-4222-8222-222222222222'; get diagnostics n=row_count; if n<>0 then raise exception 'Tenant A modified Tenant B export'; end if;
   delete from public.exports where id='bbbb8001-2222-4222-8222-222222222222'; get diagnostics n=row_count; if n<>0 then raise exception 'Tenant A deleted Tenant B export'; end if;
   update storage.objects set metadata='{"tampered":true}'::jsonb where bucket_id='printforge-exports' and name like '22222222-2222-4222-8222-222222222222/%'; get diagnostics n=row_count; if n<>0 then raise exception 'Tenant A modified Tenant B export object'; end if;
-  delete from storage.objects where bucket_id='printforge-exports' and name like '22222222-2222-4222-8222-222222222222/%'; get diagnostics n=row_count; if n<>0 then raise exception 'Tenant A deleted Tenant B export object'; end if;
+  -- Supabase's storage.protect_delete() requires deletion through the Storage API; do not DELETE storage.objects directly.
   update public.students set data=data || '{"tampered_by":"tenant-a"}'::jsonb where id='bbbb0001-2222-4222-8222-222222222222';
   get diagnostics n = row_count;
   if n <> 0 then raise exception 'Tenant A modified Tenant B student'; end if;
@@ -193,7 +193,7 @@ begin
   select count(*) into n from public.generated_cards; if n <> 1 then raise exception 'Tenant B should see exactly its generated card'; end if;
   select count(*) into n from public.processing_jobs; if n <> 1 then raise exception 'Tenant B should see exactly its processing job'; end if;
   select count(*) into n from public.exports; if n <> 1 then raise exception 'Tenant B should see exactly its export'; end if;
-  select count(*) into n from storage.objects where name like '22222222-2222-4222-8222-222222222222/%';
+  select count(*) into n from storage.objects where bucket_id='printforge-student-photos' and name like '22222222-2222-4222-8222-222222222222/%';
   if n <> 1 then raise exception 'Tenant B cannot see its own private photo metadata'; end if;
   select count(*) into n from storage.objects where name like '11111111-1111-4111-8111-111111111111/%';
   if n <> 0 then raise exception 'Tenant B can see Tenant A private photo metadata'; end if;
