@@ -10,7 +10,7 @@ This phase performs the safe code-level reliability fixes and rechecks current C
 
 - `lib/batch/recovery.ts`: reconciliation now fails closed for an empty item set. It cannot infer that a zero-item/corrupt batch completed successfully. A terminal/operator-controlled existing state is preserved.
 - `tests/batch-recovery.test.ts`: regression test covers empty batches while running and preserves an already-terminal status.
-- `package.json`: removed the ineffective `sprintf-js@^1.1.3` override. The current advisory affects versions through 1.1.3 and has no upstream patched release, so the override did not remediate the finding and was misleading. No breaking transitive downgrade was forced.
+- Dependency review: confirmed the current branch has no `sprintf-js` override (only the existing Rollup override remains). The current advisory affects versions through 1.1.3 and has no upstream patched release; no breaking transitive downgrade was forced.
 - `.github/workflows/phase25-batch-generation.yml`: include the Phase 26 branch and Phase 25 PR target so this same full verification job runs on this work.
 
 ## Current infrastructure evidence
@@ -33,7 +33,7 @@ The existing unit suite includes 300-item status-count reconciliation and synthe
 
 ## Dependency advisory review
 
-GitHub Advisory Database entry [GHSA-hp3w-g68c-fv3c / CVE-2026-97058](https://github.com/advisories/GHSA-hp3w-g68c-fv3c), updated 2026-10-05, reports `sprintf-js` versions `<=1.1.3` affected by unbounded precision specifiers; **no patched npm version is currently listed**. The issue is a potential denial-of-service via an uncaught RangeError when untrusted format strings reach the affected formatting functions. The Phase 25 dependency gate checks high severity only and therefore does not establish absence of moderate findings. The Phase 26 change removes a no-op pin rather than pretending to fix the advisory. Remaining action: inspect the resolved dependency paths with `npm ls sprintf-js`, verify whether untrusted strings can reach format-string arguments, replace/upgrade the upstream dependency when a real fix is available, and keep the exposure under review. Do not use a breaking TensorFlow.js downgrade solely to silence audit.
+GitHub Advisory Database entry [GHSA-hp3w-g68c-fv3c / CVE-2026-97058](https://github.com/advisories/GHSA-hp3w-g68c-fv3c), updated 2026-10-05, reports `sprintf-js` versions `<=1.1.3` affected by unbounded precision specifiers; **no patched npm version is currently listed**. The issue is a potential denial-of-service via an uncaught RangeError when untrusted format strings reach the affected formatting functions. The Phase 25 dependency gate checks high severity only and therefore does not establish absence of moderate findings. The current manifest has no no-op pin, so the advisory remains unresolved rather than being hidden by an ineffective override. Remaining action: inspect the resolved dependency paths with `npm ls sprintf-js`, verify whether untrusted strings can reach format-string arguments, replace/upgrade the upstream dependency when a real fix is available, and keep the exposure under review. Do not use a breaking TensorFlow.js downgrade solely to silence audit.
 
 ## Verification commands and evidence
 
