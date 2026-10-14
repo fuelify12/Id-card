@@ -33,8 +33,8 @@ describe("Phase 28 migration-recovery contract", () => {
     expect(count(privileges, /^\s*grant .* on table public\./gim)).toBe(29);
     const indexes = read("supabase/recovery/phase28_snapshot/02_constraints_indexes.sql");
     const rls = read("supabase/recovery/phase28_snapshot/05_rls_and_private_buckets.sql");
-    const firstIndex = indexes.search(/^\\s*create (?:unique )?index if not exists /im);
-    const firstForeignKey = indexes.search(/^\\s*alter table public\\..* add constraint .* foreign key /im);
+    const firstIndex = indexes.search(/create (?:unique )?index if not exists /i);
+    const firstForeignKey = indexes.search(/alter table public\..* add constraint .* foreign key /i);
     expect(firstIndex).toBeGreaterThanOrEqual(0);
     expect(firstForeignKey).toBeGreaterThanOrEqual(0);
     expect(firstIndex).toBeLessThan(firstForeignKey);
