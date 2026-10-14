@@ -6,12 +6,14 @@ on:
       - phase-25-batch-generation-acceptance
       - phase-26-blocker-resolution
       - phase-27-visual-print-acceptance
+      - phase-28-authoritative-schema-recovery
   pull_request:
     branches:
       - phase-24-canonical-student-identifiers
       - phase-25-batch-generation-acceptance
       - phase-26-blocker-resolution
       - phase-27-visual-print-acceptance
+      - phase-28-authoritative-schema-recovery
     paths:
       - "app/api/projects/**"
       - "components/auth/**"
@@ -29,6 +31,9 @@ on:
       - "docs/phase25-batch-generation-acceptance.md"
       - "docs/phase26-blocker-resolution.md"
       - "docs/phase27-visual-print-acceptance.md"
+      - "docs/phase28-migration-recovery.md"
+      - "scripts/phase28-migration-contract-check.mjs"
+      - "supabase/recovery/**"
       - ".github/workflows/phase25-batch-generation.yml"
       - "package.json"
       - "package-lock.json"
@@ -57,6 +62,8 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
       - name: Repository security checks
         run: node scripts/security-check.mjs
+      - name: Phase 28 migration contract check
+        run: node scripts/phase28-migration-contract-check.mjs --allow-recovery-snapshot
       - name: Full regression tests
         env:
           PRINTFORGE_VISUAL_ARTIFACT_DIR: artifacts/phase27-visual-print
