@@ -15,6 +15,9 @@
 
 ## Phase 27 implementation
 
+- Latest passing CI run: https://github.com/fuelify12/Id-card/actions/runs/38588794003 (commit `5d79d48f6288dba743c466eb779ba51a21a4f145`). Full suite: 19 test files, 114/114 tests passed; TypeScript passed; lint passed with 0 errors and 8 warnings; production build passed; repository secret hygiene check passed for 181 tracked files; client bundle secret scan passed for 18 generated static files. The `npm audit --omit=dev --audit-level=high` gate passed, but the report still listed 3 moderate `sprintf-js`/`argparse` advisories.
+- The first Phase 27 run failed because a Devanagari-only font subset was selected for a mixed-script name containing Latin digits. The renderer was corrected to shape script-specific runs with per-script font fallback. The subsequent full CI run passed, including the 300-card test.
+
 - `tests/visual-print-acceptance.test.ts` uses the real renderer and Sharp pixel data to verify 85.6 × 54 mm / 300 DPI geometry, deterministic output hashes, nonblank Devanagari/leading-zero rendering, bounded pixel difference against an empty synthetic template render, and one-page PDF physical dimensions.
 - `tests/batch-render-300.test.ts` runs 300 synthetic student records through the real renderer using bounded concurrency of four, checks output dimensions, nonempty artifacts, zero renderer errors, and unique hashes, and logs actual elapsed time in CI. This is an in-process render workload—not the database-backed persisted worker/storage/download workflow.
 - `lib/rendering/engine.ts` now segments mixed-script text into script-aware font runs so Devanagari names containing Latin digits or text do not fail just because the subset Devanagari font lacks Latin glyphs. The first 300-card CI run exposed this real mixed-script defect; it was fixed on the branch and the complete CI suite is rerunning.
@@ -30,8 +33,8 @@ The new pixel-difference test compares a generated text-bearing card to a same-t
 | Requirement | Implementation / test | Evidence status | Remaining limitation |
 |---|---|---|---|
 | Exact text identifier policy, including leading zeros | `lib/identifiers/student-identifier.ts`; identifier/import/photo/batch tests | Automated regression exists; Phase 24 CI was reported green | Live DB migration and constraint behavior not executed in isolated app schema |
-| Required field mapping and Unicode values | `lib/rendering/engine.ts`; `tests/rendering-engine.test.ts`; new visual fixture and mixed-script 300-card fixture | CI rerun pending after mixed-script font fallback fix | No OCR/human review of every glyph/placement |
-| Physical raster dimensions at 300 DPI | `validatePhysicalSize`; `tests/visual-print-acceptance.test.ts` | CI pending on this commit | Actual printer not available |
+| Required field mapping and Unicode values | `lib/rendering/engine.ts`; `tests/rendering-engine.test.ts`; new visual fixture and mixed-script 300-card fixture | PASS in CI run 38588794003 after mixed-script font fallback fix | No OCR/human review of every glyph/placement |
+| Physical raster dimensions at 300 DPI | `validatePhysicalSize`; `tests/visual-print-acceptance.test.ts` | PASS in CI run 38588794003 | Actual printer not available |
 | PDF page geometry | `pdf-lib`; `tests/visual-print-acceptance.test.ts` | CI pending on this commit | Font/output behavior on target print hardware not verified |
 | Deterministic artifact and content changes | Renderer input/output hashes; existing renderer tests | Existing unit coverage plus new hash check | No approved image golden baseline yet |
 | 300 synthetic cards | `tests/batch-render-300.test.ts` | CI pending; elapsed time will be captured in logs | In-memory rendering only, not persisted DB worker, storage, or ZIP |
@@ -76,7 +79,7 @@ Status below is a release-evidence assessment, not a claim that historical imple
 | 24 | Canonical identifiers | PARTIAL | Text identifier policy/migrations implemented on branch; migrations not yet validated/applied to isolated app schema |
 | 25 | Batch artifact integrity | PARTIAL | Persisted-artifact gate and automated CI reported green; live worker/storage acceptance missing |
 | 26 | Blocker resolution | PARTIAL | Empty-batch reconciliation fix; report explicitly retains external blockers |
-| 27 | Visual/print acceptance | IN PROGRESS | New image-diff, PDF geometry, and 300-render tests await this branch's CI result; physical print and live workflow still unverified |
+| 27 | Visual/print acceptance | PARTIAL | CI passes image-diff, PDF geometry, and 300-render tests; physical print and live workflow remain unverified |
 
 ## Required unblocking actions
 
