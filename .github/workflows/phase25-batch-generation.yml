@@ -10,6 +10,8 @@ on:
     branches:
       - phase-24-canonical-student-identifiers
       - phase-25-batch-generation-acceptance
+      - phase-26-blocker-resolution
+      - phase-27-visual-print-acceptance
     paths:
       - "app/api/projects/**"
       - "components/auth/**"
