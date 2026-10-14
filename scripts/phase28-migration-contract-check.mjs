@@ -68,6 +68,7 @@ const expectedCounts = [
   ["public routines", /^\s*create or replace function public\./gim, 14],
   ["RLS policies", /^\s*create policy /gim, 27],
   ["triggers", /^\s*create trigger /gim, 15],
+  ["custom RLS DDL event triggers", /^\s*create event trigger ensure_rls/gim, 1],
   ["RLS-enabled tables", /^\s*alter table public\..* enable row level security;/gim, 15],
   ["private PrintForge buckets", /^\s*insert into storage\.buckets /gim, 5],
 ];
@@ -83,6 +84,7 @@ const chunkFunctions = read(join(chunkDir, "03_create_functions.sql"), "function
 const chunkPrivileges = read(join(chunkDir, "04_function_table_privileges.sql"), "privileges chunk");
 const chunkRls = read(join(chunkDir, "05_rls_and_private_buckets.sql"), "RLS/buckets chunk");
 const chunkPolicies = read(join(chunkDir, "06_policies_and_triggers.sql"), "policies/triggers chunk");
+const chunkEventTrigger = read(join(chunkDir, "07_rls_event_trigger.sql"), "custom RLS event trigger chunk");
 requireThat(count(chunkTables, /^\s*create table public\./gim) === 15, "Recovery tables chunk must define exactly 15 public tables.");
 requireThat(count(chunkIndexes, /^\s*create (?:unique )?index if not exists /gim) === 67, "Recovery index chunk must preserve all 67 source index definitions.");
 requireThat(count(chunkIndexes, /^\s*alter table public\..* add constraint .* foreign key /gim) === 64, "Recovery constraint chunk must preserve all 64 source foreign keys.");
@@ -94,14 +96,26 @@ requireThat(count(chunkRls, /^\s*alter table public\..* enable row level securit
 requireThat(count(chunkRls, /^\s*insert into storage\.buckets /gim) === 5, "Recovery must configure all five PrintForge storage buckets.");
 requireThat(count(chunkPolicies, /^\s*create policy /gim) === 27, "Recovery must preserve all 27 current policies.");
 requireThat(count(chunkPolicies, /^\s*create trigger /gim) === 15, "Recovery must preserve all 15 current triggers.");
+requireThat(count(chunkEventTrigger, /^\s*create event trigger ensure_rls/gim) === 1, "Recovery must restore the custom ensure_rls event trigger.");
 requireThat(/public\.security_rate_limits/i.test(chunkTables), "Rate-limit table is missing from the recovered schema.");
 requireThat(/printforge-exports[^\n]*false|\('printforge-exports'[^\n]*false/i.test(chunkRls),
   "Export bucket must remain private in the recovered schema.");
 
-if (!existsSync(join(root, "supabase", "phase6_student_photo_matching.sql"))) {
-  warnings.push("Legacy Phase 6 SQL outside the migration directory was not present; verify migration history manually before treating the canonical history as complete.");
-} else if (!existsSync(join(migrationsDir, "20261009032438_phase6_student_photo_matching.sql"))) {
-  warnings.push("Phase 6 schema SQL exists outside supabase/migrations but is not tracked under the canonical migration directory.");
+const legacyFoundationFiles = [
+  "phase2_backend.sql", "phase3_project_templates.sql", "phase6_student_photo_matching.sql",
+  "phase7_photo_processing.sql", "phase8_card_rendering.sql", "phase8_rendering_engine.sql",
+  "phase9_batch_generation_engine.sql", "phase9_batch_status_transitions.sql",
+  "phase9_batch_worker_authorization.sql", "phase9_qualify_item_rls.sql",
+  "phase9_worker_invoker_and_indexes.sql", "phase10_validation.sql",
+  "phase10_validation_settings.sql", "phase10_stale_output_invalidation.sql",
+  "phase10_critical_finding_guard.sql", "phase10_finding_insert_guard.sql", "phase11_zip_exports.sql",
+];
+const legacyOutsideCanonical = legacyFoundationFiles.filter((name) =>
+  existsSync(join(root, "supabase", name)) &&
+  !migrationFiles.some((migration) => migration.endsWith("_" + name))
+);
+if (legacyOutsideCanonical.length) {
+  warnings.push("Found phase SQL outside supabase/migrations (not replayable by the canonical migration runner): " + legacyOutsideCanonical.join(", "));
 }
 if (!existsSync(join(root, "package-lock.json")) && !existsSync(join(root, "npm-shrinkwrap.json"))) {
   warnings.push("No npm lockfile is tracked; dependency resolution is not fully reproducible and audit results can drift between installs.");

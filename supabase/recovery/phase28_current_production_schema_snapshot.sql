@@ -1433,4 +1433,11 @@ CREATE TRIGGER security_audit_templates AFTER INSERT OR DELETE OR UPDATE ON temp
 
 CREATE TRIGGER security_audit_validation_results AFTER INSERT OR DELETE OR UPDATE ON validation_results FOR EACH ROW EXECUTE FUNCTION capture_security_audit_event();
 
+-- Restore the one custom application-owned DDL event trigger found in the source catalog.
+-- Supabase-managed event triggers are provisioned by the Supabase platform itself.
+create event trigger ensure_rls
+  on ddl_command_end
+  when tag in ('CREATE TABLE', 'CREATE TABLE AS', 'SELECT INTO')
+  execute function public.rls_auto_enable();
+
 commit;

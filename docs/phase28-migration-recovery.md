@@ -23,7 +23,7 @@ Created:
 - `supabase/recovery/phase28_current_production_schema_snapshot.sql`
 - Six ordered chunks under `supabase/recovery/phase28_snapshot/`
 
-The snapshot is sourced from current read-only catalogs: 15 public tables, 285 pre-Phase-24 columns, 130 constraints, 67 non-constraint index definitions, 14 public routines, 15 triggers, 27 policy definitions, five private PrintForge buckets and their allow-lists. The original schema's current state is a justified starting point for the isolated clone, but it cannot reconstruct the exact historical order, intent, comments, or one-time data transformations of the missing original migration.
+The snapshot is sourced from current read-only catalogs: 15 public tables, 285 pre-Phase-24 columns, 130 constraints, 67 non-constraint index definitions, 14 public routines, 15 table triggers, the custom `ensure_rls` DDL event trigger, 23 public policies and four PrintForge storage-object policies, five private PrintForge buckets and their allow-lists. The original schema's current state is a justified starting point for the isolated clone, but it cannot reconstruct the exact historical order, intent, comments, or one-time data transformations of the missing original migration.
 
 ## Task B — canonical migration-chain validation
 
@@ -49,7 +49,7 @@ Target identity was rechecked before remote changes:
 - Initial state: 0 public application tables; 0 recorded migrations
 - Known Production ref `xdoenkusrakuyyxnnkff` was not the target
 
-Six snapshot steps and four source migrations were applied successfully after two initial failures were diagnosed and fixed in the isolated project. The failures were in the first proposed recovery artifact, not in application code: unique indexes referenced by composite foreign keys were missing from the initial index ordering, and policy extraction truncated multiline RLS predicates. The chunk SQL was corrected before retrying. No Production mutation was used for retries.
+Seven snapshot steps and four source migrations were applied successfully after two initial artifact failures were diagnosed and fixed in the isolated project. The failures were in the first proposed recovery artifact, not in application code: unique indexes referenced by composite foreign keys were missing from the initial index ordering, and policy extraction truncated multiline RLS predicates. The chunk SQL was corrected before retrying. No Production mutation was used for retries.
 
 Post-bootstrap read-only integrity checks:
 - 15 public tables / 294 columns

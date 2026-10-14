@@ -25,6 +25,7 @@ describe("Phase 28 migration-recovery contract", () => {
     expect(count(snapshot, /^\s*create or replace function public\./gim)).toBe(14);
     expect(count(snapshot, /^\s*create policy /gim)).toBe(27);
     expect(count(snapshot, /^\s*create trigger /gim)).toBe(15);
+    expect(count(snapshot, /^\s*create event trigger ensure_rls/gim)).toBe(1);
   });
 
   it("orders fresh-schema indexes before composite foreign keys and keeps RLS on", () => {
@@ -33,6 +34,8 @@ describe("Phase 28 migration-recovery contract", () => {
     expect(indexes.indexOf("CREATE UNIQUE INDEX IF NOT EXISTS")).toBeLessThan(indexes.indexOf("ALTER TABLE"));
     expect(count(rls, /^\s*alter table public\..* enable row level security;/gim)).toBe(15);
     expect(count(rls, /^\s*insert into storage\.buckets /gim)).toBe(5);
+    const eventTrigger = read("supabase/recovery/phase28_snapshot/07_rls_event_trigger.sql");
+    expect(count(eventTrigger, /^\s*create event trigger ensure_rls/gim)).toBe(1);
     expect(rls).toMatch(/printforge-exports[^\n]*false|\('printforge-exports'[^\n]*false/i);
   });
 
