@@ -1,7 +1,7 @@
 -- Phase 28 schema snapshot part: function_table_privileges
--- Derived from read-only Production catalog metadata on 2026-10-14.
--- Apply only after verifying project ref zzecjgauhkaxyptsurlw is isolated and empty.
--- Not the original Phase 1 migration; no Production data is copied.
+-- Derived from read-only role/table ACL catalog checks on Production.
+-- Table-level GRANT statements are included verbatim from the reviewed full snapshot.
+-- Apply only to the verified isolated project zzecjgauhkaxyptsurlw.
 begin;
 revoke all on function public."bump_template_version_for_field_change"() from public, anon, authenticated, service_role;
 grant execute on function public."bump_template_version_for_field_change"() to "authenticated";
@@ -43,22 +43,50 @@ grant execute on function public."rls_auto_enable"() to "service_role";
 revoke all on function public."set_active_template_version"(uuid, uuid) from public, anon, authenticated, service_role;
 grant execute on function public."set_active_template_version"(uuid, uuid) to "authenticated";
 grant execute on function public."set_active_template_version"(uuid, uuid) to "service_role";
-alter default privileges for role postgres in schema public revoke execute on functions from public, anon;
 revoke all privileges on table public."audit_logs" from public, anon, authenticated, service_role;
 grant SELECT on table public."audit_logs" to "authenticated";
+grant SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER on table public."audit_logs" to "service_role";
 revoke all privileges on table public."batch_generation_items" from public, anon, authenticated, service_role;
+grant SELECT, INSERT, UPDATE, DELETE on table public."batch_generation_items" to "authenticated";
+grant SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER on table public."batch_generation_items" to "service_role";
 revoke all privileges on table public."batches" from public, anon, authenticated, service_role;
+grant SELECT, INSERT, UPDATE, DELETE on table public."batches" to "authenticated";
+grant SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER on table public."batches" to "service_role";
 revoke all privileges on table public."card_validation_findings" from public, anon, authenticated, service_role;
+grant SELECT, INSERT, UPDATE, DELETE on table public."card_validation_findings" to "authenticated";
+grant SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER on table public."card_validation_findings" to "service_role";
 revoke all privileges on table public."exports" from public, anon, authenticated, service_role;
+grant SELECT, INSERT, UPDATE, DELETE on table public."exports" to "authenticated";
+grant SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER on table public."exports" to "service_role";
 revoke all privileges on table public."generated_cards" from public, anon, authenticated, service_role;
+grant SELECT, INSERT, UPDATE, DELETE on table public."generated_cards" to "authenticated";
+grant SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER on table public."generated_cards" to "service_role";
 revoke all privileges on table public."processing_jobs" from public, anon, authenticated, service_role;
+grant SELECT, INSERT, UPDATE, DELETE on table public."processing_jobs" to "authenticated";
+grant SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER on table public."processing_jobs" to "service_role";
 revoke all privileges on table public."profiles" from public, anon, authenticated, service_role;
+grant SELECT, INSERT, UPDATE, DELETE on table public."profiles" to "authenticated";
+grant SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER on table public."profiles" to "service_role";
 revoke all privileges on table public."school_projects" from public, anon, authenticated, service_role;
+grant SELECT, INSERT, UPDATE, DELETE on table public."school_projects" to "authenticated";
+grant SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER on table public."school_projects" to "service_role";
 revoke all privileges on table public."security_rate_limits" from public, anon, authenticated, service_role;
+grant SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER on table public."security_rate_limits" to "service_role";
 revoke all privileges on table public."student_photos" from public, anon, authenticated, service_role;
+grant SELECT, INSERT, UPDATE, DELETE on table public."student_photos" to "authenticated";
+grant SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER on table public."student_photos" to "service_role";
 revoke all privileges on table public."students" from public, anon, authenticated, service_role;
+grant SELECT, INSERT, UPDATE, DELETE on table public."students" to "authenticated";
+grant SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER on table public."students" to "service_role";
 revoke all privileges on table public."template_fields" from public, anon, authenticated, service_role;
+grant SELECT, INSERT, UPDATE, DELETE on table public."template_fields" to "authenticated";
+grant SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER on table public."template_fields" to "service_role";
 revoke all privileges on table public."templates" from public, anon, authenticated, service_role;
+grant SELECT, INSERT, UPDATE, DELETE on table public."templates" to "authenticated";
+grant SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER on table public."templates" to "service_role";
 revoke all privileges on table public."validation_results" from public, anon, authenticated, service_role;
+grant SELECT, INSERT, UPDATE, DELETE on table public."validation_results" to "authenticated";
+grant SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER on table public."validation_results" to "service_role";
 grant usage on schema public to anon, authenticated, service_role;
+alter default privileges for role postgres in schema public revoke execute on functions from public, anon;
 commit;

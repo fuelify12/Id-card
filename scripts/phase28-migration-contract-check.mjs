@@ -82,6 +82,7 @@ const chunkTables = read(join(chunkDir, "01_create_tables.sql"), "tables chunk")
 const chunkIndexes = read(join(chunkDir, "02_constraints_indexes.sql"), "constraints/indexes chunk");
 const chunkFunctions = read(join(chunkDir, "03_create_functions.sql"), "functions chunk");
 const chunkPrivileges = read(join(chunkDir, "04_function_table_privileges.sql"), "privileges chunk");
+requireThat(count(chunkPrivileges, /^\s*grant .* on table public\./gim) === 29, "Privilege chunk must restore all 29 catalog-derived table GRANT statements.");
 const chunkRls = read(join(chunkDir, "05_rls_and_private_buckets.sql"), "RLS/buckets chunk");
 const chunkPolicies = read(join(chunkDir, "06_policies_and_triggers.sql"), "policies/triggers chunk");
 const chunkEventTrigger = read(join(chunkDir, "07_rls_event_trigger.sql"), "custom RLS event trigger chunk");

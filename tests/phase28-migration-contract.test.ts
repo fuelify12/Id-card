@@ -29,6 +29,8 @@ describe("Phase 28 migration-recovery contract", () => {
   });
 
   it("orders fresh-schema indexes before composite foreign keys and keeps RLS on", () => {
+    const privileges = read("supabase/recovery/phase28_snapshot/04_function_table_privileges.sql");
+    expect(count(privileges, /^\s*grant .* on table public\./gim)).toBe(29);
     const indexes = read("supabase/recovery/phase28_snapshot/02_constraints_indexes.sql");
     const rls = read("supabase/recovery/phase28_snapshot/05_rls_and_private_buckets.sql");
     expect(indexes.indexOf("CREATE UNIQUE INDEX IF NOT EXISTS")).toBeLessThan(indexes.indexOf("ALTER TABLE"));
