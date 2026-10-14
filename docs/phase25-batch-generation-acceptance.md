@@ -66,7 +66,7 @@ This ledger distinguishes implementation history from current acceptance evidenc
 ## Environment and release controls
 
 - Production Supabase project xdoenkusrakuyyxnnkff remains read-only for this phase. Do not run the Phase 24 migration or destructive tests there.
-- At inspection, only the Production project and its default main branch were available. Creating an isolated branch at the quoted $0.01344/hour was attempted but Supabase rejected it because branching requires Pro; no upgrade or paid plan change was made.
+- Production project `xdoenkusrakuyyxnnkff` was not modified. Supabase branching at $0.01344/hour was rejected because the connected plan does not support branching. A separate $0/month synthetic-only project `zzecjgauhkaxyptsurlw` was created under the previously authorized test-project scope. Its migration list is empty, and the repository does not contain the historical Phase 1–18 migration source files listed in Production migration history; applying Phase 24 alone to the blank project is invalid. No Production schema or data was changed. Reconstructing the missing baseline migration chain or providing a supported isolated schema seed is required before live migration/RLS acceptance.
 - The latest previously inspected Vercel preview was tied to a Phase 23 commit, not the Phase 24/25 commit. READY status alone is not application acceptance.
 - Vercel SSO is not bypassed. A browser profile with an authorized signed-in session is required for authenticated acceptance.
 - Production deployment, PR merge, paid infrastructure changes, and schema mutation are not authorized by this phase request.
