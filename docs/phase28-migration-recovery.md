@@ -38,68 +38,45 @@ CI now checks migration filename/order conventions, schema-snapshot object count
 
 ## Task C/D — isolated Supabase bootstrap
 
-**Status: PASS WITH WARNINGS (schema), PARTIAL (complete acceptance setup).**
+**Status: PASS WITH WARNINGS (isolated schema), PARTIAL (complete acceptance setup).**
 
-Target identity was rechecked before remote changes:
-- Ref: `zzecjgauhkaxyptsurlw`
-- Project: `PrintForge Phase 25 Synthetic Acceptance`
-- Region: `ap-south-1`
-- Status: `ACTIVE_HEALTHY`
-- Initial state: 0 public application tables; 0 recorded migrations
-- Known Production ref `xdoenkusrakuyyxnnkff` was not the target
+Target was verified before remote writes: ref zzecjgauhkaxyptsurlw, project PrintForge Phase 25 Synthetic Acceptance, region ap-south-1, status ACTIVE_HEALTHY. Its initial state had zero public application tables and zero migration-ledger rows. The known Production ref xdoenkusrakuyyxnnkff was not used as a write target.
 
-Eight schema-snapshot/bootstrap steps and four subsequent tracked migrations were successfully applied only on the verified isolated Supabase project. Early iterations exposed and fixed three generator defects: indexes needed by composite foreign keys were omitted from the first index chunk, multiline RLS expressions were truncated by the first policy extractor, and comma-separated table GRANT statements were dropped by the first ACL filter. The corrected ACL chunk preserves all 29 catalog-derived table GRANTs, and chunk 08 reapplied those grants to the isolated project only. No Production mutation was used for retries.
+Eight catalog-derived bootstrap chunks plus the tracked Phase 19/24 SQL and one new Phase 28 forward migration have been applied only to the isolated project. Its ledger contains 13 entries. This validates the separate snapshot-bootstrap path, not a clean replay of the incomplete canonical Phase 1–24 migration directory.
 
-Post-bootstrap exact read-only verification:
-- 15 public tables / 294 columns / 136 constraints / 95 indexes / 19 routines
-- 23 public policies plus four PrintForge storage-object policies; zero public tables with RLS disabled
-- custom `ensure_rls` event trigger enabled
-- all five PrintForge Storage buckets private
-- exact dynamic row counts returned zero rows in each of the 15 public application tables
-- Regenerated `lib/supabase/database.types.ts` from the isolated schema after detecting drift in the checked-in definitions: the `batch_generation_items` table was missing and newer Phase 24/rendering fields were absent from some tables. The CI TypeScript/build gates will validate application compilation against the refreshed generated contract.
-- zero synthetic Auth users, zero fixture-owned Storage objects, and zero RLS probe tables remained after rollback
+Read-only catalog evidence now shows 15 public tables, 294 columns, 136 constraints, 95 indexes, 19 public routines, 23 public policies, and four Storage object policies. All 15 public tables have RLS enabled; the custom ensure_rls DDL event trigger is enabled; all five PrintForge buckets are private. Direct COUNT queries after test rollback confirmed zero rows in all 15 public application tables, no synthetic test Auth users, and no Phase 28 probe tables. The generated Supabase TypeScript schema was refreshed because the checked-in types lacked batch_generation_items and newer Phase 24/rendering columns.
 
-Three stored SQL security checks under `supabase/recovery/tests/` were executed, each using synthetic fixtures in a transaction followed by `ROLLBACK`:
-- Tenant A/B: under PostgreSQL role `authenticated`, simulated `request.jwt.claim.sub` values. Each tenant saw only its own project/student; cross-tenant update/delete affected zero rows; a forged project insert was denied; cross-tenant private-object metadata select/update/insert was denied. **PASS**.
-- Anonymous role: project-table SELECT privilege denied, private object metadata invisible. **PASS**.
-- `ensure_rls`: a new public table automatically had RLS enabled; probe DDL rolled back. **PASS**.
-
-These tests validate PostgreSQL policies, not a real GoTrue sign-in or authenticated HTTP request. No persistent synthetic account or fixture row was created.
+Tracked isolated SQL checks passed: Tenant A/B RLS simulation, anonymous-role denial, and the ensure_rls event-trigger test. All test fixtures are rolled back. These are real PostgreSQL role/JWT-claim simulations, not real GoTrue authentication or authenticated HTTP/browser tests.
 
 ## Task E — Vercel Preview
 
-**Status: PASS WITH WARNINGS for configuration; authenticated application acceptance remains BLOCKED.**
+**Status: PASS WITH WARNINGS for configuration/build; authenticated app acceptance remains BLOCKED.**
 
-Branch-scoped Preview variables `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` are configured only for `phase-28-authoritative-schema-recovery`, and source from isolated project `zzecjgauhkaxyptsurlw`. No Production URL or service-role key was added. Vercel project `printforge-phase27-acceptance` is non-production (`live=false`); SSO protection remains enabled.
+Branch-scoped Preview variables NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY are configured for phase-28-authoritative-schema-recovery and point at the isolated project. No Production URL or service-role key was added. The READY non-Production Preview for tested code/test SHA 10df395c2bfe9d1df53c5f57a02b2de2964d594c is https://printforge-phase27-acceptance-icr2f1ioi-yash-6966.vercel.app. Its Vercel deployment target is null and SSO remains enabled.
 
-An early deployment launched before these variables existed failed during prerender with `Supabase URL and publishable key must be configured in the deployment environment.` A READY non-production Preview was verified for tested application-code head `35a747a5a0c3358136ba2d0333acf15f9f5ea89e`: `https://printforge-phase27-acceptance-46cyz4evy-yash-6966.vercel.app` (deployment `dpl_4TM3hdA9T2tHA8eGFS1u7g46CUKg`, target `null`). The project remains `live=false` and SSO is enabled. A fresh unauthenticated TinyFish fetch timed out; that is not evidence of a successful login or a bypass. A READY Preview does not unblock authenticated acceptance without a signed-in browser profile.
+The TinyFish Default browser profile has zero signed-in sites. The latest anonymous fetch timed out; that is not proof of authenticated access. No credentials were submitted and no SSO bypass was attempted.
 
 ## Task F/G — browser acceptance and 300-record persisted batch
 
 **Status: BLOCKED.**
 
-The TinyFish Default profile has no signed-in sites. Earlier non-authenticated Preview access returned `login_required`; a later fetch of the current protected Preview timed out. No credentials were requested or entered, and no SSO bypass was attempted. Therefore no actual project/template/import/photo workflow, 300-row persisted batch, photo-association check, reload persistence, worker restart/retry/cancel fault injection, or authenticated browser export has been claimed.
-
-Phase 27's 300-card render timing is in-process renderer evidence only and is not reused as evidence of a persisted Supabase worker batch.
+The protected Preview could not be accessed through an authorized signed-in browser profile. No authenticated project/template creation, spreadsheet import, photo association/crop review, persisted 300-student batch, reload persistence, worker retry/resume/cancel test, or application-created export download is claimed. Phase 27's in-process 300-card render remains renderer evidence only, not persisted batch acceptance.
 
 ## Additional schema compatibility defect discovered during Phase 28
 
-The expanded isolated fixture exposed a real mismatch in the actual catalog snapshot: `public.exports_status_check` accepted only `queued`, `ready`, and `failed`, while the current export route transitions rows through `running`, `verifying`, `completed`, `completed_with_errors`, and `expired`. That constraint would reject the normal export worker lifecycle even when authorization and file generation succeed.
+The isolated schema exposed a real export-pipeline mismatch: public.exports_status_check initially allowed only queued, ready, and failed, while the current route also transitions exports through running, verifying, completed, completed_with_errors, and expired. That would reject valid export-worker state transitions.
 
-Added forward-only migration `supabase/migrations/20261014182500_phase28_export_status_transitions.sql` to preserve existing states and allow the application lifecycle. It does not rewrite or impersonate the missing Phase 1 migration. It is to be applied and exercised only on the isolated Supabase project; Production remains untouched.
+Added and applied only on the isolated project the forward-only migration supabase/migrations/20261014182500_phase28_export_status_transitions.sql. It accepts the ten states exercised by the current route/worker: pending, queued, running, verifying, ready, completed, completed_with_errors, failed, cancelled, and expired. The migration was successfully re-applied to verify its repeatable constraint replacement, then recorded in the isolated ledger as version 20261014182500. It does not impersonate or reconstruct the missing original Phase 1 migration. Production schema was not changed.
 
 ## Task H — export/tenant authorization
 
-**Status: PASS WITH WARNINGS for database-level policy simulation; live HTTP/application authorization remains BLOCKED.**
+**Status: PASS WITH WARNINGS for database-level policy tests; live HTTP/API authorization remains BLOCKED.**
 
-The isolated schema contains owner-scoped RLS policies, private object policies, the Phase 19 owner-checked download-link audit RPC and Phase 24 identifier rules. Catalog checks confirm RLS is enabled across all 15 public tables and PrintForge buckets are private.
+The expanded tracked SQL test supabase/recovery/tests/phase28_tenant_isolation.sql returned PASS on the isolated project with all fixtures rolled back. Simulated authenticated tenants A and B saw only their own project, student, template/field, batch/item, photo, generated card, processing job, and export rows. Cross-tenant reads returned no rows; cross-tenant public-table updates/deletes affected zero rows; forged cross-tenant project/export insertion was rejected. Cross-tenant private photo/export object metadata reads and updates were denied, and cross-tenant object insertion was denied. Supabase's storage.protect_delete() requires object deletion through Storage API, so no direct SQL DELETE against storage.objects was attempted.
 
-Three stored SQL checks under `supabase/recovery/tests/` were executed on the isolated project:
-- `phase28_tenant_isolation.sql`: **PASS**. Under PostgreSQL role `authenticated`, simulated JWT subject claims for synthetic A and B. Each tenant saw only its own project/student; cross-tenant SELECT was filtered, UPDATE/DELETE affected zero rows, forged tenant project creation was denied, and foreign private object metadata was not visible or modifiable.
-- `phase28_anonymous_access.sql`: **PASS**. The `anon` role lacked project-table SELECT privilege and could not see private object metadata.
-- `phase28_ensure_rls_event_trigger.sql`: **PASS**. A newly created public test table had RLS automatically enabled by `ensure_rls`.
+The test loop exercised all ten export statuses through the newly corrected constraint and restored the synthetic export to completed. Tenant A could not forge Tenant B's export or invoke Tenant B's owner-checked download-audit RPC. Tenant B could invoke its own audit RPC but not Tenant A's. phase28_anonymous_access.sql passed, and phase28_ensure_rls_event_trigger.sql passed. Direct post-test COUNT queries confirmed zero rows in all 15 public tables; no synthetic Auth users, fixture objects, or probe table remained.
 
-All test fixtures were rolled back. A subsequent exact count query confirmed no application rows, no synthetic Auth users, no fixture-owned objects, and no probe tables remain. This was a database-role/JWT-claim simulation, **not** a real GoTrue sign-in, authenticated browser session or API-level denial test. No authenticated export link was issued or downloaded and no export-audit event was exercised, because the TinyFish Default profile has no signed-in sites and SSO was not bypassed.
+These are database-role/JWT-claim simulations, not real GoTrue sign-in, authenticated REST requests, Storage API requests, signed-URL expiry checks, or an actual ZIP download through the browser. Those live gates remain blocked by the lack of an authorized signed-in Preview profile.
 
 ## Task I — dependencies and current Supabase advisors
 
@@ -115,31 +92,34 @@ The performance advisor reports 28 foreign keys without covering indexes. These 
 
 ## Task K — backup, restore and regression
 
-**Status: PARTIAL / NOT VERIFIED.**
+**Status: PASS WITH WARNINGS for automated CI; NOT VERIFIED for backup/restore and physical hardware.**
 
-The latest Phase 28 push and PR workflows passed on code/test head `35a747a5a0c3358136ba2d0333acf15f9f5ea89e`: **20 test files / 121 tests passed**, migration contract check passed, TypeScript passed, lint had zero errors and eight existing `<img>` warnings, production build passed, dependency audit gate and repository security checks passed, client-bundle secret scan passed for 18 static files, and four synthetic visual/print artifacts uploaded successfully. The 300-card in-process renderer ran 300/300 with bounded concurrency 4 in **17.704 seconds**; this does not measure persisted worker/storage/download performance. Earlier runs failed on defects in the contract guard and generated recovery SQL; those were corrected and retested. Push run: `https://github.com/fuelify12/Id-card/actions/runs/38613937430`; PR run: `https://github.com/fuelify12/Id-card/actions/runs/38613948321`. No backup or restore operation was performed, no physical Android camera test was run, and no physical printer was available. Do not interpret schema bootstrap or a successful Preview build as those acceptance checks.
+Latest completed push CI on code/test SHA 10df395c2bfe9d1df53c5f57a02b2de2964d594c: https://github.com/fuelify12/Id-card/actions/runs/38616256233. Latest completed PR CI on the same SHA: https://github.com/fuelify12/Id-card/actions/runs/38616266253. Both passed the Phase 28 migration contract check, Vitest, TypeScript, lint, production build, dependency gate, repository security check, client-bundle secret scan and synthetic artifact upload. Vitest reported 20 test files / 122 tests passed. Lint had zero errors and eight existing img-optimization warnings. The high-severity-only production audit gate passed, but the audit output still reported three moderate dependency vulnerabilities.
+
+The 300-card in-process renderer passed 300/300 with bounded concurrency four. Across the current push workflow, elapsed measurements were 11.505 seconds in the main test pass and 13.859 seconds in the repeated prebuild pass; this does not measure the persisted worker, database, Storage, ZIP or authenticated download path. No backup/restore drill, physical Android camera test, or physical printer inspection was performed.
 
 ## Phase-by-phase / task acceptance matrix
 
 | Gate | Status | Evidence / limitation |
 |---|---|---|
-| Original historical Phase 1 SQL recovered | BLOCKED | No reachable historical copy; no fabrication |
-| Separate current-schema snapshot generated | PASS WITH WARNINGS | Catalog-derived, explicitly not original, no row data |
-| Canonical migration-dir replay from empty DB | BLOCKED | Missing baseline and several early-phase migration files |
-| Isolated snapshot bootstrap | PASS WITH WARNINGS | 8 schema/bootstrap steps plus four tracked migrations; 15 tables, 136 constraints, 95 indexes, 19 routines; all 15 tables have RLS |
-| Existing Phase 19 and Phase 24 migrations | PASS | Four tracked migration files applied on isolated project |
-| Migration order/count contract in CI | PASS WITH WARNINGS | Contract check and all 121 tests passed on code/test head 35a747a; missing historical baseline remains an explicit warning |
-| Preview URL/publishable-key alignment | PASS WITH WARNINGS | Branch-scoped Preview variables point to isolated project; READY deployment matches code/test head 35a747a, SSO remains enabled |
-| Authenticated browser workflow | BLOCKED | TinyFish Default profile has no signed-in sites; SSO maintained and no bypass used |
-| Synthetic tenant A/B database RLS denial | PASS WITH WARNINGS | SQL policy simulation under authenticated DB role passed with rolled-back fixtures; actual authenticated HTTP/API denial remains BLOCKED |
-| Persisted 300-student batch & worker recovery | BLOCKED | Requires live authenticated app workflow |
-| Actual ZIP download/manifest/hash check | BLOCKED | Requires generated isolated export and authenticated user |
-| Dependency audit/reproducibility | PARTIAL | No lockfile; moderate advisories remain |
-| Security advisor remediation | PARTIAL | Two deliberate/existing privileged RPC warnings need explicit review |
-| 28 unindexed FKs | PARTIAL | Need query-driven prioritization; not blindly indexed |
-| Backup/restore | NOT VERIFIED | No restore drill executed |
-| Physical Android and print inspection | NOT VERIFIED | Hardware not tested |
-| Production release | NOT CERTIFIED | Browser, tenant, export, backup and print gates incomplete |
+| Original historical Phase 1 SQL recovered | BLOCKED | Not available in reachable Git history; not fabricated |
+| Separate current-schema recovery snapshot | PASS WITH WARNINGS | Catalog-derived bootstrap, explicitly not original Phase 1 |
+| Canonical migration-dir replay from empty database | BLOCKED | Missing baseline and earlier migration files |
+| Isolated snapshot bootstrap | PASS WITH WARNINGS | 15 tables, 294 columns, 136 constraints, 95 indexes, 19 routines; RLS on all tables |
+| Isolated migration ledger | PASS WITH WARNINGS | 13 entries including Phase 28 export-status correction; canonical historical chain still incomplete |
+| Export status constraint and migration replay | PASS | All ten states accepted; forward migration re-applied and recorded on isolated project |
+| Preview configuration/deployment | PASS WITH WARNINGS | READY Preview on code/test SHA 10df395c; branch-scoped isolated Supabase settings; SSO enabled |
+| Authenticated browser workflow | BLOCKED | No authorized signed-in TinyFish profile for Preview |
+| Tenant A/B database RLS tests | PASS WITH WARNINGS | Expanded simulated claims test passes across application rows and private object metadata; authenticated API denial remains unverified |
+| Anonymous project/storage metadata denial | PASS | Isolated SQL assertion passed |
+| ensure_rls DDL event trigger | PASS | Probe table acquired RLS; all probe changes rolled back |
+| Persisted 300-student batch and worker recovery | BLOCKED | Requires authenticated application workflow; renderer-only load is not equivalent |
+| Actual application ZIP/download/hash verification | BLOCKED | No export created/downloaded through authenticated app route |
+| Dependency audit/reproducibility | PARTIAL | No package lock; three moderate findings remain |
+| Supabase advisor remediation | PARTIAL | Two SECURITY DEFINER warnings and 28 unindexed FKs need reviewed remediation |
+| Backup/restore drill | NOT VERIFIED | No restore operation performed |
+| Physical Android and print inspection | NOT VERIFIED | Hardware was not tested |
+| Production release | NOT CERTIFIED | Historical chain, authenticated app workflow, live export and operational gates remain incomplete |
 
 ## Exact safety boundary
 
@@ -147,8 +127,8 @@ No Production table data was copied, no Production SQL was executed to apply or 
 
 ## Required next actions
 
-1. Recover the original migration from an authoritative backup or developer-controlled local Git object database if one exists; otherwise retain this schema snapshot as a separately reviewed bootstrap path, never renaming it to impersonate Phase 1.
-2. Obtain an authorized sign-in in the SSO-protected Preview and create dedicated synthetic users via the approved Auth admin path; keep credentials out of chat.
-3. Run real authenticated Tenant A/B, photo matching, persisted batch/worker and ZIP download tests.
+1. Recover the original Phase 1 SQL from an authoritative backup or developer-controlled local Git object database if one exists; keep the schema snapshot separate from the historical chain.
+2. Obtain an authorized signed-in browser profile for the SSO-protected Preview; keep credentials out of chat and do not bypass SSO.
+3. Run real authenticated Tenant A/B API and Storage denials, photo matching, a persisted 300-student worker batch, and the real ZIP download/manifest/hash path.
 4. Restore a lockfile and resolve/contain dependency advisories when a compatible remediation is available.
-5. Complete a restore drill and hardware print/Android inspection before release.
+5. Complete a backup/restore drill and physical printer/Android inspection before production review.
