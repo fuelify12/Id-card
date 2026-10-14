@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import { reconcileBatchItemStatuses, retryDelayMs } from "@/lib/batch/recovery";
 
 describe("reconcileBatchItemStatuses", () => {
+  it("never marks an empty or unexpectedly emptied batch completed", () => {
+    expect(reconcileBatchItemStatuses([], "running")).toMatchObject({ total_count: 0, completed_count: 0, status: "queued" });
+    expect(reconcileBatchItemStatuses([], "completed")).toMatchObject({ total_count: 0, status: "completed" });
+  });
+
   it("reconciles all successful outcomes to completed", () => {
     expect(reconcileBatchItemStatuses(["SUCCEEDED", "SUCCEEDED"], "running")).toMatchObject({
       total_count: 2, eligible_count: 2, completed_count: 2, failed_count: 0, status: "completed",
