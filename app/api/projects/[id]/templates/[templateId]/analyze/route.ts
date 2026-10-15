@@ -148,7 +148,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     try { raw = JSON.parse(output); } catch { return NextResponse.json({ error: "Gemini returned invalid JSON. Retry analysis." }, { status: 502 }); }
     const parsed = templateAnalysisSchema.safeParse(raw);
     if (!parsed.success) return NextResponse.json({ error: "Gemini output failed validation.", details: parsed.error.issues.slice(0, 5) }, { status: 502 });
-    const normalized = normalizeAnalysis(parsed.data);
+    // Coordinates must use the uploaded template's real pixel basis, not dimensions guessed by the model.
+    const analysisData = {
+      ...parsed.data,
+      width: Number(t.width_px) > 0 ? Number(t.width_px) : parsed.data.width,
+      height: Number(t.height_px) > 0 ? Number(t.height_px) : parsed.data.height
+    };
+    const normalized = normalizeAnalysis(analysisData);
     const { error: del } = await s.from("template_fields").delete().eq("template_id", templateId);
     if (del) return NextResponse.json({ error: "Analysis succeeded but old field map could not be replaced.", details: del.message }, { status: 500 });
     const rows = normalized.fields.map(f => ({ ...f, template_id: templateId, owner_id: uid }));
@@ -156,10 +162,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       const { error: ie } = await s.from("template_fields").insert(rows);
       if (ie) return NextResponse.json({ error: "Analysis succeeded but detected fields could not be saved.", details: ie.message }, { status: 500 });
     }
-    const analysis = { engine: "gemini", model: selectedModel, version: 1, analyzed_at: new Date().toISOString(), raw: parsed.data, normalized_count: normalized.fields.length };
+    const analysis = { engine: "gemini", model: selectedModel, version: 2, analyzed_at: new Date().toISOString(), raw: analysisData, normalized_count: normalized.fields.length };
     const { error: ue } = await s.from("templates").update({ analysis_status: "ready", analysis, updated_at: new Date().toISOString() }).eq("id", templateId).eq("project_id", id);
     if (ue) return NextResponse.json({ error: "Analysis succeeded but template status could not be updated.", details: ue.message }, { status: 500 });
-    return NextResponse.json({ analysis: parsed.data, fields: normalized.fields, message: "Detected template fields. Please review low-confidence boxes and source-column matches before generating cards." });
+    return NextResponse.json({ analysis: analysisData, fields: normalized.fields, message: "Detected template fields. Please review low-confidence boxes and source-column matches before generating cards." });
   } catch (e) {
     const details = e instanceof Error ? e.message : "Unexpected server error.";
     return NextResponse.json({ error: "Template analysis could not be completed.", details: details.slice(0, 500) }, { status: 500 });
