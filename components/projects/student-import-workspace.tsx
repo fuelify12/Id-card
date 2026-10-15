@@ -29,12 +29,18 @@ function fieldAliases(field:Field):string[]{
  const key=normalizeMappingName(field.key).replace(/ /g,"_");
  return [...new Set([field.source_column??"",field.key,field.label,...(aliases[key]??[]),...(aliases[identity.replace(/ /g,"_")]??[])].map(normalizeMappingName).filter(Boolean))];
 }
-function autoMapColumn(field:Field,headers:string[]):string|null{
- const normalized=headers.map(h=>({raw:h,n:normalizeMappingName(h)}));
- const aliases=fieldAliases(field);
- for(const alias of aliases){const exact=normalized.find(h=>h.n===alias);if(exact)return exact.raw}
- const candidates=normalized.filter(h=>aliases.some(a=>a.length>=4&&(h.n.includes(a)||a.includes(h.n))));
- return candidates.length===1?candidates[0].raw:null;
+function autoMapFields(fields:Field[],headers:string[]):Field[]{
+ const normalized=headers.map(raw=>({raw,n:normalizeMappingName(raw)}));
+ const used=new Set<string>();
+ return fields.map(field=>{
+  const aliases=new Set(fieldAliases(field));
+  const matches=normalized.filter(h=>aliases.has(h.n));
+  // Map only an unambiguous exact header match; never guess from partial text.
+  const available=matches.filter(h=>!used.has(h.n));
+  const chosen=matches.length===1&&available.length===1?available[0]:null;
+  if(chosen)used.add(chosen.n);
+  return {...field,source_column:chosen?.raw??null};
+ });
 }
 export function StudentImportWorkspace({projectId,templateId,fields:initialFields}:{projectId:string;templateId:string|null;fields:Field[]}) {
  const [preview,setPreview]=useState<SpreadsheetPreview|null>(null);
@@ -52,7 +58,7 @@ export function StudentImportWorkspace({projectId,templateId,fields:initialField
  const validRows=useMemo(()=>validated.filter(r=>r.issues.length===0),[validated]);
  async function onFile(file?:File) {
   if(!file)return;setError("");setNotice("");setPreview(null);setBusy(true);
-  try { const p=parseWorkbook(await file.arrayBuffer(),file.name);setPreview(p);setSerialColumn(p.serialColumn??"");setPage(0);const mappedFields=fields.map(f=>({...f,source_column:autoMapColumn(f,p.headers)}));setFields(mappedFields);const mappedCount=mappedFields.filter(f=>Boolean(f.source_column)).length;if(templateId){await saveTemplateFields({projectId,templateId,fields:mappedFields});setNotice(`Automatically mapped and saved ${mappedCount} of ${mappedFields.length} template fields to spreadsheet columns. Review the mappings below before importing.`)}else{setNotice(`Automatically matched ${mappedCount} of ${mappedFields.length} template fields to spreadsheet columns.`)} }
+  try { const p=parseWorkbook(await file.arrayBuffer(),file.name);setPreview(p);setSerialColumn(p.serialColumn??"");setPage(0);const mappedFields=autoMapFields(fields,p.headers);setFields(mappedFields);const mappedCount=mappedFields.filter(f=>Boolean(f.source_column)).length;if(templateId){await saveTemplateFields({projectId,templateId,fields:mappedFields});setNotice(`Automatically mapped and saved ${mappedCount} of ${mappedFields.length} template fields to spreadsheet columns. Review the mappings below before importing.`)}else{setNotice(`Automatically matched ${mappedCount} of ${mappedFields.length} template fields to spreadsheet columns.`)} }
   catch(e){setError(e instanceof Error?e.message:"Could not read this spreadsheet.");}
   finally{setBusy(false);}
  }

@@ -106,7 +106,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       if (!(Number.isInteger(Number(config.dpi)) && Number(config.dpi) >= 72 && Number(config.dpi) <= 1200)) configIssues.push("Save a valid output DPI.");
       const rows = students.map((student: any) => {
         const data = student.data && typeof student.data === "object" ? student.data : {};
-        const missing = (fields ?? []).filter((f: any) => f.required && !(String(data[f.source_column || f.key] ?? "").trim()) && !(["photo","image","student_photo","student-photo"].includes(String(f.field_type).toLowerCase()) || f.key === "student_photo")).map((f: any) => f.label || f.key);
+        const missing = (fields ?? []).filter((f: any) => f.required && String(f.source_column ?? "").trim() && !(String(data[String(f.source_column).trim()] ?? "").trim()) && !(["photo","image","student_photo","student-photo"].includes(String(f.field_type).toLowerCase()) || f.key === "student_photo")).map((f: any) => f.label || f.key);
         const photoMissing = needsPhoto && !approvedPhotos.has(student.id);
         const identityIssues = studentFindings.filter(f => f.studentId === student.id && (f.severity === "CRITICAL" || f.severity === "ERROR"));
         return { studentId: student.id, serialNumber: student.serial_number, studentName: String(data.name ?? data.student_name ?? data.full_name ?? ""), eligible: !missing.length && !photoMissing && !identityIssues.length && !configIssues.length, missingFields: missing, photoMissing, identityIssues: identityIssues.map(f => f.message) };
