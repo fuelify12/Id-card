@@ -1,0 +1,1 @@
+create index if not exists idx_exports_batch_project_owner on public.exports(batch_id,project_id,owner_id);
