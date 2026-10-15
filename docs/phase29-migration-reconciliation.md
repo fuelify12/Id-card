@@ -59,6 +59,68 @@ The source inventory below is generated from a read-only query of Production's `
 | `20261009101414` | `phase13_photo_processing_quota` | `supabase/migrations/20261009101414_phase13_photo_processing_quota.sql` | 2659 | `989bb0059da2db60748bfbb911acce0c` |
 | `20261010125420` | `phase18_batch_worker_recovery` | `supabase/migrations/20261010125420_phase18_batch_worker_recovery.sql` | 5285 | `19002bee3f5b1a9e4f9bc6f8ae906339` |
 
+## Isolated ledger reconciliation matrix
+
+The isolated project's 13 ledger rows were re-read read-only and reconciled to their recorded SQL/file provenance:
+
+| Isolated ledger version | Ledger name | Source file / canonical mapping | SQL comparison | Interpretation |
+|---|---|---|---|---|
+| `20261014173555` | `phase28_snapshot_01_tables` | `supabase/recovery/phase28_snapshot/01_create_tables.sql` | Snapshot chunk; not a historical migration | Bootstrap snapshot only |
+| `20261014173759` | `phase28_snapshot_02_constraints_indexes` | `supabase/recovery/phase28_snapshot/02_constraints_indexes.sql` | Snapshot chunk; not a historical migration | Bootstrap snapshot only |
+| `20261014173808` | `phase28_snapshot_03_functions` | `supabase/recovery/phase28_snapshot/03_create_functions.sql` | Snapshot chunk; not a historical migration | Bootstrap snapshot only |
+| `20261014173817` | `phase28_snapshot_04_privileges` | `supabase/recovery/phase28_snapshot/04_function_table_privileges.sql` | Snapshot chunk; not a historical migration | Bootstrap snapshot only |
+| `20261014173821` | `phase28_snapshot_05_rls_buckets` | `supabase/recovery/phase28_snapshot/05_rls_and_private_buckets.sql` | Snapshot chunk; not a historical migration | Bootstrap snapshot only |
+| `20261014173910` | `phase28_snapshot_06_policies_triggers` | `supabase/recovery/phase28_snapshot/06_policies_and_triggers.sql` | Snapshot chunk; not a historical migration | Bootstrap snapshot only |
+| `20261014174007` | `phase19_export_download_audit_rpc` | `supabase/migrations/20261010140000_phase19_export_download_audit_rpc.sql` | **Exact match**, 1,906 characters | Applied to snapshot bootstrap under a different ledger version |
+| `20261014174011` | `phase24_canonical_student_identifiers` | `supabase/migrations/20261013120000_phase24_canonical_student_identifiers.sql` | **Exact match**, 11,519 characters | Applied to snapshot bootstrap under a different ledger version |
+| `20261014174016` | `phase24_identifier_correction_rpc` | `supabase/migrations/20261013120100_phase24_identifier_correction_rpc.sql` | **Exact match**, 8,205 characters | Applied to snapshot bootstrap under a different ledger version |
+| `20261014174019` | `phase24_worker_identifier_ordering` | `supabase/migrations/20261013120200_phase24_worker_identifier_ordering.sql` | **Exact match**, 3,142 characters | Applied to snapshot bootstrap under a different ledger version |
+| `20261014174920` | `phase28_snapshot_07_rls_event_trigger` | `supabase/recovery/phase28_snapshot/07_rls_event_trigger.sql` | Snapshot chunk; not a historical migration | Bootstrap snapshot only |
+| `20261014175843` | `phase28_snapshot_08_table_grant_repair` | `supabase/recovery/phase28_snapshot/08_table_grant_repair.sql` | Snapshot chunk; not a historical migration | Bootstrap snapshot only |
+| `20261014182500` | `phase28_export_status_transitions` | `supabase/migrations/20261014182500_phase28_export_status_transitions.sql` | **Exact match**, 680 characters | Isolated-only forward migration |
+
+This confirms all five non-snapshot SQL files in the isolated ledger match their tracked migration file byte-for-byte. The six snapshot chunks plus the two later snapshot-repair chunks are not part of the 39-row Production historical ledger and must not be treated as original chronological migrations.
+
+## Legacy SQL scripts outside the canonical migration directory
+
+The following tracked SQL files remain outside `supabase/migrations/`. They are preserved, but are **not automatically replayed** by the canonical Supabase migration runner; some overlap with the newly restored canonical migrations. Do not apply them as additional steps without dependency and duplicate-DDL review:
+
+- `supabase/phase2_backend.sql`
+- `supabase/phase3_project_templates.sql`
+- `supabase/phase6_student_photo_matching.sql`
+- `supabase/phase7_photo_processing.sql`
+- `supabase/phase8_card_rendering.sql`
+- `supabase/phase8_rendering_engine.sql`
+- `supabase/phase9_batch_generation_engine.sql`
+- `supabase/phase9_batch_status_transitions.sql`
+- `supabase/phase9_batch_worker_authorization.sql`
+- `supabase/phase9_qualify_item_rls.sql`
+- `supabase/phase9_worker_invoker_and_indexes.sql`
+- `supabase/phase10_validation.sql`
+- `supabase/phase10_validation_settings.sql`
+- `supabase/phase10_stale_output_invalidation.sql`
+- `supabase/phase10_critical_finding_guard.sql`
+- `supabase/phase10_finding_insert_guard.sql`
+- `supabase/phase11_zip_exports.sql`
+- `supabase/phase13_rate_limits.sql`
+- `supabase/phase13_security_hardening.sql`
+- `supabase/phase13_storage_path_policy_fix.sql`
+
+## Current Supabase advisor findings (15 October 2026)
+
+These checks were read-only. No advisor-driven DDL or privilege changes were applied.
+
+| Project | Advisor | Current finding |
+|---|---|---|
+| Isolated `zzecjgauhkaxyptsurlw` | Security | 2 warnings: authenticated execution of SECURITY DEFINER RPCs `consume_security_rate_limit` and `record_export_download_link_issued` |
+| Production `xdoenkusrakuyyxnnkff` | Security | 1 warning: authenticated execution of SECURITY DEFINER RPC `consume_security_rate_limit` |
+| Isolated | Performance | 28 unindexed foreign keys; 47 unused-index notices; 4 duplicate-index warnings |
+| Production | Performance | 28 unindexed foreign keys; 50 unused-index notices; 4 duplicate-index warnings |
+
+Security advisor guidance: [Supabase database linter 0029](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable). Foreign-key index guidance: [Supabase database linter 0001](https://supabase.com/docs/guides/database/database-linter?lint=0001_unindexed_foreign_keys). Duplicate/unused indexes should be reviewed with real query plans and representative workload before removing or adding indexes. The two isolated SECURITY DEFINER RPCs are used by application flows and need a privilege/authorization review rather than a blind revoke. Production was not changed.
+
+**Dependency audit:** the latest previous CI evidence reports three moderate `sprintf-js`/`argparse` transitive findings and no committed npm lockfile. The Phase 29 CI audit is in progress; no forced downgrade was applied because the previously proposed TensorFlow downgrade was breaking.
+
 ## Additional tracked migrations outside Production's recorded history
 
 | Version | File | Status / interpretation |
