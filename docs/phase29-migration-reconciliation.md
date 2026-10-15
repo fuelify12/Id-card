@@ -82,7 +82,7 @@ These five files are intentionally kept as later migrations, not misrepresented 
 
 - **Clean-room replay: BLOCKED.** No local PostgreSQL binaries or Docker runtime are available; external network is unavailable for obtaining a runtime. The current isolated project is not used as a reset target without explicit authorization.
 - **Authenticated browser: BLOCKED.** TinyFish has only a default profile with no recorded signed-in sites. Preview SSO remains enabled; no bypass or credential collection was attempted.
-- **Preview alignment: NOT VERIFIED.** The previous report documented a branch-scoped Preview and isolated Supabase variables, but Phase 29 did not find a READY deployment through the narrow recent-deployment query. Deployment SHA/environment alignment needs a fresh, unfiltered Vercel deployment inspection.
+- **Preview alignment: PARTIAL.** Vercel confirmed a READY non-production Preview for commit `173e38f374380cd4d831bcaff77222f73f0e9126` (`https://printforge-phase27-acceptance-ehf3pftlh-yash-6966.vercel.app`, target `null`). The current branch head `78dffadd5d90def1c6e610b6df6a8a2ed37091f4` had a queued Preview at last inspection, so the exact current commit did not yet have a READY deployment. Reading project configuration/environment metadata was denied by Vercel team-scope authorization (403); no environment values were accessed. Exact branch-scoped database configuration therefore remains NOT VERIFIED.
 - **Persisted 300-record batch, worker recovery, real ZIP/download hashes, HTTP/storage tenant denial, backup/restore, physical camera/print: NOT VERIFIED.** No live authenticated app workflow was run.
 
 ## Safety and remediation

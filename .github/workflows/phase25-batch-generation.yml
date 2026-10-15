@@ -33,6 +33,7 @@ on:
       - "docs/phase27-visual-print-acceptance.md"
       - "docs/phase28-migration-recovery.md"
       - "scripts/phase28-migration-contract-check.mjs"
+      - "scripts/phase29-authoritative-ledger-check.mjs"
       - "supabase/recovery/**"
       - ".github/workflows/phase25-batch-generation.yml"
       - "package.json"
@@ -64,6 +65,8 @@ jobs:
         run: node scripts/security-check.mjs
       - name: Phase 28 migration contract check
         run: node scripts/phase28-migration-contract-check.mjs --allow-recovery-snapshot
+      - name: Phase 29 authoritative migration ledger checksum contract
+        run: node scripts/phase29-authoritative-ledger-check.mjs
       - name: Full regression tests
         env:
           PRINTFORGE_VISUAL_ARTIFACT_DIR: artifacts/phase27-visual-print
