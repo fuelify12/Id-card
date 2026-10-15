@@ -5,6 +5,37 @@ import {parseWorkbook,validateStudentRows,type SpreadsheetPreview,type ParsedStu
 import {importStudentRows,saveTemplateFields} from "@/app/dashboard/actions";
 
 type Field={id:string;key:string;label:string;field_type:string;required:boolean;x:number;y:number;width:number;height:number;font_family:string|null;font_size:number|null;font_weight:string|null;color:string|null;alignment:string|null;fit_mode:string|null;source_column:string|null;confidence:number|null};
+function normalizeMappingName(value:string){return value.normalize("NFKC").toLocaleLowerCase("en-IN").replace(/['’`]/g,"").replace(/[^\\p{L}\\p{N}]+/gu," ").trim().replace(/\\s+/g," ")}
+function fieldAliases(field:Field):string[]{
+ const identity=normalizeMappingName([field.key,field.label].join(" "));
+ const aliases:Record<string,string[]>={
+  student_name:["student name","name","student full name","name of student","विद्यार्थी का नाम","छात्र का नाम","विद्यार्थी का पूरा नाम"],
+  father_name:["father name","fathers name","father's name","father","father name of student","पिता का नाम","पिता का नाम"],
+  mother_name:["mother name","mothers name","mother's name","mother","माता का नाम"],
+  guardian_name:["guardian name","guardian","अभिभावक का नाम"],
+  class:["class","class name","grade","कक्षा"],
+  section:["section","सेक्शन","वर्ग"],
+  roll_number:["roll no","roll number","rollno","रोल नंबर","अनुक्रमांक"],
+  admission_number:["admission no","admission number","admissionno","प्रवेश संख्या","प्रवेशांक"],
+  date_of_birth:["date of birth","dob","birth date","जन्म तिथि","जन्मतिथि"],
+  address:["address","पता"],
+  blood_group:["blood group","blood type","रक्त समूह"],
+  phone:["phone","mobile","mobile number","contact number","मोबाइल नंबर","फोन नंबर"],
+  session:["session","academic session","शैक्षिक सत्र"],
+  gender:["gender","sex","लिंग"],
+  student_id:["student id","student code","विद्यार्थी आईडी"],
+  serial_number:["serial number","serial no","s no","sno","क्रमांक","अनुक्रमांक"]
+ };
+ const key=normalizeMappingName(field.key).replace(/ /g,"_");
+ return [...new Set([field.source_column??"",field.key,field.label,...(aliases[key]??[]),...(aliases[identity.replace(/ /g,"_")]??[])].map(normalizeMappingName).filter(Boolean))];
+}
+function autoMapColumn(field:Field,headers:string[]):string|null{
+ const normalized=headers.map(h=>({raw:h,n:normalizeMappingName(h)}));
+ const aliases=fieldAliases(field);
+ for(const alias of aliases){const exact=normalized.find(h=>h.n===alias);if(exact)return exact.raw}
+ const candidates=normalized.filter(h=>aliases.some(a=>a.length>=4&&(h.n.includes(a)||a.includes(h.n))));
+ return candidates.length===1?candidates[0].raw:null;
+}
 export function StudentImportWorkspace({projectId,templateId,fields:initialFields}:{projectId:string;templateId:string|null;fields:Field[]}) {
  const [preview,setPreview]=useState<SpreadsheetPreview|null>(null);
  const [fields,setFields]=useState(initialFields);
@@ -19,7 +50,7 @@ export function StudentImportWorkspace({projectId,templateId,fields:initialField
  const validRows=useMemo(()=>validated.filter(r=>r.issues.length===0),[validated]);
  async function onFile(file?:File) {
   if(!file)return;setError("");setNotice("");setPreview(null);setBusy(true);
-  try { const p=parseWorkbook(await file.arrayBuffer(),file.name);setPreview(p);setSerialColumn(p.serialColumn??"");setPage(0); }
+  try { const p=parseWorkbook(await file.arrayBuffer(),file.name);setPreview(p);setSerialColumn(p.serialColumn??"");setPage(0);setFields(old=>old.map(f=>{const mapped=autoMapColumn(f,p.headers);return mapped?{...f,source_column:mapped}:f})); }
   catch(e){setError(e instanceof Error?e.message:"Could not read this spreadsheet.");}
   finally{setBusy(false);}
  }
