@@ -25,17 +25,20 @@ export const templateAnalysisSchema=z.object({
 export type TemplateAnalysis=z.infer<typeof templateAnalysisSchema>;
 
 export function normalizeAnalysis(raw:TemplateAnalysis){
+  const clamp=(value:number)=>Math.max(0,Math.min(1000,value));
   const fields=raw.fields.map((f,i)=>{
-    const [y1,x1,y2,x2]=f.box;
+    const [rawY1,rawX1,rawY2,rawX2]=f.box;
+    const x1=Math.min(clamp(rawX1),clamp(rawX2)),x2=Math.max(clamp(rawX1),clamp(rawX2));
+    const y1=Math.min(clamp(rawY1),clamp(rawY2)),y2=Math.max(clamp(rawY1),clamp(rawY2));
+    const x=Math.round(x1/1000*raw.width),y=Math.round(y1/1000*raw.height);
+    const right=Math.round(x2/1000*raw.width),bottom=Math.round(y2/1000*raw.height);
     return {
       key:f.key,label:f.label,field_type:f.fieldType,required:f.required,
-      x:Math.round(x1/1000*raw.width),y:Math.round(y1/1000*raw.height),
-      width:Math.max(1,Math.round((x2-x1)/1000*raw.width)),
-      height:Math.max(1,Math.round((y2-y1)/1000*raw.height)),
+      x,y,width:Math.max(1,right-x),height:Math.max(1,bottom-y),
       font_family:f.fontFamily,font_size:Math.max(8,Math.round(f.fontSizeRatio*raw.width)),
       font_weight:"400",color:f.color,alignment:f.alignment,fit_mode:f.fitMode,
       source_column:f.suggestedSourceColumn||null,confidence:f.confidence,sort_order:i
     };
-  }).filter(f=>f.width>0&&f.height>0);
+  }).filter(f=>f.width>0&&f.height>0&&f.x<raw.width&&f.y<raw.height);
   return {fields};
 }
