@@ -1,9 +1,23 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { templateAnalysisSchema, normalizeAnalysis } from "@/lib/ai/template-schema";
+import sharp from "sharp";
+import { sanitizeSvg } from "@/lib/rendering/engine";
 
 const MODEL = process.env.GEMINI_TEMPLATE_MODEL || "gemini-2.5-flash";
-const PROMPT = `Inspect the supplied ID card template image carefully and return JSON only. Identify every variable field a human would need to fill for each student: student name, father/mother/guardian name, class, section, roll number, admission number, date of birth, address, blood group, session, phone, and any other visible student-specific value. Identify the photo placeholder separately. Also record static school/logo/header text in detectedText, not as student fields. Do not invent unseen fields. For each variable field give its visible label, a stable snake_case key, source-column suggestion only when supported by visible label, confidence from 0 to 1, and bounding box [ymin,xmin,ymax,xmax] normalized 0-1000. Make boxes tight around the actual print region. Include fields that are blank placeholders even if they have no current value. Do not infer student values from the template; this is field detection, not student data generation.`;
+const PROMPT = `Analyze this school/student ID-card template as a precise print-layout engineer. Return JSON only.
+
+GOAL: create a usable field map, not just an OCR transcript. Inspect the entire card, including Hindi/English text, labels, blank lines, underlines, boxes, photo placeholders, and small text.
+
+1) DETECT EVERY variable student-specific field that a human would otherwise map or fill: student full name, father's name, mother's name, guardian name, class, section, roll number, admission number, date of birth, address, blood group, phone, academic session, gender, student ID, and any other visible variable field. Include a photo field separately when there is a photo placeholder.
+2) SEPARATE PRINTED LABELS FROM VALUE AREAS. For a layout such as "Father's Name: __________", keep "Father's Name:" in detectedText and set the father_name field box ONLY over the blank line/empty value area after the label. Never place the value box over the printed label. If a label is above its blank area, box only the area where the value should print. If the card already has an empty outlined box for a value, use that box.
+3) Return every printed/static label and school/header text in detectedText with tight normalized boxes. Do not treat static label text as a student value field.
+4) Each variable field must have a stable snake_case key and a meaningful label. Use canonical keys such as student_name, father_name, mother_name, guardian_name, class, section, roll_number, admission_number, date_of_birth, address, blood_group, phone, session, gender, student_id, student_photo. For father/mother fields use fieldType "parent"; use other appropriate enum values for the remaining fields.
+5) Set suggestedSourceColumn to the most likely spreadsheet header name, e.g. "Father's Name" for father_name or "Student Name" for student_name. This is a semantic suggestion, not a claim that the spreadsheet has that exact column. Never leave it blank when the field identity is clear.
+6) Boxes are [ymin,xmin,ymax,xmax] normalized 0–1000, relative to the complete card image. Coordinates must be ordered, inside the card, and tight around the actual value-printing region. Do not use the whole card as a box. Estimate image width and height in pixels from the supplied file.
+7) Infer alignment, font family, approximate font-size ratio, text color, and whether the field is required. Use Noto Sans for Indian scripts. Use confidence honestly; low confidence is preferable to invented certainty.
+8) Do not invent unseen fields or student values. Do not remove important fields because the value area is blank. Keep photo placeholder separate from text fields. If a field is genuinely ambiguous, add a note.
+`;
 const responseSchema = {
   type: "OBJECT",
   properties: {
@@ -66,26 +80,67 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     if (fe || !file) return NextResponse.json({ error: "Could not download the template image.", details: fe?.message }, { status: 500 });
     if (file.size > 20 * 1024 * 1024) return NextResponse.json({ error: "Template is too large for analysis (20 MB maximum)." }, { status: 413 });
 
-    const bytes = Buffer.from(await file.arrayBuffer());
-    const mimeType = t.source_type === "png" || t.source_type === "image/png" || t.source_path.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(MODEL)}:generateContent`;
-    const gr = await fetch(url, {
-      method: "POST",
-      headers: { "x-goog-api-key": apiKey, "content-type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: PROMPT }, { inline_data: { mime_type: mimeType, data: bytes.toString("base64") } }] }],
-        generationConfig: { responseMimeType: "application/json", responseSchema, temperature: 0.1 }
-      }),
-      cache: "no-store",
-      signal: AbortSignal.timeout(60000)
-    });
-    if (!gr.ok) {
+    const originalBytes = Buffer.from(await file.arrayBuffer());
+    const sourceType = String(t.source_type || "").toLowerCase();
+    const sourcePath = String(t.source_path || "").toLowerCase();
+    let bytes = originalBytes;
+    let mimeType: string;
+    if (sourceType === "svg" || sourceType === "image/svg+xml" || sourcePath.endsWith(".svg")) {
+      bytes = await sharp(sanitizeSvg(originalBytes), { limitInputPixels: 24_000_000, density: 144 }).png().toBuffer();
+      mimeType = "image/png";
+    } else if (sourceType === "pdf" || sourceType === "application/pdf" || sourcePath.endsWith(".pdf")) {
+      // Gemini accepts PDF documents directly. Do not mislabel PDF bytes as JPEG.
+      mimeType = "application/pdf";
+    } else if (sourceType === "png" || sourceType === "image/png" || sourcePath.endsWith(".png")) {
+      mimeType = "image/png";
+    } else if (["jpg", "jpeg", "image/jpeg"].includes(sourceType) || /\.(jpe?g)$/.test(sourcePath)) {
+      mimeType = "image/jpeg";
+    } else {
+      return NextResponse.json({ error: "Unsupported template format for Gemini analysis.", details: "Use PNG, JPEG, SVG, or a single-page PDF template." }, { status: 415 });
+    }
+    if (bytes.length > 20 * 1024 * 1024) return NextResponse.json({ error: "Prepared template is too large for analysis.", details: "The image prepared for Gemini exceeds 20 MB." }, { status: 413 });
+    const models = [...new Set([MODEL, "gemini-2.5-flash", "gemini-2.5-flash-lite"].filter(Boolean))];
+    let gj: any = null;
+    let lastFailure = { status: 502, detail: "Gemini did not return a response." };
+    for (const model of models) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+      let gr: Response;
+      try {
+        gr = await fetch(url, {
+          method: "POST",
+          headers: { "x-goog-api-key": apiKey, "content-type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: PROMPT }, { inline_data: { mime_type: mimeType, data: bytes.toString("base64") } }] }],
+            generationConfig: { responseMimeType: "application/json", responseSchema, temperature: 0.1 }
+          }),
+          cache: "no-store",
+          signal: AbortSignal.timeout(60000)
+        });
+      } catch (err) {
+        lastFailure = { status: 502, detail: err instanceof Error ? err.message : "Network request to Gemini failed." };
+        continue;
+      }
+      if (gr.ok) { gj = await gr.json(); break; }
       const providerBody = await gr.text();
       let detail = `Gemini API returned HTTP ${gr.status}.`;
       try { detail = JSON.parse(providerBody)?.error?.message || detail; } catch {}
-      return NextResponse.json({ error: "Gemini analysis failed.", details: detail.slice(0, 700), model: MODEL }, { status: gr.status === 429 ? 429 : 502 });
+      lastFailure = { status: gr.status, detail: detail.slice(0, 700) };
+      // Only retry another model for model/schema/unsupported-request failures or transient rate/server errors.
+      if (![400, 404, 429, 500, 502, 503].includes(gr.status)) break;
     }
-    const gj = await gr.json();
+    if (!gj) {
+      const status = lastFailure.status === 429 ? 429 : lastFailure.status === 401 || lastFailure.status === 403 ? 502 : 502;
+      return NextResponse.json({
+        error: "Gemini analysis failed.",
+        details: lastFailure.detail,
+        modelTried: models,
+        hint: /api key|permission|unauthorized|billing|quota/i.test(lastFailure.detail)
+          ? "Check that GEMINI_API_KEY is valid, enabled for the Generative Language API, and has available quota."
+          : /mime|media type|file type|unsupported/i.test(lastFailure.detail)
+            ? "The template format could not be accepted by Gemini. Try exporting the card as PNG or JPEG."
+            : "Open the detailed error, then retry. The app now attempts compatible Gemini models automatically."
+      }, { status });
+    }
     const output = gj.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || "").join("").trim();
     if (!output) return NextResponse.json({ error: "Gemini returned no structured output.", details: gj.promptFeedback?.blockReason || "Empty model response." }, { status: 502 });
     let raw: unknown;
