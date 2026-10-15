@@ -33,7 +33,7 @@ for (const entry of manifest.migrations) {
   requireThat(md5 === entry.md5, `${entry.path}: MD5 ${md5} != authoritative source ${entry.md5}.`);
 }
 const filenames = readdirSync(migrationsDir).filter((name) => name.endsWith(".sql")).sort();
-const versions = filenames.map((name) => name.match(/^(\\d{14})_[a-z0-9_]+\\.sql$/)?.[1] ?? "");
+const versions = filenames.map((name) => name.match(/^(\d{14})_[a-z0-9_]+\.sql$/)?.[1] ?? "");
 requireThat(versions.every(Boolean), "One or more canonical migration filenames do not follow YYYYMMDDHHMMSS_name.sql.");
 requireThat(versions.every((v, i) => i === 0 || versions[i - 1] < v), "Canonical migration versions are not strictly increasing and unique.");
 requireThat(existsSync(join(root, "supabase", "recovery", "phase29_superseded_migration_candidates", "20261010115000_phase18_batch_worker_recovery.sql")), "Superseded Phase 18 candidate was not preserved outside the canonical migration directory.");
