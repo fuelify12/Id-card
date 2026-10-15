@@ -1,0 +1,1 @@
+alter table public.templates drop constraint if exists templates_source_type_check; alter table public.templates add constraint templates_source_type_check check (source_type = any (array['png','jpg','jpeg','pdf','svg']::text[]));
