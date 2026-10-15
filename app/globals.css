@@ -51,3 +51,27 @@ button:focus-visible,a:focus-visible,summary:focus-visible,input:focus-visible,s
 .pf-table-scroll{max-width:100%;overflow-x:auto}
 @media(max-width:640px){.pf-panel{border-radius:15px}.pf-camera-dialog{padding:12px}.pf-workflow-nav{top:56px;margin-left:-2px;margin-right:-2px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+
+/* Consistent project workflow hierarchy and reliable phase navigation */
+html{scroll-behavior:smooth;scroll-padding-top:125px}
+.pf-project-page{width:100%;max-width:1440px;margin-inline:auto}
+.pf-back-link{display:inline-flex;align-items:center;min-height:40px;color:#5269d9;font-size:14px;font-weight:700}
+.pf-project-heading{margin:14px 0 18px;padding:24px;border:1px solid #e1e8f3;border-radius:20px;background:linear-gradient(120deg,rgba(255,255,255,.96),rgba(239,244,255,.9));box-shadow:0 8px 26px rgba(38,61,96,.045)}
+.pf-project-heading h1{margin:5px 0;font-size:clamp(26px,4vw,36px);line-height:1.2;font-weight:800;letter-spacing:-.035em;color:#17243a}
+.pf-project-heading>p:last-child{margin-top:8px;color:#718096;font-size:14px}
+.pf-eyebrow{font-size:11px;font-weight:800;letter-spacing:.16em;color:#6179e7}
+.pf-workflow-nav{position:sticky;top:65px;z-index:30;display:flex;gap:8px;overflow-x:auto;overscroll-behavior-x:contain;padding:10px 2px 13px;margin:0 0 22px;background:rgba(245,248,252,.94);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);scrollbar-width:thin}
+.pf-workflow-nav a{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;min-height:42px;padding:9px 14px;border:1px solid #dfe6f1;border-radius:12px;background:rgba(255,255,255,.92);color:#52627a;font-size:13px;font-weight:700;white-space:nowrap;box-shadow:0 2px 7px rgba(38,61,96,.025);transition:background .15s,border-color .15s,color .15s}
+.pf-workflow-nav a:hover,.pf-workflow-nav a:focus-visible{background:#edf2ff;border-color:#c8d4ff;color:#405bd5}
+.pf-workflow-content{display:flex;flex-direction:column;gap:28px}
+.pf-workflow-section{min-width:0;scroll-margin-top:130px;padding:0}
+.pf-section-heading{display:flex;align-items:flex-start;gap:13px;margin-bottom:14px}
+.pf-section-heading>span{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;min-width:64px;min-height:29px;padding:5px 8px;border:1px solid #dfe5ff;border-radius:9px;background:#edf1ff;color:#4d63d6;font-size:10px;font-weight:900;letter-spacing:.08em}
+.pf-section-heading h2{margin:0;color:#1d2a40;font-size:20px;font-weight:800;letter-spacing:-.025em;line-height:1.3}
+.pf-section-heading p{margin:4px 0 0;color:#718096;font-size:13px;line-height:1.55}
+.pf-advanced-settings{margin-top:16px;padding:15px 17px;border:1px solid #e1e8f2;border-radius:15px;background:rgba(255,255,255,.7)}
+.pf-advanced-settings summary{cursor:pointer;color:#52627a;font-size:14px;font-weight:700}
+.pf-inline-link{display:inline-flex;margin-top:8px;color:#4d63d6;font-size:14px;font-weight:700}
+.pf-workflow-section .pf-panel{color:#24334a}
+.pf-workflow-section .pf-muted{color:#718096}
+@media(max-width:640px){html{scroll-padding-top:112px}.pf-project-heading{padding:18px;border-radius:16px}.pf-workflow-nav{top:56px;margin-left:-4px;margin-right:-4px}.pf-workflow-section{scroll-margin-top:115px}.pf-workflow-content{gap:23px}.pf-section-heading h2{font-size:18px}.pf-section-heading{gap:9px}.pf-section-heading>span{min-width:55px;font-size:9px}}
