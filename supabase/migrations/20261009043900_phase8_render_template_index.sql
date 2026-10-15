@@ -1,0 +1,1 @@
+create index if not exists idx_generated_cards_template_id on public.generated_cards(template_id) where template_id is not null;
