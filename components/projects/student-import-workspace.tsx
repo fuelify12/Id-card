@@ -16,18 +16,23 @@ function fieldAliases(field:Field):string[]{
   class:["class","class name","grade","कक्षा"],
   section:["section","सेक्शन","वर्ग"],
   roll_number:["roll no","roll number","rollno","रोल नंबर","अनुक्रमांक"],
-  admission_number:["admission no","admission number","admissionno","प्रवेश संख्या","प्रवेशांक"],
-  date_of_birth:["date of birth","dob","birth date","जन्म तिथि","जन्मतिथि"],
+  admission_number:["admission no","admission number","admissionno","admission id","enrollment no","enrollment number","प्रवेश संख्या","प्रवेशांक"],
+  admission_no:["admission no","admission number","admissionno","admission id","enrollment no","enrollment number","प्रवेश संख्या","प्रवेशांक"],
+  date_of_birth:["date of birth","dob","birth date","date of birth (dob)","जन्म तिथि","जन्मतिथि"],
+  dob:["date of birth","dob","birth date","जन्म तिथि","जन्मतिथि"],
   address:["address","पता"],
   blood_group:["blood group","blood type","रक्त समूह"],
   phone:["phone","mobile","mobile number","contact number","मोबाइल नंबर","फोन नंबर"],
-  session:["session","academic session","शैक्षिक सत्र"],
+  session:["session","academic session","school session","शैक्षिक सत्र"],
+  academic_session:["session","academic session","school session","शैक्षिक सत्र"],
   gender:["gender","sex","लिंग"],
   student_id:["student id","student code","विद्यार्थी आईडी"],
   serial_number:["serial number","serial no","s no","sno","क्रमांक","अनुक्रमांक"]
  };
  const key=normalizeMappingName(field.key).replace(/ /g,"_");
- return [...new Set([field.source_column??"",field.key,field.label,...(aliases[key]??[]),...(aliases[identity.replace(/ /g,"_")]??[])].map(normalizeMappingName).filter(Boolean))];
+ const labelKey=normalizeMappingName(field.label).replace(/ /g,"_");
+ const aliasKey=Object.keys(aliases).find(k=>aliases[k].some(a=>normalizeMappingName(a)===labelKey));
+ return [...new Set([field.source_column??"",field.key,field.label,...(aliases[key]??[]),...(aliases[labelKey]??[]),...(aliasKey?aliases[aliasKey]:[]),...(aliases[identity.replace(/ /g,"_")]??[])].map(normalizeMappingName).filter(Boolean))];
 }
 function autoMapFields(fields:Field[],headers:string[]):Field[]{
  const normalized=headers.map(raw=>({raw,n:normalizeMappingName(raw)}));

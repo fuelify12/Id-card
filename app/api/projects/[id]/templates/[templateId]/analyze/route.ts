@@ -146,6 +146,14 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     if (!output) return NextResponse.json({ error: "Gemini returned no structured output.", details: gj.promptFeedback?.blockReason || "Empty model response." }, { status: 502 });
     let raw: unknown;
     try { raw = JSON.parse(output); } catch { return NextResponse.json({ error: "Gemini returned invalid JSON. Retry analysis." }, { status: 502 }); }
+    // Clamp Gemini's approximate font-size ratio before strict validation.
+    if (raw && typeof raw === "object" && Array.isArray((raw as any).fields)) {
+      (raw as any).fields = (raw as any).fields.map((field: any) => {
+        if (!field || typeof field !== "object") return field;
+        const ratio = Number(field.fontSizeRatio);
+        return { ...field, fontSizeRatio: Number.isFinite(ratio) ? Math.max(0.005, Math.min(0.25, ratio)) : 0.04 };
+      });
+    }
     const parsed = templateAnalysisSchema.safeParse(raw);
     if (!parsed.success) return NextResponse.json({ error: "Gemini output failed validation.", details: parsed.error.issues.slice(0, 5) }, { status: 502 });
     // Coordinates must use the uploaded template's real pixel basis, not dimensions guessed by the model.
