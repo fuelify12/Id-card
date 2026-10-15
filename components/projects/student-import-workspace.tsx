@@ -50,7 +50,7 @@ export function StudentImportWorkspace({projectId,templateId,fields:initialField
  const validRows=useMemo(()=>validated.filter(r=>r.issues.length===0),[validated]);
  async function onFile(file?:File) {
   if(!file)return;setError("");setNotice("");setPreview(null);setBusy(true);
-  try { const p=parseWorkbook(await file.arrayBuffer(),file.name);setPreview(p);setSerialColumn(p.serialColumn??"");setPage(0);setFields(old=>old.map(f=>{const mapped=autoMapColumn(f,p.headers);return mapped?{...f,source_column:mapped}:f})); }
+  try { const p=parseWorkbook(await file.arrayBuffer(),file.name);setPreview(p);setSerialColumn(p.serialColumn??"");setPage(0);const mappedFields=fields.map(f=>({...f,source_column:autoMapColumn(f,p.headers)}));setFields(mappedFields);const mappedCount=mappedFields.filter(f=>Boolean(f.source_column)).length;if(templateId){await saveTemplateFields({projectId,templateId,fields:mappedFields});setNotice(`Automatically mapped and saved ${mappedCount} of ${mappedFields.length} template fields to spreadsheet columns. Review the mappings below before importing.`)}else{setNotice(`Automatically matched ${mappedCount} of ${mappedFields.length} template fields to spreadsheet columns.`)} }
   catch(e){setError(e instanceof Error?e.message:"Could not read this spreadsheet.");}
   finally{setBusy(false);}
  }
