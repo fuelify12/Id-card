@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
+import { scopedBatchIdempotencyKey } from "@/lib/batch/idempotency";
 import { createClient } from "@/lib/supabase/server";
 import { validateStudents, validateTemplateConfiguration } from "@/lib/validation/engine";
 import { consumeRateLimit } from "@/lib/security/rate-limit";
@@ -123,14 +124,16 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       if (action === "preflight") return NextResponse.json(report);
       if (configIssues.length) return NextResponse.json({ error: "Resolve critical template/render configuration errors before starting production.", preflight: report }, { status: 422 });
       if (!report.eligible) return NextResponse.json({ error: "No eligible students are available for this batch.", preflight: report }, { status: 422 });
-      const key = String(body.idempotencyKey ?? "").slice(0, 128) || randomUUID();
-      const { data: prior } = await db.from("batches").select("id,status").eq("owner_id", uid).eq("idempotency_key", key).maybeSingle();
+      const clientKey = typeof body.idempotencyKey === "string" ? body.idempotencyKey.trim() : "";
+      if (clientKey.length > 128) return reply("Idempotency key must be 128 characters or fewer.");
+      const key = clientKey ? scopedBatchIdempotencyKey(projectId, clientKey) : randomUUID();
+      const { data: prior } = await db.from("batches").select("id,status").eq("owner_id", uid).eq("project_id", projectId).eq("idempotency_key", key).maybeSingle();
       if (prior) return NextResponse.json({ batchId: prior.id, status: prior.status, reusedRequest: true });
       const eligibleRows = rows.filter(r => r.eligible);
       const skippedRows = rows.filter(r => !r.eligible);
       const { data: batch, error: batchError } = await db.from("batches").insert({ project_id: projectId, owner_id: uid, requested_by: uid, name: "ID card batch " + new Date().toISOString(), status: "queued", total_count: rows.length, eligible_count: eligibleRows.length, skipped_count: skippedRows.length, template_id: template.id, template_version: template.version_number, idempotency_key: key, config_snapshot: { templateId: template.id, templateVersion: template.version_number, renderConfig: config } }).select("id,status").single();
       if (batchError) {
-        if (batchError.code === "23505") { const { data: duplicate } = await db.from("batches").select("id,status").eq("owner_id", uid).eq("idempotency_key", key).single(); if (duplicate) return NextResponse.json({ batchId: duplicate.id, status: duplicate.status, reusedRequest: true }); }
+        if (batchError.code === "23505") { const { data: duplicate } = await db.from("batches").select("id,status").eq("owner_id", uid).eq("project_id", projectId).eq("idempotency_key", key).single(); if (duplicate) return NextResponse.json({ batchId: duplicate.id, status: duplicate.status, reusedRequest: true }); }
         throw new Error(batchError.message);
       }
       const items = [...eligibleRows.map(r => ({ batch_id: batch.id, project_id: projectId, owner_id: uid, student_id: r.studentId, serial_number: r.legacySerialNumber, student_identifier: r.studentIdentifier, student_name: r.studentName, status: "PENDING" })), ...skippedRows.map(r => ({ batch_id: batch.id, project_id: projectId, owner_id: uid, student_id: r.studentId, serial_number: r.legacySerialNumber, student_identifier: r.studentIdentifier, student_name: r.studentName, status: "SKIPPED", error_category: "validation", error_summary: [...r.missingFields, ...(r.photoMissing ? ["Missing approved processed photo"] : []), ...(r.identityIssues ?? [])].join(", ") || "Blocked by template configuration" }))];
