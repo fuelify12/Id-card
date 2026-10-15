@@ -29,3 +29,26 @@
 ## Safety
 
 No Production schema/data mutation, existing isolated-project reset, Production deployment, or PR merge was performed. Phase 30 work remains on a dedicated branch.
+
+## Clean-room replay attempt — failed with a reproducible historical-chain gap
+
+Workflow: [run 38687519743](https://github.com/fuelify12/Id-card/actions/runs/38687519743), tested SHA `3bae77f25e31653c288741c58638491262ef9353`.
+
+- The authoritative checksum check passed (39 ledger entries; 44 canonical SQL files).
+- The inventory check passed.
+- GitHub Actions initialized a fresh, disposable local Supabase stack. Supabase CLI downloaded the required containers and began applying canonical migrations.
+- Replay stopped at `20261009054041_phase8_template_sides.sql` with PostgreSQL SQLSTATE `42703`: column `is_active` does not exist, at the partial unique index predicate `where is_active = true`.
+- Earlier Phase 1 migration creates `public.templates` without `is_active`. The legacy `supabase/phase3_project_templates.sql` file adds `version_number` and `is_active`, but it is not in `supabase/migrations` and has no row in the 39-entry authoritative Production ledger. This is direct evidence of a gap between the canonical replay chain and the historically documented schema path.
+- Read-only `information_schema.columns` checks show `public.templates.is_active` exists in both current Production and the existing isolated project. Neither database was changed by this failed replay.
+- The legacy Phase 3 SQL must not simply be copied into the chain or the failing historical SQL edited without reviewing its complete provenance, dependencies, and idempotence. The replay is therefore **FAIL** for the current canonical chain; a provenance-backed migration-chain repair and a new fresh replay are required.
+
+Docker registry returned transient `toomanyrequests` errors while pulling images, but the pull eventually progressed. The terminal blocker was the PostgreSQL missing-column error, not the registry throttling.
+
+## Gate status after this run
+
+- Authoritative source checksum: **PASS**.
+- Migration inventory/order: **PASS** for the checks implemented.
+- Clean-room migration replay: **FAIL** on `20261009054041_phase8_template_sides.sql`.
+- Authenticated E2E: **BLOCKED** because the only browser profile has no recorded signed-in sites.
+- Preview environment alignment: **NOT VERIFIED** because authorized Vercel project configuration inspection returned 403.
+- Persisted 300-student batch, worker fault recovery, actual ZIP/download authorization, live cross-tenant denial, and backup/restore: **NOT VERIFIED**.
