@@ -3,19 +3,29 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getSupabasePublicEnv } from "@/lib/env";
 import { PRIVATE_RESPONSE_CACHE_CONTROL } from "@/lib/security/headers";
 
+const authCookieOptions = {
+  path: "/",
+  sameSite: "lax" as const,
+  maxAge: 400 * 24 * 60 * 60,
+  secure: process.env.NODE_ENV === "production",
+};
+
 export async function proxy(request: NextRequest) {
   const env = getSupabasePublicEnv();
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(env.url, env.publishableKey, {
+    cookieOptions: authCookieOptions,
     cookies: {
       getAll() {
         return request.cookies.getAll();
       },
       setAll(values) {
-        values.forEach(({ name, value }) => request.cookies.set(name, value));
+        values.forEach(({ name, value, options }) => request.cookies.set(name, value));
         response = NextResponse.next({ request });
-        values.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+        values.forEach(({ name, value, options }) =>
+          response.cookies.set(name, value, { ...authCookieOptions, ...options })
+        );
       },
     },
   });
