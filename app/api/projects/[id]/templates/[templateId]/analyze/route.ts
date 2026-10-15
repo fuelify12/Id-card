@@ -163,7 +163,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       if (ie) return NextResponse.json({ error: "Analysis succeeded but detected fields could not be saved.", details: ie.message }, { status: 500 });
     }
     const analysis = { engine: "gemini", model: selectedModel, version: 2, analyzed_at: new Date().toISOString(), raw: analysisData, normalized_count: normalized.fields.length };
-    const { error: ue } = await s.from("templates").update({ analysis_status: "ready", analysis, updated_at: new Date().toISOString() }).eq("id", templateId).eq("project_id", id);
+    const { error: ue } = await s.from("templates").update({ analysis_status: "needs_review", analysis, updated_at: new Date().toISOString() }).eq("id", templateId).eq("project_id", id);
     if (ue) return NextResponse.json({ error: "Analysis succeeded but template status could not be updated.", details: ue.message }, { status: 500 });
     return NextResponse.json({ analysis: analysisData, fields: normalized.fields, message: "Detected template fields. Please review low-confidence boxes and source-column matches before generating cards." });
   } catch (e) {
