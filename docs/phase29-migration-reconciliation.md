@@ -10,7 +10,7 @@
 
 - **PASS WITH WARNINGS — historical Phase 1 source recovered:** the tracked Phase 1 file was compared byte-for-byte with the read-only Production migration-ledger SQL. Both are 12,142 characters and identical; PostgreSQL ledger MD5 is `12ce32c68a90886c1673eee121218451`. This is authoritative ledger evidence, not a recovered Git commit: GitHub commit history for that file path returned an empty array.
 - **PARTIAL — canonical historical migration inventory restored:** 39 historical migration rows are present in the read-only Production ledger. Phase 29 restored 17 missing Phase 8–11 migration files from the exact SQL stored in that ledger. The previously tracked Phase 18 file used version `20261010115000` and differed (5,682 characters) from the authoritative ledger SQL (5,285 characters at `20261010125420`); its candidate is preserved outside `supabase/migrations`. The Phase 13 audit-metadata file was also a normalized schema-function dump (3,010 characters), not the original 2,890-character migration SQL; it was replaced with the exact ledger SQL and the prior candidate preserved outside the canonical directory.
-- **NOT VERIFIED — checksum contract:** `scripts/phase29-authoritative-ledger-check.mjs` and the ledger manifest are added so CI can verify all 39 source-ledger files by exact MD5 and character count. This execution environment could not run the repository locally because `psql`, `postgres`, and `docker` are unavailable and network access prevented cloning the repo. The new check must run in CI before declaring checksum reconciliation passed.
+- **PASS — checksum contract:** GitHub Actions run [38675867308](https://github.com/fuelify12/Id-card/actions/runs/38675867308) on code/test SHA `2d304afb0f0c9d5d05ec23fbe4ae192bccb7f32a` checked all 39 authoritative Production ledger rows against the canonical files; all 44 canonical migration filenames were inspected, and MD5/character checks passed. An earlier CI run caught the Phase 13 audit-metadata mismatch; the canonical file was corrected from the ledger and the superseded candidate preserved. Local replay is still unavailable because `psql`, `postgres`, and `docker` are absent and network access prevented cloning the repo.
 - **BLOCKED — clean-room replay:** no empty disposable PostgreSQL/Supabase runtime is available. The existing isolated project is not reset because its disposable-reset status has not been explicitly re-authorized. No migration was applied to either Supabase project in Phase 29.
 
 ## Authoritative migration matrix
@@ -19,7 +19,7 @@ The matrix below is based on a read-only query of Production's `supabase_migrati
 
 | Version | Name | Canonical SQL file | Candidate dependencies (static scan) | Fresh replay | DML/data behavior | Reapply safety | Source checksum | Validation status | Remediation |
 |---|---|---|---|---|---|---|---|---|---|
-| `20261008173336` | `phase1_foundation` | `supabase/migrations/20261008173336_phase1_foundation.sql` | auth.users, storage.buckets, storage.objects | Baseline; requires Supabase auth/storage schemas + pgcrypto | Insert/seed/config DML present; verify conflict handling | Non-repeatable without guards (CREATE TABLE, CREATE INDEX) | 12142 chars / MD5 `12ce32c68a90886c1673eee121218451` | File checksum is CI-enforced; clean replay NOT VERIFIED | Replay on a truly empty disposable DB; do not reapply blindly to existing DB |
+| `20261008173336` | `phase1_foundation` | `supabase/migrations/20261008173336_phase1_foundation.sql` | auth.users, storage.buckets, storage.objects | Baseline; requires Supabase auth/storage schemas + pgcrypto | Insert/seed/config DML present; verify conflict handling | Non-repeatable without guards (CREATE TABLE, CREATE INDEX) | 12142 chars / MD5 `12ce32c68a90886c1673eee121218451` | CI PASS on `2d304afb0f0c9d5d05ec23fbe4ae192bccb7f32a`; clean replay NOT VERIFIED | Replay on a truly empty disposable DB; do not reapply blindly to existing DB |
 | `20261009032438` | `phase6_student_photo_matching` | `supabase/migrations/20261009032438_phase6_student_photo_matching.sql` | public.student_photos, public.batches, auth.users, public.school_projects | Intended after earlier ledger migrations; dependency order not runtime-verified | No direct DML tokens detected (DDL/function/policy scan) | Non-repeatable without guards (ADD CONSTRAINT) | 5430 chars / MD5 `02a05b4425de04d6d8386d47ebce7d40` | File checksum is CI-enforced; clean replay NOT VERIFIED | Replay on a truly empty disposable DB; do not reapply blindly to existing DB |
 | `20261009032635` | `phase6_storage_policy_hardening` | `supabase/migrations/20261009032635_phase6_storage_policy_hardening.sql` | public.student_photos, storage.objects, public.school_projects | Intended after earlier ledger migrations; dependency order not runtime-verified | No direct DML tokens detected (DDL/function/policy scan) | Partially repeatable; review DDL side effects | 2673 chars / MD5 `728ea8d9cf530707c40e1fbcef953cfa` | File checksum is CI-enforced; clean replay NOT VERIFIED | Replay on a truly empty disposable DB; do not reapply blindly to existing DB |
 | `20261009032855` | `phase6_photo_batch_byte_limits` | `supabase/migrations/20261009032855_phase6_photo_batch_byte_limits.sql` | public.batches | Intended after earlier ledger migrations; dependency order not runtime-verified | Data-transform/backfill DML tokens present | Partially repeatable; review DDL side effects | 1369 chars / MD5 `37f1543b9118ba3fdd635f98792c79e4` | File checksum is CI-enforced; clean replay NOT VERIFIED | Replay on a truly empty disposable DB; do not reapply blindly to existing DB |
@@ -132,6 +132,21 @@ Security advisor guidance: [Supabase database linter 0029](https://supabase.com/
 
 These five files are intentionally kept as later migrations, not misrepresented as Production-applied history. Their compatibility with a fresh historical replay remains unverified until clean-room execution.
 
+## CI evidence for the reconciled migration chain
+
+Latest full workflow: [GitHub Actions run 38675867308](https://github.com/fuelify12/Id-card/actions/runs/38675867308), code/test SHA `2d304afb0f0c9d5d05ec23fbe4ae192bccb7f32a`.
+
+- Authoritative migration checksum contract: **PASS**, 39 ledger rows and 44 canonical migration filenames.
+- Phase 28 migration contract: **PASS with explicit warnings** for legacy SQL outside the canonical migration directory.
+- Regression: **20 test files / 122 tests passed**.
+- Synthetic in-process renderer: **300/300 cards**, concurrency 4, 15.469 seconds in the test step. The build script's nested test run also passed 300/300 in 18.089 seconds. These are renderer tests, not persisted database-backed batch acceptance.
+- TypeScript: **PASS**.
+- Lint: **PASS with 8 existing `<img>` optimization warnings**, zero lint errors.
+- Production build: **PASS**; Next.js compiled successfully, TypeScript completed, and all five static pages generated.
+- Client bundle secret scan: **PASS**, 18 generated static files.
+- Dependency gate: **PASS at high-severity threshold**, but 3 moderate transitive `sprintf-js`/`argparse` advisories remain. The suggested `npm audit fix --force` would downgrade TensorFlow to a breaking version, so no blind upgrade/downgrade was applied.
+- Synthetic visual/print artifact: uploaded, 15,016 bytes, SHA-256 `98f3a2063ccd82a1f66b33e45630bd5ac7062cb218df5e760f1c6b90d39b68c2`, [artifact link](https://github.com/fuelify12/Id-card/actions/runs/38675867308/artifacts/11946566763).
+
 ## Existing isolated database
 
 - Target checked read-only: `zzecjgauhkaxyptsurlw`, name `PrintForge Phase 25 Synthetic Acceptance`, region `ap-south-1`, status `ACTIVE_HEALTHY`.
@@ -143,7 +158,7 @@ These five files are intentionally kept as later migrations, not misrepresented 
 
 - **Clean-room replay: BLOCKED.** No local PostgreSQL binaries or Docker runtime are available; external network is unavailable for obtaining a runtime. The current isolated project is not used as a reset target without explicit authorization.
 - **Authenticated browser: BLOCKED.** TinyFish has only a default profile with no recorded signed-in sites. Preview SSO remains enabled; no bypass or credential collection was attempted.
-- **Preview alignment: PARTIAL.** Vercel confirmed a READY non-production Preview for commit `173e38f374380cd4d831bcaff77222f73f0e9126` (`https://printforge-phase27-acceptance-ehf3pftlh-yash-6966.vercel.app`, target `null`). The current branch head `78dffadd5d90def1c6e610b6df6a8a2ed37091f4` had a queued Preview at last inspection, so the exact current commit did not yet have a READY deployment. Reading project configuration/environment metadata was denied by Vercel team-scope authorization (403); no environment values were accessed. Exact branch-scoped database configuration therefore remains NOT VERIFIED.
+- **Preview alignment: PARTIAL.** Vercel confirmed a READY non-production Preview for the tested code/test SHA `2d304afb0f0c9d5d05ec23fbe4ae192bccb7f32a` at `https://printforge-phase27-acceptance-gkj67ng3x-yash-6966.vercel.app` (deployment `dpl_14VhyU5CdZykivLEZ3RdRN8xfQvr`, target `null`). Vercel project configuration/environment metadata access returned 403; no environment values were accessed. Exact branch-scoped database configuration therefore remains NOT VERIFIED.
 - **Persisted 300-record batch, worker recovery, real ZIP/download hashes, HTTP/storage tenant denial, backup/restore, physical camera/print: NOT VERIFIED.** No live authenticated app workflow was run.
 
 ## Safety and remediation
@@ -159,6 +174,6 @@ These five files are intentionally kept as later migrations, not misrepresented 
 
 - Restored 17 missing historical migration SQL files directly from Production's read-only migration ledger.
 - Replaced the incorrect Phase 18 timestamp/content and the drifted Phase 13 audit-metadata SQL in the canonical directory with the exact ledger versions/content; preserved both superseded candidates under `supabase/recovery/phase29_superseded_migration_candidates/`.
-- Added `supabase/recovery/phase29-authoritative-migration-ledger.json`, an executable checksum checker, this report, and a CI step.
+- Added `supabase/recovery/phase29-authoritative-migration-ledger.json`, an executable checksum checker, this report, and a CI step. The checker passed in CI run `38675867308`.
 
 **Final Phase 29 decision: PARTIAL. Production remains NOT CERTIFIED.**
