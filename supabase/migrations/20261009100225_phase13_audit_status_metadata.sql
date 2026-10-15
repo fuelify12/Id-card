@@ -1,9 +1,9 @@
-CREATE OR REPLACE FUNCTION public.capture_security_audit_event()
- RETURNS trigger
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'pg_catalog', 'public'
-AS $function$
+create or replace function public.capture_security_audit_event()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
 declare
   v_row jsonb;
   v_owner uuid;
@@ -64,6 +64,4 @@ begin
   if tg_op = 'DELETE' then return old; end if;
   return new;
 end;
-$function$
-
-revoke all on function public.capture_security_audit_event() from public, anon, authenticated;
+$$;
