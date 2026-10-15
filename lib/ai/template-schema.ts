@@ -33,7 +33,7 @@ export function normalizeAnalysis(raw:TemplateAnalysis){
     const x=Math.round(x1/1000*raw.width),y=Math.round(y1/1000*raw.height);
     const right=Math.round(x2/1000*raw.width),bottom=Math.round(y2/1000*raw.height);
     return {
-      key:f.key,label:f.label,field_type:f.fieldType,required:f.required,
+      key:f.key,label:f.label,field_type:f.fieldType==="photo"?"photo":"text",required:f.required,render_options:{ai_field_type:f.fieldType},
       x,y,width:Math.max(1,right-x),height:Math.max(1,bottom-y),
       font_family:f.fontFamily,font_size:Math.max(8,Math.round(f.fontSizeRatio*raw.width)),
       font_weight:"400",color:f.color,alignment:f.alignment,fit_mode:f.fitMode,
