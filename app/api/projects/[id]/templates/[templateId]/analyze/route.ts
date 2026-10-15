@@ -127,7 +127,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       try { detail = JSON.parse(providerBody)?.error?.message || detail; } catch {}
       lastFailure = { status: gr.status, detail: detail.slice(0, 700) };
       // Only retry another model for model/schema/unsupported-request failures or transient rate/server errors.
-      if (![400, 404, 429, 500, 502, 503].includes(gr.status)) break;
+      if (![400, 403, 404, 429, 500, 502, 503].includes(gr.status)) break;
     }
     if (!gj) {
       const status = lastFailure.status === 429 ? 429 : lastFailure.status === 401 || lastFailure.status === 403 ? 502 : 502;
