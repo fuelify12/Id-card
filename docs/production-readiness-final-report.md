@@ -134,3 +134,43 @@ The connected Production project was inspected with SELECT-only catalog queries;
 
 **Safe next action:** keep PR #14 in draft. Obtain the authoritative Phase 3 deployment record or explicit database-owner approval for a migration-history reconciliation. After that decision, implement a forward-only repair and prove a fresh replay on the exact final SHA; then complete authenticated two-tenant browser, persisted batch/ZIP, recovery, and backup/restore acceptance before any release decision.
 
+## Phase 32 — final checkpoint (2026-10-15)
+
+This checkpoint supplements the earlier Phase 32 addendum with completed results observed afterward. The code implementation remains `3321aa0459fe16d5dadabee845bb462b26b8bf2f`; the report-only branch head before this checkpoint was `b5a27f1d69ce00145d36430fa90b28646866338b`.
+
+### Exact-SHA regression and replay
+
+- [Full regression run 38698456823](https://github.com/fuelify12/Id-card/actions/runs/38698456823) **PASS** on report-only head `b5a27f1d69ce00145d36430fa90b28646866338b`. All steps passed: dependency vulnerability gate, repository security, migration contracts/checksums, 127 tests across 21 files, TypeScript, lint (0 errors; 8 existing warnings), production build, client-bundle secret scan, and synthetic visual/print artifact upload.
+- [Clean-room replay run 38698456686](https://github.com/fuelify12/Id-card/actions/runs/38698456686) **FAIL** before migration replay: the disposable local Supabase stack startup failed; replay/history/catalog tests were skipped. Its sanitized summary artifact is [available here](https://github.com/fuelify12/Id-card/actions/runs/38698456686/artifacts/11954889092). This is an environment/startup failure, not evidence that replay passed. The completed earlier run [38692847698](https://github.com/fuelify12/Id-card/actions/runs/38692847698) remains the confirmed migration failure at Phase 8 (`is_active` missing).
+- The branch's current report update is documentation-only; the application implementation code is unchanged from the regression-tested SHA. Do not treat a passing application build as a passing migration replay.
+
+### Private Storage catalog (read-only Production queries)
+
+- The five `printforge-*` buckets (`printforge-exports`, `printforge-generated-cards`, `printforge-private`, `printforge-student-photos`, `printforge-templates`) all report `public = false`: **PASS** for bucket privacy metadata.
+- `storage.objects` reports RLS enabled: **PASS** for the catalog flag.
+- Four named authenticated Storage policies (SELECT/INSERT/UPDATE/DELETE) cover templates, student photos, generated cards, and exports; they require the first object path segment to equal `auth.uid()` and the second to identify a project owned by that user. This is **NOT VERIFIED** for actual cross-tenant Storage requests because no authorized signed-in two-tenant browser/API session was available.
+- The private `printforge-private` bucket is not included in those four named policy bucket lists. Its intended access pattern and any additional policy/edge-function access should be reviewed before release; no policy was changed.
+
+### Vercel Preview result
+
+- After adding only branch-scoped Preview environment entries for the isolated synthetic Supabase project, deployment [`dpl_9mwsZmutH9TpYPrV2LoAtiXYQYgk`](https://vercel.com/yash-6966/printforge-phase27-acceptance/9mwsZmutH9TpYPrV2LoAtiXYQYgk) reached **READY**.
+- Deployment metadata reports application SHA `3321aa0459fe16d5dadabee845bb462b26b8bf2f`, branch `phase-31-provenance-analysis`, and target `null` (Preview). The Vercel project reports `live=false` and SSO protection enabled. This is a successful non-production build, not authenticated application acceptance. Exact backend alignment is configured to the isolated URL/key but end-to-end backend reachability and data-flow remain **NOT VERIFIED** until authenticated acceptance.
+
+### Updated release gates
+
+| Gate | Status | Evidence |
+|---|---|---|
+| Regression / types / lint / build / security checks | PASS | Run 38698456823 on `b5a27f1...` |
+| Migration inventory and checksum contract | PASS | Run 38698456686 completed these steps before local-stack failure |
+| Fresh canonical replay | FAIL | Run 38698456686 failed starting local Supabase; run 38692847698 confirmed missing `is_active` |
+| Production table RLS catalog | PASS | Read-only query found RLS enabled on all 15 public tables |
+| Named private Storage bucket metadata | PASS | Five PrintForge buckets are private |
+| Actual cross-tenant Storage denial | NOT VERIFIED | No authorized signed-in negative request |
+| Preview build | PASS | Deployment `dpl_9mwsZmutH9TpYPrV2LoAtiXYQYgk` READY |
+| Authenticated browser workflow | BLOCKED | Available browser profile has no recorded signed-in sites |
+| 300-student persisted batch, worker recovery, ZIP verification | NOT VERIFIED | No authenticated end-to-end run |
+| Backup/restore | BLOCKED | No authorized disposable restore target/drill |
+| Migration-history reconciliation | BLOCKED | Requires authoritative Phase 3 deployment record or explicit database-owner approval |
+
+**Verdict remains NOT PRODUCTION-READY.** No Production schema/data was mutated, no migration history was rewritten, no PR was merged, and no Production deployment was made.
+
