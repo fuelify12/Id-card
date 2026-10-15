@@ -44,7 +44,9 @@ export function StudentImportWorkspace({projectId,templateId,fields:initialField
  const [error,setError]=useState("");
  const [notice,setNotice]=useState("");
  const [replaceExisting,setReplaceExisting]=useState(false);
- const [page,setPage]=useState(0);\n const [showAllMappings,setShowAllMappings]=useState(false);\n const [showAllPreviewValues,setShowAllPreviewValues]=useState<Record<number,boolean>>({});
+ const [page,setPage]=useState(0);
+ const [showAllMappings,setShowAllMappings]=useState(false);
+ const [showAllPreviewValues,setShowAllPreviewValues]=useState<Record<number,boolean>>({});
  const columns=preview?.headers??[];
  const validated=useMemo(()=>preview?validateStudentRows(preview.rows,serialColumn||null):[],[preview,serialColumn]);
  const validRows=useMemo(()=>validated.filter(r=>r.issues.length===0),[validated]);
@@ -70,7 +72,8 @@ export function StudentImportWorkspace({projectId,templateId,fields:initialField
    setNotice(`Imported ${result.imported.toLocaleString()} students. Original spreadsheet values were preserved in each student's data; only explicitly mapped fields will be used by later card rendering.`);
   }catch(e){setError(e instanceof Error?e.message:"Import failed.");}finally{setBusy(false);}
  }
- const pageSize=20;\n const visible=validated.slice(page*pageSize,page*pageSize+pageSize);
+ const pageSize=20;
+ const visible=validated.slice(page*pageSize,page*pageSize+pageSize);
  return <section className="pf-panel mt-5 p-5">
   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-sm text-blue-300">PHASE 5</p><h2 className="text-xl font-bold">Student spreadsheet import</h2><p className="pf-muted mt-1 text-sm">Import XLSX, XLS, or CSV. Values are stored as source data; card fields are used only when explicitly mapped.</p></div><label className="cursor-pointer rounded-lg border border-white/15 px-4 py-2 text-sm font-medium">{busy?"Working…":"Choose spreadsheet"}<input className="sr-only" type="file" accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" disabled={busy} onChange={e=>void onFile(e.target.files?.[0])}/></label></div>
   {error&&<p role="alert" className="mt-4 rounded-lg border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">{error}</p>}
