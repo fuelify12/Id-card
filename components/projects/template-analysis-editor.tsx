@@ -46,5 +46,4 @@ export function TemplateAnalysisEditor({projectId,templateId,width,height,source
  </div>}
  </div>
  </div></div>
- </div>
 }
