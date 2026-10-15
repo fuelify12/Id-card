@@ -85,3 +85,52 @@ The canonical migration chain still has a confirmed failure:
 6. Re-run the mandatory gate suite on the exact final branch head after all code/documentation changes. Do not merge or deploy Production until the migration and acceptance gates pass.
 
 **Release rule:** The application is not certified production-ready while the migration replay is failing and mandatory authenticated/operational acceptance remains blocked or unverified.
+
+## Phase 32 — live verification addendum (2026-10-15)
+
+**Status: NOT PRODUCTION-READY.** The starting implementation head was re-fetched from GitHub as `3321aa0459fe16d5dadabee845bb462b26b8bf2f`. The working branch remains `phase-31-provenance-analysis`; draft PR [#14](https://github.com/fuelify12/Id-card/pull/14) remains open and unmerged.
+
+### Live GitHub / CI state
+
+- Full regression workflow [38693187976](https://github.com/fuelify12/Id-card/actions/runs/38693187976): **PASS** on exact starting SHA `3321aa0459fe16d5dadabee845bb462b26b8bf2f`. The job steps for dependency gate, repository security, migration contracts/checksums, tests, TypeScript, lint, production build, client bundle scan, and synthetic visual/print artifacts all concluded successfully.
+- Clean-room replay [38693188003](https://github.com/fuelify12/Id-card/actions/runs/38693188003): inventory and authoritative checksums **PASS**; its first attempt failed while starting the disposable Supabase stack before replay. A failed-job rerun was initiated; at the time of this addendum its replay job was still running. Therefore replay is **NOT VERIFIED** by that attempt. The earlier completed replay [38692847698](https://github.com/fuelify12/Id-card/actions/runs/38692847698) remains a confirmed **FAIL** at Phase 8 with SQLSTATE `42703`, missing `public.templates.is_active`.
+- The authoritative source for migration history is still the read-only Production ledger with 39 recorded migration rows. The legacy Phase 3 SQL is absent from that ledger and the exact deployment mechanism remains **BLOCKED**. No historical migration or checksum was edited and no database was reset.
+
+### Read-only Production catalog checks
+
+The connected Production project was inspected with SELECT-only catalog queries; no schema/data writes were performed.
+
+- The Production migration ledger contains 39 versions, including `20261009054041 / phase8_template_sides` and `20261010125420 / phase18_batch_worker_recovery`; it has no Phase 3 migration entry.
+- All 15 listed public application tables have RLS enabled (**PASS** for the catalog flag only; live cross-tenant API and Storage denial remains **NOT VERIFIED**).
+- `public.templates.version_number` is `integer NOT NULL DEFAULT 1`; `is_active` is `boolean NOT NULL DEFAULT true`; `render_config` is `jsonb NOT NULL`.
+- Template indexes include both `uq_templates_active_project` (unique on `project_id` where `is_active = true`) and `templates_one_active_per_side_idx` (unique on project and side). The older project-wide uniqueness constraint conflicts with the Phase 8 intention to permit one active template per side. A forward-only repair should reconcile this only after the owner approves the migration-history approach; no Production change was made.
+- `templates` has an owner/project-qualified RLS policy. Catalog inspection of `set_active_template_version`, `claim_batch_generation_items`, and `retry_failed_batch_items` found `SECURITY INVOKER`, fixed `search_path=public`, execute denied to `anon`, and execute granted to `authenticated`. These metadata checks do not replace adversarial authenticated API tests.
+
+### Preview configuration recovery
+
+- The previous exact-SHA Preview deployment `dpl_FJFnz5eUyGiz8xMQJ9jeJQ5FPs9p` ended **FAIL** during prerender of `/`: `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` were missing in that branch's Preview environment. SSO remained enabled.
+- Added two **Preview-only, branch-scoped** environment entries for `phase-31-provenance-analysis`: the isolated synthetic Supabase URL and its public publishable key for project `zzecjgauhkaxyptsurlw`. No service-role key was used or added; Production environment targets were not changed.
+- Triggered a fresh Preview build for exact SHA `3321aa0459fe16d5dadabee845bb462b26b8bf2f`: deployment [`dpl_9mwsZmutH9TpYPrV2LoAtiXYQYgk`](https://vercel.com/yash-6966/printforge-phase27-acceptance/9mwsZmutH9TpYPrV2LoAtiXYQYgk). At the last live inspection it was still **BUILDING**, target metadata was `null`, and successful deployment/backend alignment was **NOT VERIFIED**. Do not treat this as accepted.
+- TinyFish browser profiles were rechecked; the only available profile has no recorded signed-in sites. Authenticated browser E2E remains **BLOCKED**; no SSO/MFA bypass was attempted.
+
+### Remaining mandatory gates
+
+| Gate | Status | Evidence / dependency |
+|---|---|---|
+| Exact-SHA full regression at starting head | PASS | Run 38693187976 on `3321aa0...` |
+| Canonical migration inventory and authoritative checksums | PASS | Run 38693188003 steps 5–6 |
+| Fresh canonical migration replay | FAIL | Confirmed prior failure in run 38692847698; latest retry was in progress at addendum time |
+| Production template schema catalog | PASS | Read-only columns, constraints, indexes and RLS metadata inspected |
+| Migration provenance and approved reconciliation | BLOCKED | DB owner must provide authoritative Phase 3 deployment record or approve a documented reconciliation strategy |
+| Vercel Preview build | NOT VERIFIED | Exact-SHA Preview build still running at last inspection |
+| Preview-to-isolated-Supabase alignment | NOT VERIFIED | Branch-scoped URL/key now configured, but deployment must finish and be verified |
+| Authenticated browser acceptance | BLOCKED | No authorized signed-in browser profile |
+| Persisted 300-student batch and record-level validation | NOT VERIFIED | Requires authorized isolated authenticated workflow |
+| Worker crash recovery / retry / resume / cancellation under concurrency | NOT VERIFIED | No real persisted end-to-end recovery run |
+| Actual ZIP integrity and cross-tenant download denial | NOT VERIFIED | No authenticated two-tenant acceptance run |
+| Backup/restore | BLOCKED | No authorized disposable restore target/drill |
+| Mobile, accessibility and physical printer acceptance | NOT VERIFIED | No real device or physical print acceptance |
+| Production safety | PASS | No Production mutation, PR merge or Production deployment |
+
+**Safe next action:** keep PR #14 in draft. Obtain the authoritative Phase 3 deployment record or explicit database-owner approval for a migration-history reconciliation. After that decision, implement a forward-only repair and prove a fresh replay on the exact final SHA; then complete authenticated two-tenant browser, persisted batch/ZIP, recovery, and backup/restore acceptance before any release decision.
+
