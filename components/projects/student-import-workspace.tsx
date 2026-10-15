@@ -5,7 +5,7 @@ import {parseWorkbook,validateStudentRows,type SpreadsheetPreview,type ParsedStu
 import {importStudentRows,saveTemplateFields} from "@/app/dashboard/actions";
 
 type Field={id:string;key:string;label:string;field_type:string;required:boolean;x:number;y:number;width:number;height:number;font_family:string|null;font_size:number|null;font_weight:string|null;color:string|null;alignment:string|null;fit_mode:string|null;source_column:string|null;confidence:number|null};
-function normalizeMappingName(value:string){return value.normalize("NFKC").toLocaleLowerCase("en-IN").replace(/['’`]/g,"").replace(/[^\\p{L}\\p{N}]+/gu," ").trim().replace(/\\s+/g," ")}
+function normalizeMappingName(value:string){return value.normalize("NFKC").toLocaleLowerCase("en-IN").replace(/['’`]/g,"").replace(/[^\p{L}\p{N}]+/gu," ").trim().replace(/\s+/g," ")}
 function fieldAliases(field:Field):string[]{
  const identity=normalizeMappingName([field.key,field.label].join(" "));
  const aliases:Record<string,string[]>={
