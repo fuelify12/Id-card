@@ -1,0 +1,78 @@
+name: Phase 30 clean-room migration replay
+
+on:
+  push:
+    branches: [phase-30-clean-room-acceptance]
+  pull_request:
+    branches: [phase-28-authoritative-schema-recovery, phase-30-clean-room-acceptance]
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/recovery/phase29-authoritative-migration-ledger.json"
+      - "scripts/phase29-authoritative-ledger-check.mjs"
+      - "scripts/phase30-migration-inventory-check.mjs"
+      - ".github/workflows/phase30-clean-room-migration-replay.yml"
+      - "docs/phase30-clean-room-acceptance.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase30-migration-replay-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  clean-room-replay:
+    name: Disposable local Supabase migration replay
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Verify authoritative migration source integrity
+        run: node scripts/phase29-authoritative-ledger-check.mjs
+      - name: Verify inventory, versions, and snapshot separation
+        run: node scripts/phase30-migration-inventory-check.mjs
+      - name: Initialize default local Supabase configuration when absent
+        shell: bash
+        run: |
+          if [ ! -f supabase/config.toml ]; then
+            supabase init
+          fi
+      - name: Start disposable local Supabase stack
+        run: supabase start
+      - name: Replay all canonical migrations from an empty local database
+        run: supabase db reset --local
+      - name: Verify database migration history
+        run: supabase migration list --local
+      - name: Run database tests if present
+        shell: bash
+        run: |
+          if find supabase/tests -type f -name '*.sql' -print -quit 2>/dev/null | grep -q .; then
+            supabase test db
+          else
+            echo "No SQL database test files found; replay and migration-history checks remain mandatory."
+          fi
+      - name: Upload sanitized replay summary
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p artifacts/phase30
+          {
+            echo "commit=${GITHUB_SHA}"
+            echo "workflow_run=${GITHUB_RUN_ID}"
+            echo "migration_files=$(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | wc -l | tr -d ' ')"
+            echo "manifest_rows=$(node -e "const m=require('./supabase/recovery/phase29-authoritative-migration-ledger.json'); console.log(m.migrations.length)")"
+          } > artifacts/phase30/replay-summary.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase30-clean-room-replay-${{ github.run_id }}
+          path: artifacts/phase30/replay-summary.txt
+          if-no-files-found: error
+          retention-days: 14
