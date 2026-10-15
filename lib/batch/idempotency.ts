@@ -16,6 +16,8 @@ export function scopedBatchIdempotencyKey(projectId: string, clientKey: string):
     throw new Error("Idempotency key must be 128 characters or fewer.");
   }
   return createHash("sha256")
+    .update("printforge-batch-idempotency-v1")
+    .update("\0")
     .update(projectId)
     .update("\0")
     .update(normalized)
