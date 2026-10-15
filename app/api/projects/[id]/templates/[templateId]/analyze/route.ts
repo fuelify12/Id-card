@@ -101,6 +101,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     if (bytes.length > 20 * 1024 * 1024) return NextResponse.json({ error: "Prepared template is too large for analysis.", details: "The image prepared for Gemini exceeds 20 MB." }, { status: 413 });
     const models = [...new Set([MODEL, "gemini-2.5-flash", "gemini-2.5-flash-lite"].filter(Boolean))];
     let gj: any = null;
+    let selectedModel = MODEL;
     let lastFailure = { status: 502, detail: "Gemini did not return a response." };
     for (const model of models) {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
@@ -120,7 +121,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
         lastFailure = { status: 502, detail: err instanceof Error ? err.message : "Network request to Gemini failed." };
         continue;
       }
-      if (gr.ok) { gj = await gr.json(); break; }
+      if (gr.ok) { gj = await gr.json(); selectedModel = model; break; }
       const providerBody = await gr.text();
       let detail = `Gemini API returned HTTP ${gr.status}.`;
       try { detail = JSON.parse(providerBody)?.error?.message || detail; } catch {}
@@ -155,7 +156,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       const { error: ie } = await s.from("template_fields").insert(rows);
       if (ie) return NextResponse.json({ error: "Analysis succeeded but detected fields could not be saved.", details: ie.message }, { status: 500 });
     }
-    const analysis = { engine: "gemini", model: MODEL, version: 1, analyzed_at: new Date().toISOString(), raw: parsed.data, normalized_count: normalized.fields.length };
+    const analysis = { engine: "gemini", model: selectedModel, version: 1, analyzed_at: new Date().toISOString(), raw: parsed.data, normalized_count: normalized.fields.length };
     const { error: ue } = await s.from("templates").update({ analysis_status: "ready", analysis, updated_at: new Date().toISOString() }).eq("id", templateId).eq("project_id", id);
     if (ue) return NextResponse.json({ error: "Analysis succeeded but template status could not be updated.", details: ue.message }, { status: 500 });
     return NextResponse.json({ analysis: parsed.data, fields: normalized.fields, message: "Detected template fields. Please review low-confidence boxes and source-column matches before generating cards." });
