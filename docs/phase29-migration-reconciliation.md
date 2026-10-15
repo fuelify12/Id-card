@@ -9,7 +9,7 @@
 ## Executive result
 
 - **PASS WITH WARNINGS — historical Phase 1 source recovered:** the tracked Phase 1 file was compared byte-for-byte with the read-only Production migration-ledger SQL. Both are 12,142 characters and identical; PostgreSQL ledger MD5 is `12ce32c68a90886c1673eee121218451`. This is authoritative ledger evidence, not a recovered Git commit: GitHub commit history for that file path returned an empty array.
-- **PARTIAL — canonical historical migration inventory restored:** 39 historical migration rows are present in the read-only Production ledger. Phase 29 restored 17 missing Phase 8–11 migration files from the exact SQL stored in that ledger. The previously tracked Phase 18 file used version `20261010115000` and differed (5,682 characters) from the authoritative ledger SQL (5,285 characters at `20261010125420`). The old candidate was preserved outside `supabase/migrations`; the authoritative file now uses the ledger's exact version/name.
+- **PARTIAL — canonical historical migration inventory restored:** 39 historical migration rows are present in the read-only Production ledger. Phase 29 restored 17 missing Phase 8–11 migration files from the exact SQL stored in that ledger. The previously tracked Phase 18 file used version `20261010115000` and differed (5,682 characters) from the authoritative ledger SQL (5,285 characters at `20261010125420`); its candidate is preserved outside `supabase/migrations`. The Phase 13 audit-metadata file was also a normalized schema-function dump (3,010 characters), not the original 2,890-character migration SQL; it was replaced with the exact ledger SQL and the prior candidate preserved outside the canonical directory.
 - **NOT VERIFIED — checksum contract:** `scripts/phase29-authoritative-ledger-check.mjs` and the ledger manifest are added so CI can verify all 39 source-ledger files by exact MD5 and character count. This execution environment could not run the repository locally because `psql`, `postgres`, and `docker` are unavailable and network access prevented cloning the repo. The new check must run in CI before declaring checksum reconciliation passed.
 - **BLOCKED — clean-room replay:** no empty disposable PostgreSQL/Supabase runtime is available. The existing isolated project is not reset because its disposable-reset status has not been explicitly re-authorized. No migration was applied to either Supabase project in Phase 29.
 
@@ -159,7 +159,7 @@ These five files are intentionally kept as later migrations, not misrepresented 
 ## Phase 29 file changes
 
 - Restored 17 missing historical migration SQL files directly from Production's read-only migration ledger.
-- Replaced the incorrect Phase 18 timestamp/content in the canonical directory with the exact ledger version; preserved the superseded candidate under `supabase/recovery/phase29_superseded_migration_candidates/`.
+- Replaced the incorrect Phase 18 timestamp/content and the drifted Phase 13 audit-metadata SQL in the canonical directory with the exact ledger versions/content; preserved both superseded candidates under `supabase/recovery/phase29_superseded_migration_candidates/`.
 - Added `supabase/recovery/phase29-authoritative-migration-ledger.json`, an executable checksum checker, this report, and a CI step.
 
 **Final Phase 29 decision: PARTIAL. Production remains NOT CERTIFIED.**

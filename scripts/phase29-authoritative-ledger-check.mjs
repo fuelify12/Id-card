@@ -37,6 +37,7 @@ const versions = filenames.map((name) => name.match(/^(\d{14})_[a-z0-9_]+\.sql$/
 requireThat(versions.every(Boolean), "One or more canonical migration filenames do not follow YYYYMMDDHHMMSS_name.sql.");
 requireThat(versions.every((v, i) => i === 0 || versions[i - 1] < v), "Canonical migration versions are not strictly increasing and unique.");
 requireThat(existsSync(join(root, "supabase", "recovery", "phase29_superseded_migration_candidates", "20261010115000_phase18_batch_worker_recovery.sql")), "Superseded Phase 18 candidate was not preserved outside the canonical migration directory.");
+requireThat(existsSync(join(root, "supabase", "recovery", "phase29_superseded_migration_candidates", "20261009100225_phase13_audit_status_metadata.sql")), "Superseded Phase 13 audit-metadata candidate was not preserved outside the canonical migration directory.");
 requireThat(!filenames.some((name) => name.startsWith("20261010115000_phase18_batch_worker_recovery")), "Superseded Phase 18 candidate must not be replayed as a canonical migration.");
 requireThat(existsSync(join(migrationsDir, "20261010125420_phase18_batch_worker_recovery.sql")), "Authoritative Phase 18 migration version is missing.");
 console.log(`Authoritative Production migration rows checked: ${manifest.migrations.length}`);
