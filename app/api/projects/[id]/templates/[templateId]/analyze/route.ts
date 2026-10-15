@@ -7,16 +7,44 @@ const PROMPT = `Inspect the supplied ID card template image carefully and return
 const responseSchema = {
   type: "OBJECT",
   properties: {
-    width: { type: "INTEGER" }, height: { type: "INTEGER" },
-    detectedText: { type: "ARRAY", items: { type: "OBJECT", properties: { text: { type: "STRING" }, box: { type: "ARRAY", items: { type: "NUMBER" }, minItems: 4, maxItems: 4 } }, required: ["text", "box"] },
-    fields: { type: "ARRAY", items: { type: "OBJECT", properties: {
-      label: { type: "STRING" }, key: { type: "STRING" }, fieldType: { type: "STRING", enum: ["text", "photo", "school_name", "student_name", "class", "section", "roll_number", "admission_number", "dob", "parent", "address", "session", "other"] },
-      confidence: { type: "NUMBER" }, box: { type: "ARRAY", items: { type: "NUMBER" }, minItems: 4, maxItems: 4 }, detectedText: { type: "STRING" }, required: { type: "BOOLEAN" },
-      suggestedSourceColumn: { type: "STRING" }, alignment: { type: "STRING", enum: ["left", "center", "right"] }, fontFamily: { type: "STRING" }, fontSizeRatio: { type: "NUMBER" },
-      color: { type: "STRING" }, fitMode: { type: "STRING", enum: ["cover", "contain", "fill"] }
-    }, required: ["label", "key", "fieldType", "confidence", "box", "required", "alignment", "fontFamily", "fontSizeRatio", "color", "fitMode"] } },
+    width: { type: "INTEGER" },
+    height: { type: "INTEGER" },
+    detectedText: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          text: { type: "STRING" },
+          box: { type: "ARRAY", items: { type: "NUMBER" } }
+        },
+        required: ["text", "box"]
+      }
+    },
+    fields: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          label: { type: "STRING" },
+          key: { type: "STRING" },
+          fieldType: { type: "STRING", enum: ["text", "photo", "school_name", "student_name", "class", "section", "roll_number", "admission_number", "dob", "parent", "address", "session", "other"] },
+          confidence: { type: "NUMBER" },
+          box: { type: "ARRAY", items: { type: "NUMBER" } },
+          detectedText: { type: "STRING" },
+          required: { type: "BOOLEAN" },
+          suggestedSourceColumn: { type: "STRING" },
+          alignment: { type: "STRING", enum: ["left", "center", "right"] },
+          fontFamily: { type: "STRING" },
+          fontSizeRatio: { type: "NUMBER" },
+          color: { type: "STRING" },
+          fitMode: { type: "STRING", enum: ["cover", "contain", "fill"] }
+        },
+        required: ["label", "key", "fieldType", "confidence", "box", "required", "alignment", "fontFamily", "fontSizeRatio", "color", "fitMode"]
+      }
+    },
     notes: { type: "ARRAY", items: { type: "STRING" } }
-  }, required: ["width", "height", "detectedText", "fields", "notes"]
+  },
+  required: ["width", "height", "detectedText", "fields", "notes"]
 };
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string; templateId: string }> }) {
