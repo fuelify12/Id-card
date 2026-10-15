@@ -77,7 +77,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
   try {
     if (action === "preflight" || action === "create") {
-      const { data: templates, error: templateError } = await db.from("templates").select("id,name,version_number,is_active,render_config,width_px,height_px,source_type").eq("project_id", projectId).eq("is_active", true).limit(1);
+      const { data: templates, error: templateError } = await db.from("templates").select("id,name,source_path,version_number,is_active,render_config,width_px,height_px,source_type").eq("project_id", projectId).eq("is_active", true).limit(1);
       if (templateError) throw new Error(templateError.message);
       const template = templates?.[0];
       if (!template) return NextResponse.json({ ok: false, configIssues: ["Upload and activate an ID card template first."], totalStudents: 0, eligible: 0, blocked: 0 }, { status: 422 });
