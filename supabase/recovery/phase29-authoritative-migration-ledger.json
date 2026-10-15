@@ -1,0 +1,321 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-15",
+  "source_project_ref": "xdoenkusrakuyyxnnkff",
+  "source_table": "supabase_migrations.schema_migrations",
+  "checksum_algorithm": "MD5 of exact UTF-8 SQL string array joined with LF; character count from PostgreSQL length()",
+  "migrations": [
+    {
+      "version": "20261008173336",
+      "name": "phase1_foundation",
+      "path": "supabase/migrations/20261008173336_phase1_foundation.sql",
+      "md5": "12ce32c68a90886c1673eee121218451",
+      "characters": 12142,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009032438",
+      "name": "phase6_student_photo_matching",
+      "path": "supabase/migrations/20261009032438_phase6_student_photo_matching.sql",
+      "md5": "02a05b4425de04d6d8386d47ebce7d40",
+      "characters": 5430,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009032635",
+      "name": "phase6_storage_policy_hardening",
+      "path": "supabase/migrations/20261009032635_phase6_storage_policy_hardening.sql",
+      "md5": "728ea8d9cf530707c40e1fbcef953cfa",
+      "characters": 2673,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009032855",
+      "name": "phase6_photo_batch_byte_limits",
+      "path": "supabase/migrations/20261009032855_phase6_photo_batch_byte_limits.sql",
+      "md5": "37f1543b9118ba3fdd635f98792c79e4",
+      "characters": 1369,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009033031",
+      "name": "phase6_photo_fk_indexes",
+      "path": "supabase/migrations/20261009033031_phase6_photo_fk_indexes.sql",
+      "md5": "26bc112f2cc19ce586fd307752bf3e45",
+      "characters": 423,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009033838",
+      "name": "phase6_photo_path_reservations",
+      "path": "supabase/migrations/20261009033838_phase6_photo_path_reservations.sql",
+      "md5": "ebfc2b05efa04b56e04205b5f8433880",
+      "characters": 2853,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009041524",
+      "name": "phase7_photo_processing",
+      "path": "supabase/migrations/20261009041524_phase7_photo_processing.sql",
+      "md5": "108cc28f4700a705f8b1aa67a92c6a94",
+      "characters": 2437,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009043227",
+      "name": "phase8_card_rendering",
+      "path": "supabase/migrations/20261009043227_phase8_card_rendering.sql",
+      "md5": "cf7130071edd2fe750a202cfc1587cff",
+      "characters": 2475,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009043836",
+      "name": "phase8_rendering_engine",
+      "path": "supabase/migrations/20261009043836_phase8_rendering_engine.sql",
+      "md5": "c8f67c00df825d6e7d5b4aabd5bcff44",
+      "characters": 2839,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009043900",
+      "name": "phase8_render_template_index",
+      "path": "supabase/migrations/20261009043900_phase8_render_template_index.sql",
+      "md5": "14ab792ffab57cb53c47badedfcbacef",
+      "characters": 128,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009045334",
+      "name": "phase8_svg_template_type",
+      "path": "supabase/migrations/20261009045334_phase8_svg_template_type.sql",
+      "md5": "0d9dad990d04e25b024e5eb5c89f8802",
+      "characters": 230,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009045509",
+      "name": "phase8_rendering_engine",
+      "path": "supabase/migrations/20261009045509_phase8_rendering_engine.sql",
+      "md5": "47e6594aa65282191faaa5f8a36612f8",
+      "characters": 3165,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009054041",
+      "name": "phase8_template_sides",
+      "path": "supabase/migrations/20261009054041_phase8_template_sides.sql",
+      "md5": "9697d043b213f44d23e6d2042d0ec6be",
+      "characters": 251,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009055657",
+      "name": "phase9_batch_generation_engine",
+      "path": "supabase/migrations/20261009055657_phase9_batch_generation_engine.sql",
+      "md5": "07697a255db890f0e1f76cfa79c02500",
+      "characters": 5618,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009055811",
+      "name": "phase9_batch_status_transitions",
+      "path": "supabase/migrations/20261009055811_phase9_batch_status_transitions.sql",
+      "md5": "4eb1520eb4a1c213e40a57d4008ed411",
+      "characters": 373,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009055901",
+      "name": "phase9_batch_worker_authorization",
+      "path": "supabase/migrations/20261009055901_phase9_batch_worker_authorization.sql",
+      "md5": "79bada05756f3c606fc69334307e7cb7",
+      "characters": 2573,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009055932",
+      "name": "phase9_qualify_item_rls",
+      "path": "supabase/migrations/20261009055932_phase9_qualify_item_rls.sql",
+      "md5": "ce0137db08aac335e0b349776de70cd1",
+      "characters": 1398,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009061659",
+      "name": "phase10_validation",
+      "path": "supabase/migrations/20261009061659_phase10_validation.sql",
+      "md5": "6bda46f13bfbee75510d6fb603774fb3",
+      "characters": 3805,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009062045",
+      "name": "phase10_stale_output_invalidation",
+      "path": "supabase/migrations/20261009062045_phase10_stale_output_invalidation.sql",
+      "md5": "e6817f4eab8e531beb212691511a3393",
+      "characters": 1247,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009063018",
+      "name": "phase10_validation_settings",
+      "path": "supabase/migrations/20261009063018_phase10_validation_settings.sql",
+      "md5": "225b94bf055d70ac7944eb539567a8e2",
+      "characters": 324,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009063718",
+      "name": "phase10_critical_finding_guard",
+      "path": "supabase/migrations/20261009063718_phase10_critical_finding_guard.sql",
+      "md5": "29a93eb24a5cfab77002540bf5bd459a",
+      "characters": 1866,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009064158",
+      "name": "phase10_finding_insert_guard",
+      "path": "supabase/migrations/20261009064158_phase10_finding_insert_guard.sql",
+      "md5": "980cdb3dbba3bda4b9b519c8438ae1f9",
+      "characters": 2280,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009070649",
+      "name": "phase11_zip_exports",
+      "path": "supabase/migrations/20261009070649_phase11_zip_exports.sql",
+      "md5": "7d5102062b3de44b804dee1fb75067b1",
+      "characters": 4173,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009070909",
+      "name": "phase11_exports_policy_qualification",
+      "path": "supabase/migrations/20261009070909_phase11_exports_policy_qualification.sql",
+      "md5": "2c89a12c337affe180cfb68bc7681bd3",
+      "characters": 474,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009071118",
+      "name": "phase11_export_retry_limits",
+      "path": "supabase/migrations/20261009071118_phase11_export_retry_limits.sql",
+      "md5": "985851d64398d0dc68766a6643029be6",
+      "characters": 220,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009071434",
+      "name": "phase11_export_fk_index",
+      "path": "supabase/migrations/20261009071434_phase11_export_fk_index.sql",
+      "md5": "80c1b5939b9ceaaa0896fc2fa17a3bd9",
+      "characters": 107,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009095425",
+      "name": "phase13_security_hardening",
+      "path": "supabase/migrations/20261009095425_phase13_security_hardening.sql",
+      "md5": "5483daa08cf8d3c23ad4a91a2f360d45",
+      "characters": 18743,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009095538",
+      "name": "phase13_function_privileges",
+      "path": "supabase/migrations/20261009095538_phase13_function_privileges.sql",
+      "md5": "49d88c1bfa39416d50e2f4d740bcd0cb",
+      "characters": 326,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009095800",
+      "name": "phase13_security_hardening_v2",
+      "path": "supabase/migrations/20261009095800_phase13_security_hardening_v2.sql",
+      "md5": "cd13eb833c54d3edcbd0a8722d263ff6",
+      "characters": 14838,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009095926",
+      "name": "phase13_storage_path_policy_fix",
+      "path": "supabase/migrations/20261009095926_phase13_storage_path_policy_fix.sql",
+      "md5": "bb4dc342d03a8f912e46f4e2cab97cb0",
+      "characters": 2876,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009095940",
+      "name": "phase13_default_function_privileges",
+      "path": "supabase/migrations/20261009095940_phase13_default_function_privileges.sql",
+      "md5": "24f94b1a16fa386e36d4a94bfe368566",
+      "characters": 245,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009100225",
+      "name": "phase13_audit_status_metadata",
+      "path": "supabase/migrations/20261009100225_phase13_audit_status_metadata.sql",
+      "md5": "ae9d3a1c0d681fc1d001abe565e63567",
+      "characters": 2890,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009100320",
+      "name": "phase13_rate_limits",
+      "path": "supabase/migrations/20261009100320_phase13_rate_limits.sql",
+      "md5": "a496b994c57fc0dfaba1fdcc73898c65",
+      "characters": 2334,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009100339",
+      "name": "phase13_validate_tenant_constraints",
+      "path": "supabase/migrations/20261009100339_phase13_validate_tenant_constraints.sql",
+      "md5": "efe02fc40657eb960ff995e3f24f38dd",
+      "characters": 1359,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009100605",
+      "name": "phase13_fixed_rate_limit_quotas",
+      "path": "supabase/migrations/20261009100605_phase13_fixed_rate_limit_quotas.sql",
+      "md5": "4ebed15fd5a1ed2deb792723c82229b6",
+      "characters": 2250,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009100837",
+      "name": "phase13_rate_limit_deny_policy",
+      "path": "supabase/migrations/20261009100837_phase13_rate_limit_deny_policy.sql",
+      "md5": "3d1d70dab73897c9b156bf723e47fca7",
+      "characters": 329,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009101327",
+      "name": "phase13_photo_processing_rate_limit",
+      "path": "supabase/migrations/20261009101327_phase13_photo_processing_rate_limit.sql",
+      "md5": "3458c481bfee29a9bbe8d9d3138b549d",
+      "characters": 2178,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261009101414",
+      "name": "phase13_photo_processing_quota",
+      "path": "supabase/migrations/20261009101414_phase13_photo_processing_quota.sql",
+      "md5": "989bb0059da2db60748bfbb911acce0c",
+      "characters": 2659,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    },
+    {
+      "version": "20261010125420",
+      "name": "phase18_batch_worker_recovery",
+      "path": "supabase/migrations/20261010125420_phase18_batch_worker_recovery.sql",
+      "md5": "19002bee3f5b1a9e4f9bc6f8ae906339",
+      "characters": 5285,
+      "source": "read-only Production supabase_migrations.schema_migrations ledger"
+    }
+  ]
+}
