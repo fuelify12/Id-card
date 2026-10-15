@@ -45,5 +45,5 @@ export function TemplateAnalysisEditor({projectId,templateId,width,height,source
  <button type="button" className="pf-button mt-2" onClick={()=>setFields(fs=>[...fs,{id:crypto.randomUUID(),key:"new_field",label:"New field",field_type:"text",confidence:1,x:20,y:20,width:200,height:40,font_family:"Noto Sans",font_size:24,font_weight:"400",color:"#000000",alignment:"left",fit_mode:"contain",required:false,source_column:null,render_options:{maxLines:1,overflowPolicy:"warn",visible:true}}])}>+ Add field</button>
  </div>}
  </div>
- </div>
+ </div></div>
 }
