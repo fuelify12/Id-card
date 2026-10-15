@@ -174,3 +174,45 @@ This checkpoint supplements the earlier Phase 32 addendum with completed results
 
 **Verdict remains NOT PRODUCTION-READY.** No Production schema/data was mutated, no migration history was rewritten, no PR was merged, and no Production deployment was made.
 
+
+
+## Final Ship-It Mission — live checkpoint (2026-10-15)
+
+**Verdict: NOT READY — BLOCKED.** This checkpoint reflects live GitHub Actions, Vercel, Supabase project inventory, and a real unauthenticated browser visit. It does not reinterpret a green build as proof of the complete workflow.
+
+### Current exact-head results
+
+- Current branch report head at inspection: `3e1d91aec5d8d21286db41ef9c2e6405274f84ef`; the application implementation remains `3321aa0459fe16d5dadabee845bb462b26b8bf2f`.
+- Full regression [run 38698743457](https://github.com/fuelify12/Id-card/actions/runs/38698743457) **PASS** on report head `3e1d91a...`: dependency gate, repository security checks, migration contracts/checksum, full regression tests, TypeScript, lint, production build, client bundle secret scan, and synthetic visual/print artifact upload all passed.
+- Clean-room migration replay [run 38698744079](https://github.com/fuelify12/Id-card/actions/runs/38698744079) **FAIL** at “Start disposable local Supabase stack.” The canonical replay and migration history/catalog assertions were skipped. The replay is therefore not proven; earlier run 38692847698 remains evidence of the actual Phase 8 missing-`is_active` error.
+- Vercel deployment [dpl_FJtPMpjsiUp4ZDjswdEF2QegUXPJ](https://vercel.com/yash-6966/printforge-phase27-acceptance/FJtPMpjsiUp4ZDjswdEF2QegUXPJ) is **READY** for report SHA `3e1d91aec5d8d21286db41ef9c2e6405274f84ef`, branch `phase-31-provenance-analysis`, Preview target (not Production). Project is marked `live=false`; SSO protection is enabled for all deployment URLs except custom domains.
+- A real browser visit to [the deployed Preview URL](https://printforge-phase27-acceptance-9fdb23xfz-yash-6966.vercel.app) was performed without credentials. **FAIL for unauthenticated reachability:** Vercel SSO redirected to the Vercel login portal before the PrintForge page or its own sign-in screen could render. This is an intentional access barrier, not evidence that application sign-in itself works or fails. No SSO bypass was attempted.
+- Supabase project inventory confirms both the existing `Id-card` project (`xdoenkusrakuyyxnnkff`) and the isolated synthetic acceptance project (`zzecjgauhkaxyptsurlw`) are active/healthy. The Preview environment was configured for the isolated synthetic project; authenticated end-to-end backend data flow remains **NOT VERIFIED**.
+
+### Ship-it acceptance status
+
+| Gate | Status | Evidence |
+|---|---|---|
+| Exact-head regression, types, lint, build, dependency/security gates | PASS | [Run 38698743457](https://github.com/fuelify12/Id-card/actions/runs/38698743457) |
+| Vercel deployment build | PASS | [Deployment metadata](https://vercel.com/yash-6966/printforge-phase27-acceptance/FJtPMpjsiUp4ZDjswdEF2QegUXPJ), READY, Preview |
+| Public/unauthed browser reachability | BLOCKED | Vercel SSO redirects to Vercel login; app page not reached |
+| Application sign-in tested | NOT VERIFIED | No authorized signed-in browser session or test account |
+| Spreadsheet import against persisted database | NOT VERIFIED | No authenticated end-to-end run |
+| Exact serial-number photo matching against persisted student rows | NOT VERIFIED | No authenticated end-to-end run |
+| Per-record rendered identity/photo/template verification | NOT VERIFIED | No real persisted batch/output set |
+| Actual ZIP generation, extraction, and content/hash verification | NOT VERIFIED | No authenticated end-to-end export |
+| Approx. 300-student acceptance batch | NOT VERIFIED | No persisted authenticated batch; no accuracy counts can honestly be reported |
+| Cross-project API and Storage denial | NOT VERIFIED | Catalog/RLS metadata exists, but no two-tenant adversarial request test |
+| Fresh canonical migration replay | FAIL / BLOCKED | Latest replay job fails starting local Supabase stack; confirmed earlier missing-column replay failure remains unresolved |
+| Migration provenance / approved reconciliation | BLOCKED | No authoritative Phase 3 deployment record or explicit database-owner approval for reconciliation |
+| Production safety | PASS | No Production schema/data change, PR merge, or Production deployment performed |
+
+### Exact remaining actions to unblock a genuinely usable instance
+
+1. **Vercel access:** sign in to the authorized Vercel team in the browser to pass the existing Preview SSO gate. Do not disable SSO just to make a link appear usable. After access, an authorized application test account/session is still needed to verify the app's own authentication.
+2. **Migration:** the database owner must provide the authoritative Phase 3 deployment record or explicitly approve a documented migration-ledger reconciliation strategy. Then fix the canonical chain with a reviewable forward-only migration and prove a fresh replay on an empty disposable database. The local Supabase startup failure also needs a working runner/stack before that replay can complete.
+3. **Core workflow:** execute the real authenticated flow on the isolated project with synthetic records, starting with a smaller batch if needed and scaling toward 300; verify each expected student/photo/field/template association and inspect the extracted ZIP. Record actual correct/mismatch/rejected/review-required counts only after that run.
+4. **Tenant/storage security:** execute authenticated negative tests using two synthetic accounts/projects and inspect access to each private bucket, including the currently unaccounted-for `printforge-private` bucket.
+5. Keep PR #14 in draft and keep Production untouched until those gates pass.
+
+No real student data was used for acceptance, no credentials were printed, and no migration history or checksum was fabricated.
