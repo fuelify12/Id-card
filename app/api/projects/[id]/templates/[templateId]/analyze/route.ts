@@ -17,7 +17,7 @@ const responseSchema = {
           text: { type: "STRING" },
           box: { type: "ARRAY", items: { type: "NUMBER" } }
         },
-        required: ["text", "box"]
+        "required": ["text", "box"]
       }
     },
     fields: {
@@ -31,7 +31,7 @@ const responseSchema = {
           confidence: { type: "NUMBER" },
           box: { type: "ARRAY", items: { type: "NUMBER" } },
           detectedText: { type: "STRING" },
-          required: { type: "BOOLEAN" },
+          "required": { type: "BOOLEAN" },
           suggestedSourceColumn: { type: "STRING" },
           alignment: { type: "STRING", enum: ["left", "center", "right"] },
           fontFamily: { type: "STRING" },
@@ -39,12 +39,12 @@ const responseSchema = {
           color: { type: "STRING" },
           fitMode: { type: "STRING", enum: ["cover", "contain", "fill"] }
         },
-        required: ["label", "key", "fieldType", "confidence", "box", "required", "alignment", "fontFamily", "fontSizeRatio", "color", "fitMode"]
+        "required": ["label", "key", "fieldType", "confidence", "box", "required", "alignment", "fontFamily", "fontSizeRatio", "color", "fitMode"]
       }
     },
     notes: { type: "ARRAY", items: { type: "STRING" } }
   },
-  required: ["width", "height", "detectedText", "fields", "notes"]
+  "required": ["width", "height", "detectedText", "fields", "notes"]
 };
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string; templateId: string }> }) {
