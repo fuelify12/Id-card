@@ -44,7 +44,7 @@ function transformMappedValue(value:unknown,transform:unknown,secondaryValue?:un
  }
  if(typeof transform!=="string"||!["session_start","session_end"].includes(transform))return value;
  const text=String(value).normalize("NFKC").trim();
- const range=text.match(/((?:19|20|21)\d{2})\s*(?:-|–|—|\/|to|until)\s*(\d{2}|(?:19|20|21)\d{2})/i);
+ const range=text.match(/((?:19|20|21)\d{2})\s*(?:-|–|—|\/|to|until)\s*((?:19|20|21)\d{2}|\d{2})/i);
  if(range){
   const start=range[1],end=range[2].length===2?String(Math.floor(Number(start)/100)*100+Number(range[2])):range[2];
   return transform==="session_start"?start:end;
