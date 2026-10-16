@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
-import { validateStudents, validateTemplateConfiguration } from "@/lib/validation/engine";
+import { requiredFieldValue, validateStudents, validateTemplateConfiguration } from "@/lib/validation/engine";
 import { consumeRateLimit } from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
@@ -106,10 +106,16 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       if (!(Number.isInteger(Number(config.dpi)) && Number(config.dpi) >= 72 && Number(config.dpi) <= 1200)) configIssues.push("Save a valid output DPI.");
       const rows = students.map((student: any) => {
         const data = student.data && typeof student.data === "object" ? student.data : {};
-        const missing = (fields ?? []).filter((f: any) => f.required && String(f.source_column ?? "").trim() && !(String(data[String(f.source_column).trim()] ?? "").trim()) && !(["photo","image","student_photo","student-photo"].includes(String(f.field_type).toLowerCase()) || f.key === "student_photo")).map((f: any) => f.label || f.key);
+        const missing = (fields ?? []).filter((f: any) => {
+          if (!f.required || (["photo","image","student_photo","student-photo"].includes(String(f.field_type).toLowerCase()) || f.key === "student_photo")) return false;
+          if (String(f.static_value ?? "").trim()) return false;
+          const source = String(f.source_column ?? "").trim();
+          if (!source) return false; // Unmapped required template fields are reported by template configuration validation.
+          return String(requiredFieldValue(data, source) ?? "").trim() === "";
+        }).map((f: any) => f.label || f.key);
         const photoMissing = needsPhoto && !approvedPhotos.has(student.id);
         const identityIssues = studentFindings.filter(f => f.studentId === student.id && (f.severity === "CRITICAL" || f.severity === "ERROR"));
-        return { studentId: student.id, serialNumber: student.serial_number, studentName: String(data.name ?? data.student_name ?? data.full_name ?? ""), eligible: !missing.length && !photoMissing && !identityIssues.length && !configIssues.length, missingFields: missing, photoMissing, identityIssues: identityIssues.map(f => f.message) };
+        return { studentId: student.id, serialNumber: student.serial_number, studentName: String(requiredFieldValue(data, "student_name") ?? data.name ?? data.student_name ?? data.full_name ?? ""), eligible: !missing.length && !photoMissing && !identityIssues.length && !configIssues.length, missingFields: missing, photoMissing, identityIssues: identityIssues.map(f => f.message) };
       });
       const report = { ok: configIssues.length === 0, configWarnings: templateFindings.filter(f => f.severity === "WARNING" || f.severity === "INFO").map(f => f.message), project: { id: project.id, name: project.name }, template: { id: template.id, name: template.name, version: template.version_number, format: config.format ?? "png", widthMm: config.widthMm, heightMm: config.heightMm, dpi: config.dpi }, configIssues, totalStudents: rows.length, eligible: rows.filter(r => r.eligible).length, blocked: rows.filter(r => !r.eligible).length, students: rows.map(r => ({ ...r, reason: [...r.missingFields, ...(r.photoMissing ? ["Missing approved processed photo"] : []), ...(r.identityIssues ?? []), ...configIssues] })) };
       if (action === "preflight") return NextResponse.json(report);
