@@ -50,29 +50,46 @@ function fieldAliases(field:Field):string[]{
 function autoMapFields(fields:Field[],headers:string[]):Field[]{
  const normalized=headers.map(raw=>({raw,n:normalizeMappingName(raw)}));
  const used=new Set<string>();
- const sessionStart=normalized.find(h=>["session start","start session","session from","from year","start year","academic year start"].includes(h.n));
- const sessionEnd=normalized.find(h=>["session end","end session","session to","to year","end year","academic year end"].includes(h.n));
+ const startNames=["session start","start session","session from","from year","start year","academic year start","academic session start","session year start","session start year","academic session from","session year from"];
+ const endNames=["session end","end session","session to","to year","end year","academic year end","academic session end","session year end","session end year","academic session to","session year to"];
+ const sessionStart=normalized.find(h=>startNames.includes(h.n));
+ const sessionEnd=normalized.find(h=>endNames.includes(h.n));
+ const combinedSession=normalized.find(h=>["session","academic session","school session","academic year","session year","session period","academic year period","शैक्षिक सत्र","शैक्षणिक सत्र"].includes(h.n));
  const sessionFields=fields.filter(f=>normalizeMappingName(f.label)==="session").slice().sort((a,b)=>a.x-b.x);
  const sessionIndex=new Map(sessionFields.map((f,i)=>[f.id,i]));
+ const tokenScore=(alias:string,header:string)=>{
+  if(alias===header)return 1;
+  const a=alias.split(" ").filter(Boolean),h=header.split(" ").filter(Boolean);
+  if(a.length>=2&&a.every(t=>h.includes(t)))return .9;
+  if(h.length>=2&&h.every(t=>a.includes(t)))return .86;
+  const intersection=a.filter(t=>h.includes(t)).length;
+  return intersection/Math.max(a.length,h.length);
+ };
  return fields.map(field=>{
   const key=normalizeMappingName(field.key).replace(/ /g,"_");
   const label=normalizeMappingName(field.label);
   let chosen:null|{raw:string;n:string}=null;
+  let valueTransform:string|undefined;
   if(label==="session"&&(key.includes("start")||key.includes("from")))chosen=sessionStart??null;
   else if(label==="session"&&(key.includes("end")||key.includes("to")))chosen=sessionEnd??null;
   else if(label==="session"&&sessionFields.length>=2){
    const idx=sessionIndex.get(field.id);
-   chosen=(idx===0?sessionStart:idx===sessionFields.length-1?sessionEnd:null)??null;
+   if(idx===0&&sessionStart)chosen=sessionStart;
+   else if(idx===sessionFields.length-1&&sessionEnd)chosen=sessionEnd;
+   else if(!sessionStart&&!sessionEnd&&combinedSession){chosen=combinedSession;valueTransform=idx===0?"session_start":idx===sessionFields.length-1?"session_end":undefined;}
   }
   if(!chosen){
-   const aliases=new Set(fieldAliases(field));
-   const matches=normalized.filter(h=>aliases.has(h.n));
-   // Map only an unambiguous exact header match; never guess from partial text.
-   const available=matches.filter(h=>!used.has(h.n));
-   chosen=matches.length===1&&available.length===1?available[0]:null;
+   const aliases=[...new Set(fieldAliases(field))];
+   const exact=normalized.filter(h=>aliases.includes(h.n));
+   const availableExact=exact.filter(h=>!used.has(h.n));
+   if(exact.length===1&&availableExact.length===1)chosen=availableExact[0];
+   else if(exact.length===0){
+    const candidates=normalized.filter(h=>!used.has(h.n)).map(h=>({h,score:Math.max(0,...aliases.map(a=>tokenScore(a,h.n)))})).filter(x=>x.score>=.8).sort((a,b)=>b.score-a.score);
+    if(candidates.length&&(!candidates[1]||candidates[0].score-candidates[1].score>=.12))chosen=candidates[0].h;
+   }
   }
-  if(chosen)used.add(chosen.n);
-  return {...field,source_column:chosen?.raw??null};
+  if(chosen&&!(valueTransform&&combinedSession?.n===chosen.n))used.add(chosen.n);
+  return {...field,source_column:chosen?.raw??null,render_options:valueTransform?{...(field.render_options??{}),valueTransform}:field.render_options??null};
  });
 }
 export function StudentImportWorkspace({projectId,templateId,fields:initialFields}:{projectId:string;templateId:string|null;fields:Field[]}) {
