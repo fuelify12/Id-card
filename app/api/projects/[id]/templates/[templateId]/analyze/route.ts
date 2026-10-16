@@ -149,13 +149,36 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     if (!output) return NextResponse.json({ error: "Gemini returned no structured output.", details: gj.promptFeedback?.blockReason || "Empty model response." }, { status: 502 });
     let raw: unknown;
     try { raw = JSON.parse(output); } catch { return NextResponse.json({ error: "Gemini returned invalid JSON. Retry analysis." }, { status: 502 }); }
-    // Clamp Gemini's approximate font-size ratio before strict validation.
-    if (raw && typeof raw === "object" && Array.isArray((raw as any).fields)) {
-      (raw as any).fields = (raw as any).fields.map((field: any) => {
-        if (!field || typeof field !== "object") return field;
-        const ratio = Number(field.fontSizeRatio);
-        return { ...field, fontSizeRatio: Number.isFinite(ratio) ? Math.max(0.005, Math.min(0.25, ratio)) : 0.04 };
-      });
+    // Normalize model-estimated numeric values before strict schema validation.
+    // Gemini occasionally returns normalized coordinates as 0..1 or image-pixel
+    // coordinates instead of the documented 0..1000 coordinate system.
+    if (raw && typeof raw === "object") {
+      const obj = raw as any;
+      const normalizeBox = (box: unknown) => {
+        if (!Array.isArray(box) || box.length !== 4 || !box.every((v) => Number.isFinite(Number(v)))) return box;
+        let values = box.map(Number);
+        if (values.every((v) => v >= 0 && v <= 1) && values.some((v) => v > 0)) {
+          values = values.map((v) => v * 1000);
+        } else if (values.some((v) => v > 1000) && Number(t.width_px) > 0 && Number(t.height_px) > 0) {
+          values = values.map((v, i) => v / (i % 2 === 0 ? Number(t.height_px) : Number(t.width_px)) * 1000);
+        }
+        return values.map((v) => Math.max(0, Math.min(1000, v)));
+      };
+      if (Array.isArray(obj.fields)) {
+        obj.fields = obj.fields.map((field: any) => {
+          if (!field || typeof field !== "object") return field;
+          const ratio = Number(field.fontSizeRatio), confidence = Number(field.confidence);
+          return {
+            ...field,
+            box: normalizeBox(field.box),
+            confidence: Number.isFinite(confidence) ? Math.max(0, Math.min(1, confidence)) : 0.5,
+            fontSizeRatio: Number.isFinite(ratio) ? Math.max(0.005, Math.min(0.25, ratio)) : 0.04
+          };
+        });
+      }
+      if (Array.isArray(obj.detectedText)) {
+        obj.detectedText = obj.detectedText.map((item: any) => item && typeof item === "object" ? { ...item, box: normalizeBox(item.box) } : item);
+      }
     }
     const parsed = templateAnalysisSchema.safeParse(raw);
     if (!parsed.success) return NextResponse.json({ error: "Gemini output failed validation.", details: parsed.error.issues.slice(0, 5) }, { status: 502 });
