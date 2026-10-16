@@ -23,19 +23,28 @@ const fieldAliasGroups:string[][]=[
 ];
 function fieldAliasesFor(value:string){const n=norm(value);return fieldAliasGroups.find(group=>group.includes(n))??[n]}
 function requiredFieldValue(data:Record<string,unknown>,required:string){
+ const target=norm(required);
+ const get=(names:string[])=>{const k=Object.keys(data).find(name=>names.includes(norm(name))&&!empty(data[name]));return k?data[k]:undefined};
+ const splitAddress=(value:unknown,part:1|2)=>{
+  if(empty(value))return undefined;
+  const text=String(value).normalize("NFKC").trim();
+  const parts=text.split(/[,\n;|]+/).map(v=>v.trim()).filter(Boolean);
+  if(parts.length>1)return part===1?parts[0]:parts.slice(1).join(", ");
+  const words=text.split(/\s+/).filter(Boolean);
+  if(words.length>=4){const splitAt=Math.ceil(words.length/2);return part===1?words.slice(0,splitAt).join(" "):words.slice(splitAt).join(" ");}
+  return part===1?text:"";
+ };
+ if(["addressline1","address1"].includes(target))return splitAddress(get(["address","fulladdress","completeaddress","residentialaddress","पता"]),1);
+ if(["addressline2","address2","secondaddressline"].includes(target))return splitAddress(get(["address","fulladdress","completeaddress","residentialaddress","पता"]),2);
  const aliases=fieldAliasesFor(required);
  const key=Object.keys(data).find(k=>aliases.includes(norm(k))&&!empty(data[k]));
  if(key)return data[key];
- const target=norm(required);
- const get=(names:string[])=>{const k=Object.keys(data).find(name=>names.includes(norm(name))&&!empty(data[name]));return k?data[k]:undefined};
  if(["classsec","classsection","classandsec","classandsection","gradeandsection"].includes(target)){
   const cls=get(["class","classname","grade","कक्षा"]),sec=get(["section","sec","सेक्शन","वर्ग"]);
   if(cls!==undefined&&sec!==undefined)return String(cls)+" - "+String(sec);
  }
- if(["addressline1","address1","address"].includes(target)||aliases.includes("addressline1"))return get(["address","fulladdress","completeaddress","residentialaddress","पता"]);
- if(["addressline2","address2","secondaddressline"].includes(target))return get(["address","fulladdress","completeaddress","residentialaddress","पता"]);
  if(["sessionstart","startsession","sessionfrom","fromyear","startyear","academicsessionstart","sessionyearstart"].includes(target)){
-  const value=get(["session","academicsession","schoolsession","academic year","academicyear","sessionyear","sessionperiod","शैक्षिकसत्र","शैक्षणिकसत्र"]);
+  const value=get(["session","academicsession","schoolsession","academicyear","sessionyear","sessionperiod","शैक्षिकसत्र","शैक्षणिकसत्र"]);
   const match=String(value??"").match(/((?:19|20|21)\d{2})\s*(?:-|–|—|\/|to|until)\s*((?:19|20|21)\d{2}|\d{2})/i);
   if(match)return match[1];
  }
@@ -46,9 +55,6 @@ function requiredFieldValue(data:Record<string,unknown>,required:string){
  }
  return undefined;
 }
-const empty=(v:unknown)=>v===undefined||v===null||String(v).trim()==="";
-const hash=(v:unknown)=>createHash("sha256").update(JSON.stringify(v)).digest("hex");
-function make(ruleId:string,severity:Severity,message:string,correctiveAction:string,fingerprint:unknown,more:Partial<Finding>={}):Finding{return{ruleId,ruleVersion:1,severity,status:"OPEN",message,correctiveAction,inputFingerprint:hash(fingerprint),...more}}
 export function validateStudents(students:Student[],requiredFields:string[]=[],options:{admissionNumberUnique?:boolean}={}):Finding[]{
  const out:Finding[]=[],serials=new Map<string,Student[]>(),admissions=new Map<string,Student[]>();
  for(const s of students){const d=s.data??{},serial=s.serial_number==null?"":String(s.serial_number).trim();
