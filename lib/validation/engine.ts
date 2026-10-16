@@ -28,7 +28,7 @@ const fieldAliasGroups:string[][]=[
  ["bloodgroup","bloodtype"],
  ["phonenumber","mobile","mobilenumber","contactnumber","phone"],
  ["gender","sex"],
- ["studentid","studentidentifier","admissionid"],
+ ["studentid","studentidentifier"],
  ["pincode","postalcode","zipcode"],
  ["village","villagename"],
  ["district","districtname"],
