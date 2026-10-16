@@ -5,6 +5,10 @@ export type Finding={ruleId:string;ruleVersion:number;severity:Severity;status:F
 type Student={id:string;project_id?:string;serial_number:number|null;data?:Record<string,unknown>|null};
 type Field={id?:string;key?:string;label?:string;field_type?:string;source_column?:string|null;required?:boolean;visible?:boolean;x:number;y:number;width:number;height:number;font_family?:string|null;font_size?:number|null;color?:string|null;static_value?:string|null;render_options?:Record<string,unknown>|null};
 const norm=(s:string)=>s.normalize("NFKC").trim().toLocaleLowerCase("en-IN").replace(/['’\`]/g,"").replace(/[^\p{L}\p{N}]+/gu,"");
+const empty=(v:unknown)=>v===undefined||v===null||String(v).trim()==="";
+const hash=(v:unknown)=>createHash("sha256").update(JSON.stringify(v)).digest("hex");
+function make(ruleId:string,severity:Severity,message:string,correctiveAction:string,fingerprint:unknown,more:Partial<Finding>={}):Finding{return{ruleId,ruleVersion:1,severity,status:"OPEN",message,correctiveAction,inputFingerprint:hash(fingerprint),...more}}
+
 const fieldAliasGroups:string[][]=[
  ["studentname","name","fullname","pupilname","nameofstudent","studentfullname"],
  ["fathername","fathersname","father","nameofstudentfather"],
