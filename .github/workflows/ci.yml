@@ -22,7 +22,7 @@ jobs:
         with:
           node-version: 22
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm install --legacy-peer-deps --no-audit --no-fund
       - name: Full dependency audit report
         run: npm audit --json > npm-audit-report.json || true
       - name: Publish generated lockfile and full audit report for review
