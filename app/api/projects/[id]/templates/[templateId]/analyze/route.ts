@@ -4,7 +4,7 @@ import { templateAnalysisSchema, normalizeAnalysis, refineValueBoxes } from "@/l
 import sharp from "sharp";
 import { sanitizeSvg } from "@/lib/rendering/engine";
 
-const MODEL = process.env.GEMINI_TEMPLATE_MODEL || "gemini-3.8-flash";
+const MODEL = process.env.GEMINI_TEMPLATE_MODEL || "gemini-3.5-flash-lite";
 const PROMPT = `Analyze this school/student ID-card template as a precise print-layout engineer. Return JSON only.
 
 GOAL: create a usable field map, not just an OCR transcript. Inspect the entire card, including Hindi/English text, labels, blank lines, underlines, boxes, photo placeholders, and small text.
@@ -102,7 +102,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: "Unsupported template format for Gemini analysis.", details: "Use PNG, JPEG, SVG, or a single-page PDF template." }, { status: 415 });
     }
     if (bytes.length > 20 * 1024 * 1024) return NextResponse.json({ error: "Prepared template is too large for analysis.", details: "The image prepared for Gemini exceeds 20 MB." }, { status: 413 });
-    const models = [...new Set([MODEL, "gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-flash-lite"].filter(Boolean))];
+    const models = [...new Set([MODEL, "gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-flash-lite"].filter(Boolean))];
     let gj: any = null;
     let selectedModel = MODEL;
     let lastFailure = { status: 502, detail: "Gemini did not return a response." };
