@@ -10,6 +10,9 @@ function fieldAliases(field:Field):string[]{
  const identity=normalizeMappingName([field.key,field.label].join(" "));
  const aliases:Record<string,string[]>={
   student_name:["student name","name","student full name","name of student","विद्यार्थी का नाम","छात्र का नाम","विद्यार्थी का पूरा नाम"],
+  student_photo:["student photo","photo filename","photo file name","student photo filename","photo","image filename","picture filename"],
+  session_start:["session start","start year","session from","academic session start","session year start"],
+  session_end:["session end","end year","session to","academic session end","session year end"],
   student_photo:["student photo","photo","photo filename","student image","image filename","विद्यार्थी का फोटो"],
   father_name:["father name","fathers name","father's name","father","father name of student","पिता का नाम","पिता का नाम"],
   mother_name:["mother name","mothers name","mother's name","mother","माता का नाम"],
