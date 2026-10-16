@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import fontkit from "@pdf-lib/fontkit";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { requiredFieldValue } from "@/lib/validation/engine";
 const SCRIPT_FONTS:[RegExp,string,string][]=[
  [/[\u0900-\u097f]/,"@fontsource/noto-sans-devanagari/files/noto-sans-devanagari-devanagari-400-normal.woff2","@fontsource/noto-sans-devanagari/files/noto-sans-devanagari-devanagari-700-normal.woff2"],
  [/[\u0980-\u09ff]/,"@fontsource/noto-sans-bengali/files/noto-sans-bengali-bengali-400-normal.woff2","@fontsource/noto-sans-bengali/files/noto-sans-bengali-bengali-700-normal.woff2"],
@@ -68,11 +69,15 @@ export function resolveFieldValue(field:RenderField,student:RenderStudent,school
   const n=normalize(source),key=Object.keys(data).find(k=>normalize(k)===n);
   value=key?data[key]:undefined;
  }
+ if(value===undefined||value===null||String(value).trim()==="") {
+  const aliasValue=requiredFieldValue(data,source);
+  if(aliasValue!==undefined&&aliasValue!==null&&String(aliasValue).trim()!=="")value=aliasValue;
+ }
  let secondaryValue:unknown;
  if(typeof o.valueTransformSecondaryColumn==="string"){
   const secondary=o.valueTransformSecondaryColumn.trim();
   if(Object.prototype.hasOwnProperty.call(data,secondary))secondaryValue=data[secondary];
-  else {const normalize=(v:string)=>v.normalize("NFKC").toLocaleLowerCase("en-IN").replace(/['’]/g,"").replace(/[^\p{L}\p{N}]+/gu," ").trim().replace(/\s+/g," ");const n=normalize(secondary),k=Object.keys(data).find(key=>normalize(key)===n);secondaryValue=k?data[k]:undefined;}
+  else {const normalize=(v:string)=>v.normalize("NFKC").toLocaleLowerCase("en-IN").replace(/['’]/g,"").replace(/[^\p{L}\p{N}]+/gu," ").trim().replace(/\s+/g," ");const n=normalize(secondary),k=Object.keys(data).find(key=>normalize(key)===n);secondaryValue=k?data[k]:requiredFieldValue(data,secondary);}
  }
  return transformMappedValue(value,o.valueTransform,secondaryValue);
 }
