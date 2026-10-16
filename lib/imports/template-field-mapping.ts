@@ -58,8 +58,14 @@ export function autoMapFields(fields:Field[],headers:string[]):Field[]{
  const address2Column=normalized.find(h=>["address line 2","address line two","address 2","address2","second address line","दूसरा पता","पता पंक्ति 2"].includes(h.n));
  const sessionFields=fields.filter(f=>normalizeMappingName(f.label)==="session").slice().sort((a,b)=>a.x-b.x);
  const sessionIndex=new Map(sessionFields.map((f,i)=>[f.id,i]));
+ const keyNameRole=(value:string)=>{const tokens=value.split(" ");return ["student","father","mother","guardian","parent"].find(t=>tokens.includes(t))??null;};
  const tokenScore=(alias:string,header:string)=>{
   if(alias===header)return 1;
+  const roleTokens=["student","father","father s","mother","guardian","parent"];
+  const aliasRoles=roleTokens.filter(t=>alias.split(" ").includes(t));
+  const headerRoles=roleTokens.filter(t=>header.split(" ").includes(t));
+  if(aliasRoles.length&&headerRoles.length&& !aliasRoles.some(t=>headerRoles.includes(t)))return 0;
+  if((keyNameRole(alias)!==keyNameRole(header))&&(keyNameRole(alias)||keyNameRole(header)))return 0;
   const a=alias.split(" ").filter(Boolean),h=header.split(" ").filter(Boolean);
   if(a.length>=2&&a.every(t=>h.includes(t)))return .9;
   if(h.length>=2&&h.every(t=>a.includes(t)))return .86;
