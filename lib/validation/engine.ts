@@ -56,7 +56,7 @@ export function requiredFieldValue(data:Record<string,unknown>,required:string){
  const key=Object.keys(data).find(k=>aliases.includes(norm(k))&&!empty(data[k]));
  if(key)return data[key];
  if(["classsec","classsection","classandsec","classandsection","gradeandsection"].includes(target)){
-  const cls=get(["class","classname","grade","कक्षा"]),sec=get(["section","sec","सेक्शन","वर्ग"]);
+  const cls=get(["class","classname","grade","कक्षा"]),sec=get(["section","sectionname","sec","सेक्शन","वर्ग"]);
   if(cls!==undefined&&sec!==undefined)return String(cls)+" - "+String(sec);
  }
  if(["sessionstart","startsession","sessionfrom","fromyear","startyear","academicsessionstart","sessionyearstart"].includes(target)){
