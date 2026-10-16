@@ -28,7 +28,35 @@ export function physicalPixels(mm:number,dpi:number){if(!Number.isFinite(mm)||mm
 export function validatePhysicalSize(widthMm:number,heightMm:number,dpi:number){const widthPx=physicalPixels(widthMm,dpi),heightPx=physicalPixels(heightMm,dpi);if(widthPx*heightPx>MAX_PIXELS)throw new Error("Requested output exceeds the 24-megapixel render limit. Reduce dimensions or DPI.");return{widthPx,heightPx}}
 export function sanitizeSvg(input:Buffer|string){const source=Buffer.isBuffer(input)?input.toString("utf8"):input;if(Buffer.byteLength(source)>MAX_BYTES)throw new Error("SVG template exceeds the 20 MB limit.");if(!/^\s*(?:<\?xml[^>]*>\s*)?<svg\b/i.test(source)||FORBIDDEN.test(source))throw new Error("SVG template contains unsupported or active content.");if(/<(?:image|use)\b/i.test(source)&&/(?:href|xlink:href)\s*=/i.test(source))throw new Error("SVG image/use references are not supported. Embed static artwork directly in the SVG.");if(/url\s*\(\s*["']?(?:https?:|\/\/|file:|data:|javascript:)/i.test(source))throw new Error("SVG external resource references are not allowed.");if(/@import\s+(?:url\s*\()?\s*["']?\s*(?:https?:|\/\/|file:|data:|javascript:)/i.test(source))throw new Error("SVG external resource references are not allowed.");return Buffer.from(source.replace(/<\?xml[^>]*\?>/gi,"").replace(/<!DOCTYPE[^>]*>/gi,""),"utf8")}
 function esc(v:string){return v.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&apos;")}
-export function resolveFieldValue(field:RenderField,student:RenderStudent,schoolName:string){const o=field.render_options??{};if(typeof o.staticValue==="string")return o.staticValue;const source=(field.source_column||"").trim();if(source==="school_name"||field.key==="school_name")return schoolName;if(source==="serial_number"||field.key==="serial_number")return student.serial_number;if(!source)return undefined;const data=student.data??{};if(Object.prototype.hasOwnProperty.call(data,source))return data[source];const normalize=(v:string)=>v.normalize("NFKC").toLocaleLowerCase("en-IN").replace(/['’`]/g,"").replace(/[^\p{L}\p{N}]+/gu," ").trim().replace(/\s+/g," ");const n=normalize(source);const key=Object.keys(data).find(k=>normalize(k)===n);return key?data[key]:undefined}
+function transformMappedValue(value:unknown,transform:unknown){
+ if(typeof transform!=="string"||!["session_start","session_end"].includes(transform)||value==null)return value;
+ const text=String(value).normalize("NFKC").trim();
+ const range=text.match(/((?:19|20|21)\d{2})\s*(?:-|–|—|\/|to|until)\s*(\d{2}|(?:19|20|21)\d{2})/i);
+ if(range){
+  const start=range[1],end=range[2].length===2?String(Math.floor(Number(start)/100)*100+Number(range[2])):range[2];
+  return transform==="session_start"?start:end;
+ }
+ const years=text.match(/(?:19|20|21)\d{2}/g);
+ if(years&&years.length>=2)return transform==="session_start"?years[0]:years[years.length-1];
+ return value;
+}
+export function resolveFieldValue(field:RenderField,student:RenderStudent,schoolName:string){
+ const o=field.render_options??{};
+ if(typeof o.staticValue==="string")return o.staticValue;
+ const source=(field.source_column||"").trim();
+ if(source==="school_name"||field.key==="school_name")return schoolName;
+ if(source==="serial_number"||field.key==="serial_number")return student.serial_number;
+ if(!source)return undefined;
+ const data=student.data??{};
+ let value:unknown;
+ if(Object.prototype.hasOwnProperty.call(data,source))value=data[source];
+ else {
+  const normalize=(v:string)=>v.normalize("NFKC").toLocaleLowerCase("en-IN").replace(/['’]/g,"").replace(/[^\p{L}\p{N}]+/gu," ").trim().replace(/\s+/g," ");
+  const n=normalize(source),key=Object.keys(data).find(k=>normalize(k)===n);
+  value=key?data[key]:undefined;
+ }
+ return transformMappedValue(value,o.valueTransform);
+}
 function isPhoto(f:RenderField){return["photo","image","student_photo","student-photo"].includes(f.field_type.toLowerCase())||f.key==="student_photo"}
 function isCodeField(f:RenderField){return f.field_type.toLowerCase()==="qr"||f.field_type.toLowerCase()==="barcode"}
 async function codeImage(field:RenderField,value:string,width:number,height:number){if(field.field_type.toLowerCase()==="qr"){const side=Math.max(64,Math.min(2048,Math.max(width,height)));const raw=await QRCode.toBuffer(value,{width:side,margin:0,errorCorrectionLevel:String(field.render_options?.errorCorrectionLevel??"M") as "L"|"M"|"Q"|"H",color:{dark:"#000000",light:"#FFFFFF"}});return sharp(raw).resize(width,height,{fit:"contain",background:{r:255,g:255,b:255,alpha:1}}).png().toBuffer()}const bcid=String(field.render_options?.barcodeType??"code128").toLowerCase();const allowed=["code128","ean13","ean8","upca","upce","code39","itf14","isbn"];if(!allowed.includes(bcid))throw new Error("Unsupported barcode type configured for field "+field.label+".");const raw=await bwipjs.toBuffer({bcid,text:value,scale:3,height:Math.max(8,Math.min(100,Number(field.render_options?.barcodeHeightMm??16))),includetext:field.render_options?.includeBarcodeText===true,backgroundcolor:"FFFFFF",padding:0});return sharp(raw).resize(width,height,{fit:"contain",background:{r:255,g:255,b:255,alpha:1}}).png().toBuffer()}
