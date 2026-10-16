@@ -58,7 +58,8 @@ export function autoMapFields(fields:Field[],headers:string[]):Field[]{
  const address2Column=normalized.find(h=>["address line 2","address line two","address 2","address2","second address line","दूसरा पता","पता पंक्ति 2"].includes(h.n));
  const sessionFields=fields.filter(f=>normalizeMappingName(f.label)==="session").slice().sort((a,b)=>a.x-b.x);
  const sessionIndex=new Map(sessionFields.map((f,i)=>[f.id,i]));
- const keyNameRole=(value:string)=>{const tokens=value.split(" ");return ["student","father","mother","guardian","parent"].find(t=>tokens.includes(t))??null;};
+ const keyNameRole=(value:string)=>{const tokens=value.split(" ");if(tokens.some(t=>t==="father"||t==="fathers"))return "father";if(tokens.some(t=>t==="mother"||t==="mothers"))return "mother";if(tokens.includes("guardian"))return "guardian";if(tokens.includes("parent"))return "parent";if(tokens.includes("student"))return "student";return null;};
+ const fieldNameRole=(field:Field)=>keyNameRole(normalizeMappingName(field.key+" "+field.label));
  const tokenScore=(alias:string,header:string)=>{
   if(alias===header)return 1;
   const roleTokens=["student","father","father s","mother","guardian","parent"];
@@ -97,7 +98,7 @@ export function autoMapFields(fields:Field[],headers:string[]):Field[]{
    const availableExact=exact.filter(h=>!used.has(h.n));
    if(exact.length===1&&availableExact.length===1)chosen=availableExact[0];
    else if(exact.length===0){
-    const candidates=normalized.filter(h=>!used.has(h.n)).map(h=>({h,score:Math.max(0,...aliases.map(a=>tokenScore(a,h.n)))})).filter(x=>x.score>=.8).sort((a,b)=>b.score-a.score);
+    const role=fieldNameRole(field); const candidates=normalized.filter(h=>!used.has(h.n)&&(!role||!keyNameRole(h.n)||role===keyNameRole(h.n))).map(h=>({h,score:Math.max(0,...aliases.map(a=>tokenScore(a,h.n)))})).filter(x=>x.score>=.8).sort((a,b)=>b.score-a.score);
     if(candidates.length&&(!candidates[1]||candidates[0].score-candidates[1].score>=.12))chosen=candidates[0].h;
    }
   }
