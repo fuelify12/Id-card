@@ -16,7 +16,7 @@ const fieldAliasGroups:string[][]=[
  ["guardianname","guardian"],
  ["classsec","classsection","classandsec","classandsection","gradeandsection","classsectionname"],
  ["class","classname","grade","कक्षा"],
- ["section","sec","सेक्शन","वर्ग"],
+ ["section","sectionname","sec","सेक्शन","वर्ग"],
  ["rollnumber","rollno","roll","classrollnumber","studentrollnumber"],
  ["admissionnumber","admissionno","admissionid","enrollmentnumber","enrollmentno"],
  ["dateofbirth","dob","birthdate"],
