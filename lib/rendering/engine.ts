@@ -28,8 +28,21 @@ export function physicalPixels(mm:number,dpi:number){if(!Number.isFinite(mm)||mm
 export function validatePhysicalSize(widthMm:number,heightMm:number,dpi:number){const widthPx=physicalPixels(widthMm,dpi),heightPx=physicalPixels(heightMm,dpi);if(widthPx*heightPx>MAX_PIXELS)throw new Error("Requested output exceeds the 24-megapixel render limit. Reduce dimensions or DPI.");return{widthPx,heightPx}}
 export function sanitizeSvg(input:Buffer|string){const source=Buffer.isBuffer(input)?input.toString("utf8"):input;if(Buffer.byteLength(source)>MAX_BYTES)throw new Error("SVG template exceeds the 20 MB limit.");if(!/^\s*(?:<\?xml[^>]*>\s*)?<svg\b/i.test(source)||FORBIDDEN.test(source))throw new Error("SVG template contains unsupported or active content.");if(/<(?:image|use)\b/i.test(source)&&/(?:href|xlink:href)\s*=/i.test(source))throw new Error("SVG image/use references are not supported. Embed static artwork directly in the SVG.");if(/url\s*\(\s*["']?(?:https?:|\/\/|file:|data:|javascript:)/i.test(source))throw new Error("SVG external resource references are not allowed.");if(/@import\s+(?:url\s*\()?\s*["']?\s*(?:https?:|\/\/|file:|data:|javascript:)/i.test(source))throw new Error("SVG external resource references are not allowed.");return Buffer.from(source.replace(/<\?xml[^>]*\?>/gi,"").replace(/<!DOCTYPE[^>]*>/gi,""),"utf8")}
 function esc(v:string){return v.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&apos;")}
-function transformMappedValue(value:unknown,transform:unknown){
- if(typeof transform!=="string"||!["session_start","session_end"].includes(transform)||value==null)return value;
+function transformMappedValue(value:unknown,transform:unknown,secondaryValue?:unknown){
+ if(value==null)return value;
+ if(transform==="class_section"){
+  const first=String(value).trim(),second=secondaryValue==null?"":String(secondaryValue).trim();
+  return [first,second].filter(Boolean).join(" - ");
+ }
+ if(transform==="address_line_1"||transform==="address_line_2"){
+  const text=String(value).normalize("NFKC").trim();
+  const parts=text.split(/[,\n;|]+/).map(v=>v.trim()).filter(Boolean);
+  if(parts.length>1)return transform==="address_line_1"?parts[0]:parts.slice(1).join(", ");
+  const words=text.split(/\s+/).filter(Boolean);
+  if(words.length>=4){const splitAt=Math.ceil(words.length/2);return transform==="address_line_1"?words.slice(0,splitAt).join(" "):words.slice(splitAt).join(" ");}
+  return transform==="address_line_1"?text:"";
+ }
+ if(typeof transform!=="string"||!["session_start","session_end"].includes(transform))return value;
  const text=String(value).normalize("NFKC").trim();
  const range=text.match(/((?:19|20|21)\d{2})\s*(?:-|–|—|\/|to|until)\s*(\d{2}|(?:19|20|21)\d{2})/i);
  if(range){
@@ -55,7 +68,13 @@ export function resolveFieldValue(field:RenderField,student:RenderStudent,school
   const n=normalize(source),key=Object.keys(data).find(k=>normalize(k)===n);
   value=key?data[key]:undefined;
  }
- return transformMappedValue(value,o.valueTransform);
+ let secondaryValue:unknown;
+ if(typeof o.valueTransformSecondaryColumn==="string"){
+  const secondary=o.valueTransformSecondaryColumn.trim();
+  if(Object.prototype.hasOwnProperty.call(data,secondary))secondaryValue=data[secondary];
+  else {const normalize=(v:string)=>v.normalize("NFKC").toLocaleLowerCase("en-IN").replace(/['’]/g,"").replace(/[^\p{L}\p{N}]+/gu," ").trim().replace(/\s+/g," ");const n=normalize(secondary),k=Object.keys(data).find(key=>normalize(key)===n);secondaryValue=k?data[k]:undefined;}
+ }
+ return transformMappedValue(value,o.valueTransform,secondaryValue);
 }
 function isPhoto(f:RenderField){return["photo","image","student_photo","student-photo"].includes(f.field_type.toLowerCase())||f.key==="student_photo"}
 function isCodeField(f:RenderField){return f.field_type.toLowerCase()==="qr"||f.field_type.toLowerCase()==="barcode"}
