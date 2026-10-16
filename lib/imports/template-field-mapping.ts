@@ -94,7 +94,9 @@ export function autoMapFields(fields:Field[],headers:string[]):Field[]{
   }
   if(!chosen){
    const aliases=[...new Set(fieldAliases(field))];
-   const role=fieldNameRole(field);\n   const roleCompatible=(header:string)=>{const headerRole=keyNameRole(header);return !role||!headerRole||role===headerRole;};\n   const exact=normalized.filter(h=>aliases.includes(h.n)&&roleCompatible(h.n));
+   const role=fieldNameRole(field);
+   const roleCompatible=(header:string)=>{const headerRole=keyNameRole(header);return !role||!headerRole||role===headerRole;};
+   const exact=normalized.filter(h=>aliases.includes(h.n)&&roleCompatible(h.n));
    const availableExact=exact.filter(h=>!used.has(h.n));
    if(exact.length===1&&availableExact.length===1)chosen=availableExact[0];
    else if(exact.length===0){
