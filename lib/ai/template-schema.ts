@@ -24,6 +24,29 @@ export const templateAnalysisSchema=z.object({
 });
 export type TemplateAnalysis=z.infer<typeof templateAnalysisSchema>;
 
+export function refineValueBoxes(raw:TemplateAnalysis):TemplateAnalysis{
+ const norm=(s:string)=>s.normalize("NFKC").toLocaleLowerCase("en-IN").replace(/['’`]/g,"").replace(/[^\p{L}\p{N}]+/gu," ").trim().replace(/\s+/g," ");
+ const detected=raw.detectedText.map(item=>({...item,box:item.box.map(v=>Math.max(0,Math.min(1000,v))) as [number,number,number,number]}));
+ const fields=raw.fields.map(field=>{
+  const label=norm(field.label),key=norm(field.key.replace(/_/g," "));
+  const candidates=detected.filter(item=>{const text=norm(item.text.replace(/[:：]/g," "));return text===label||text===key||(label.length>=5&&text.replace(/\b(the|field)\b/g," ").trim()===label)});
+  if(!candidates.length)return field;
+  let box=[...field.box] as [number,number,number,number];
+  for(const item of candidates){
+   const [ly1,lx1,ly2,lx2]=item.box,[fy1,fx1,fy2,fx2]=box;
+   const overlapY=Math.max(0,Math.min(ly2,fy2)-Math.max(ly1,fy1));
+   const minHeight=Math.max(1,Math.min(ly2-ly1,fy2-fy1));
+   const overlapX=Math.max(0,Math.min(lx2,fx2)-Math.max(lx1,fx1));
+   if(overlapY/minHeight>=0.25&&overlapX>0&&fx1<lx2&&fx2>lx2+12){
+    box=[fy1,Math.min(fx2-1,lx2+8),fy2,fx2];
+    break;
+   }
+  }
+  return {...field,box};
+ });
+ return {...raw,detectedText:detected,fields};
+}
+
 export function normalizeAnalysis(raw:TemplateAnalysis){
   const clamp=(value:number)=>Math.max(0,Math.min(1000,value));
   const fields=raw.fields.map((f,i)=>{

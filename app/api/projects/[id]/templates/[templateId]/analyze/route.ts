@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { templateAnalysisSchema, normalizeAnalysis } from "@/lib/ai/template-schema";
+import { templateAnalysisSchema, normalizeAnalysis, refineValueBoxes } from "@/lib/ai/template-schema";
 import sharp from "sharp";
 import { sanitizeSvg } from "@/lib/rendering/engine";
 
@@ -17,6 +17,9 @@ GOAL: create a usable field map, not just an OCR transcript. Inspect the entire 
 6) Boxes are [ymin,xmin,ymax,xmax] normalized 0–1000, relative to the complete card image. Coordinates must be ordered, inside the card, and tight around the actual value-printing region. Do not use the whole card as a box. Estimate image width and height in pixels from the supplied file.
 7) Infer alignment, font family, approximate font-size ratio, text color, and whether the field is required. Use Noto Sans for Indian scripts. Use confidence honestly; low confidence is preferable to invented certainty.
 8) Do not invent unseen fields or student values. Do not remove important fields because the value area is blank. Keep photo placeholder separate from text fields. If a field is genuinely ambiguous, add a note.
+9) Before returning JSON, perform a visual self-check: for each field, compare its box against detectedText; if the printed label is inside or overlaps the value box, move the value box to the blank area after the label. Keep fields for different rows separate, avoid covering borders/photo/signatures, and ensure every box is ordered [ymin,xmin,ymax,xmax] within 0–1000.
+10) For a session printed as \"SESSION: ____ - ____\", create two separate fields with keys session_start and session_end and boxes over only the two blank year areas. If the spreadsheet has one combined session value such as 2025-2026, the app can split it; do not create a box over the printed word SESSION.
+11) Check that all required student fields are included exactly once; do not duplicate a field to represent its printed label.
 `;
 const responseSchema = {
   type: "OBJECT",
@@ -146,22 +149,45 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     if (!output) return NextResponse.json({ error: "Gemini returned no structured output.", details: gj.promptFeedback?.blockReason || "Empty model response." }, { status: 502 });
     let raw: unknown;
     try { raw = JSON.parse(output); } catch { return NextResponse.json({ error: "Gemini returned invalid JSON. Retry analysis." }, { status: 502 }); }
-    // Clamp Gemini's approximate font-size ratio before strict validation.
-    if (raw && typeof raw === "object" && Array.isArray((raw as any).fields)) {
-      (raw as any).fields = (raw as any).fields.map((field: any) => {
-        if (!field || typeof field !== "object") return field;
-        const ratio = Number(field.fontSizeRatio);
-        return { ...field, fontSizeRatio: Number.isFinite(ratio) ? Math.max(0.005, Math.min(0.25, ratio)) : 0.04 };
-      });
+    // Normalize model-estimated numeric values before strict schema validation.
+    // Gemini occasionally returns normalized coordinates as 0..1 or image-pixel
+    // coordinates instead of the documented 0..1000 coordinate system.
+    if (raw && typeof raw === "object") {
+      const obj = raw as any;
+      const normalizeBox = (box: unknown) => {
+        if (!Array.isArray(box) || box.length !== 4 || !box.every((v) => Number.isFinite(Number(v)))) return box;
+        let values = box.map(Number);
+        if (values.every((v) => v >= 0 && v <= 1) && values.some((v) => v > 0)) {
+          values = values.map((v) => v * 1000);
+        } else if (values.some((v) => v > 1000) && Number(t.width_px) > 0 && Number(t.height_px) > 0) {
+          values = values.map((v, i) => v / (i % 2 === 0 ? Number(t.height_px) : Number(t.width_px)) * 1000);
+        }
+        return values.map((v) => Math.max(0, Math.min(1000, v)));
+      };
+      if (Array.isArray(obj.fields)) {
+        obj.fields = obj.fields.map((field: any) => {
+          if (!field || typeof field !== "object") return field;
+          const ratio = Number(field.fontSizeRatio), confidence = Number(field.confidence);
+          return {
+            ...field,
+            box: normalizeBox(field.box),
+            confidence: Number.isFinite(confidence) ? Math.max(0, Math.min(1, confidence)) : 0.5,
+            fontSizeRatio: Number.isFinite(ratio) ? Math.max(0.005, Math.min(0.25, ratio)) : 0.04
+          };
+        });
+      }
+      if (Array.isArray(obj.detectedText)) {
+        obj.detectedText = obj.detectedText.map((item: any) => item && typeof item === "object" ? { ...item, box: normalizeBox(item.box) } : item);
+      }
     }
     const parsed = templateAnalysisSchema.safeParse(raw);
     if (!parsed.success) return NextResponse.json({ error: "Gemini output failed validation.", details: parsed.error.issues.slice(0, 5) }, { status: 502 });
     // Coordinates must use the uploaded template's real pixel basis, not dimensions guessed by the model.
-    const analysisData = {
+    const analysisData = refineValueBoxes({
       ...parsed.data,
       width: Number(t.width_px) > 0 ? Number(t.width_px) : parsed.data.width,
       height: Number(t.height_px) > 0 ? Number(t.height_px) : parsed.data.height
-    };
+    });
     const normalized = normalizeAnalysis(analysisData);
     const { error: del } = await s.from("template_fields").delete().eq("template_id", templateId);
     if (del) return NextResponse.json({ error: "Analysis succeeded but old field map could not be replaced.", details: del.message }, { status: 500 });

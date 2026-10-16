@@ -3,78 +3,8 @@ import {useMemo,useState} from "react";
 import * as XLSX from "xlsx";
 import {parseWorkbook,validateStudentRows,type SpreadsheetPreview,type ParsedStudentRow} from "@/lib/imports/student-spreadsheet";
 import {importStudentRows,saveTemplateFields} from "@/app/dashboard/actions";
+import {autoMapFields,type Field} from "@/lib/imports/template-field-mapping";
 
-type Field={id:string;key:string;label:string;field_type:string;required:boolean;x:number;y:number;width:number;height:number;font_family:string|null;font_size:number|null;font_weight:string|null;color:string|null;alignment:string|null;fit_mode:string|null;source_column:string|null;confidence:number|null;render_options?:Record<string,unknown>|null};
-function normalizeMappingName(value:string){return value.normalize("NFKC").toLocaleLowerCase("en-IN").replace(/['’`]/g,"").replace(/[^\p{L}\p{N}]+/gu," ").trim().replace(/\s+/g," ")}
-function fieldAliases(field:Field):string[]{
- const identity=normalizeMappingName([field.key,field.label].join(" "));
- const aliases:Record<string,string[]>={
-  student_name:["student name","name","student full name","name of student","विद्यार्थी का नाम","छात्र का नाम","विद्यार्थी का पूरा नाम"],
-  student_photo:["student photo","photo","photo filename","photo file name","student photo filename","student image","image filename","picture filename","विद्यार्थी का फोटो"],
-  father_name:["father name","fathers name","father's name","father","father name of student","पिता का नाम","पिता का नाम"],
-  mother_name:["mother name","mothers name","mother's name","mother","माता का नाम"],
-  guardian_name:["guardian name","guardian","अभिभावक का नाम"],
-  class:["class","class name","grade","कक्षा"],
-  section:["section","सेक्शन","वर्ग"],
-  class_sec:["class & sec","class sec","class & section","class section","class and section","class-section","grade and section","कक्षा एवं सेक्शन","कक्षा और सेक्शन"],
-  class_section:["class & sec","class sec","class & section","class section","class and section","class-section","grade and section","कक्षा एवं सेक्शन","कक्षा और सेक्शन"],
-  roll_number:["roll no","roll number","rollno","रोल नंबर","अनुक्रमांक"],
-  admission_number:["admission no","admission number","admissionno","admission id","enrollment no","enrollment number","प्रवेश संख्या","प्रवेशांक"],
-  admission_no:["admission no","admission number","admissionno","admission id","enrollment no","enrollment number","प्रवेश संख्या","प्रवेशांक"],
-  admissionno:["admission no","admission number","admissionno","admission id","enrollment no","enrollment number","प्रवेश संख्या","प्रवेशांक"],
-  date_of_birth:["date of birth","dob","birth date","date of birth (dob)","जन्म तिथि","जन्मतिथि"],
-  dob:["date of birth","dob","birth date","जन्म तिथि","जन्मतिथि"],
-  address:["address","पता"],
-  address_line_1:["address line 1","address line one","address 1","address1","पहला पता","पता पंक्ति 1"],
-  address_line_2:["address line 2","address line two","address 2","address2","second address line","दूसरा पता","पता पंक्ति 2"],
-  blood_group:["blood group","blood type","रक्त समूह"],
-  phone:["phone","mobile","mobile number","contact number","मोबाइल नंबर","फोन नंबर"],
-  session:["session","academic session","school session","academic year","session year","शैक्षिक सत्र","शैक्षणिक सत्र"],
-  session_start:["session start","start session","session from","from year","start year","academic year start","academic session start","session year start","सत्र प्रारंभ"],
-  session_end:["session end","end session","session to","to year","end year","academic year end","academic session end","session year end","सत्र समाप्ति"],
-  session_year_start:["session start","start session","session from","from year","start year","academic year start","सत्र प्रारंभ"],
-  session_year_end:["session end","end session","session to","to year","end year","academic year end","सत्र समाप्ति"],
-  academic_session_start:["session start","start session","session from","from year","start year","academic year start","सत्र प्रारंभ"],
-  academic_session_end:["session end","end session","session to","to year","end year","academic year end","सत्र समाप्ति"],
-  academic_session:["session","academic session","school session","academic year","session year","शैक्षिक सत्र","शैक्षणिक सत्र"],
-  school_session:["session","academic session","school session","academic year","session year","शैक्षिक सत्र","शैक्षणिक सत्र"],
-  gender:["gender","sex","लिंग"],
-  student_id:["student id","student code","विद्यार्थी आईडी"],
-  serial_number:["serial number","serial no","s no","sno","क्रमांक","अनुक्रमांक"]
- };
- const key=normalizeMappingName(field.key).replace(/ /g,"_");
- const labelKey=normalizeMappingName(field.label).replace(/ /g,"_");
- const aliasKey=Object.keys(aliases).find(k=>aliases[k].some(a=>normalizeMappingName(a)===labelKey));
- return [...new Set([field.source_column??"",field.key,field.label,...(aliases[key]??[]),...(aliases[labelKey.replace(/ /g,"_")]??[]),...(aliases[labelKey]??[]),...(aliasKey?aliases[aliasKey]:[]),...(aliases[identity.replace(/ /g,"_")]??[])].map(normalizeMappingName).filter(Boolean))];
-}
-function autoMapFields(fields:Field[],headers:string[]):Field[]{
- const normalized=headers.map(raw=>({raw,n:normalizeMappingName(raw)}));
- const used=new Set<string>();
- const sessionStart=normalized.find(h=>["session start","start session","session from","from year","start year","academic year start"].includes(h.n));
- const sessionEnd=normalized.find(h=>["session end","end session","session to","to year","end year","academic year end"].includes(h.n));
- const sessionFields=fields.filter(f=>normalizeMappingName(f.label)==="session").slice().sort((a,b)=>a.x-b.x);
- const sessionIndex=new Map(sessionFields.map((f,i)=>[f.id,i]));
- return fields.map(field=>{
-  const key=normalizeMappingName(field.key).replace(/ /g,"_");
-  const label=normalizeMappingName(field.label);
-  let chosen:null|{raw:string;n:string}=null;
-  if(label==="session"&&(key.includes("start")||key.includes("from")))chosen=sessionStart??null;
-  else if(label==="session"&&(key.includes("end")||key.includes("to")))chosen=sessionEnd??null;
-  else if(label==="session"&&sessionFields.length>=2){
-   const idx=sessionIndex.get(field.id);
-   chosen=(idx===0?sessionStart:idx===sessionFields.length-1?sessionEnd:null)??null;
-  }
-  if(!chosen){
-   const aliases=new Set(fieldAliases(field));
-   const matches=normalized.filter(h=>aliases.has(h.n));
-   // Map only an unambiguous exact header match; never guess from partial text.
-   const available=matches.filter(h=>!used.has(h.n));
-   chosen=matches.length===1&&available.length===1?available[0]:null;
-  }
-  if(chosen)used.add(chosen.n);
-  return {...field,source_column:chosen?.raw??null};
- });
-}
 export function StudentImportWorkspace({projectId,templateId,fields:initialFields}:{projectId:string;templateId:string|null;fields:Field[]}) {
  const [preview,setPreview]=useState<SpreadsheetPreview|null>(null);
  const [fields,setFields]=useState(initialFields);

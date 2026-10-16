@@ -4,10 +4,61 @@ export type FindingStatus="OPEN"|"IN_REVIEW"|"RESOLVED"|"WAIVED";
 export type Finding={ruleId:string;ruleVersion:number;severity:Severity;status:FindingStatus;message:string;correctiveAction:string;studentId?:string|null;generatedCardId?:string|null;batchId?:string|null;fieldRef?:string|null;assetRef?:string|null;inputFingerprint:string;details?:Record<string,unknown>};
 type Student={id:string;project_id?:string;serial_number:number|null;data?:Record<string,unknown>|null};
 type Field={id?:string;key?:string;label?:string;field_type?:string;source_column?:string|null;required?:boolean;visible?:boolean;x:number;y:number;width:number;height:number;font_family?:string|null;font_size?:number|null;color?:string|null;static_value?:string|null;render_options?:Record<string,unknown>|null};
-const norm=(s:string)=>s.normalize("NFKC").trim().toLowerCase().replace(/[\s_-]+/g,"");
+const norm=(s:string)=>s.normalize("NFKC").trim().toLocaleLowerCase("en-IN").replace(/['’\`]/g,"").replace(/[^\p{L}\p{N}]+/gu,"");
 const empty=(v:unknown)=>v===undefined||v===null||String(v).trim()==="";
 const hash=(v:unknown)=>createHash("sha256").update(JSON.stringify(v)).digest("hex");
 function make(ruleId:string,severity:Severity,message:string,correctiveAction:string,fingerprint:unknown,more:Partial<Finding>={}):Finding{return{ruleId,ruleVersion:1,severity,status:"OPEN",message,correctiveAction,inputFingerprint:hash(fingerprint),...more}}
+
+const fieldAliasGroups:string[][]=[
+ ["studentname","name","fullname","pupilname","nameofstudent","studentfullname"],
+ ["fathername","fathersname","father","nameofstudentfather"],
+ ["mothername","mothersname","mother"],
+ ["guardianname","guardian"],
+ ["classsec","classsection","classandsec","classandsection","gradeandsection","classsectionname"],
+ ["admissionnumber","admissionno","admissionid","enrollmentnumber","enrollmentno"],
+ ["dateofbirth","dob","birthdate"],
+ ["addressline1","address1","fulladdress","completeaddress","residentialaddress","address","पता"],
+ ["addressline2","address2","secondaddressline"],
+ ["sessionstart","startsession","sessionfrom","fromyear","startyear","academicsessionstart","sessionyearstart"],
+ ["sessionend","endsession","sessionto","toyear","endyear","academicsessionend","sessionyearend"],
+ ["academicsession","schoolsession","sessionyear","sessionperiod","शैक्षिकसत्र","शैक्षणिकसत्र"],
+ ["bloodgroup","bloodtype"],
+ ["phonenumber","mobile","mobilenumber","contactnumber","phone"]
+];
+function fieldAliasesFor(value:string){const n=norm(value);return fieldAliasGroups.find(group=>group.includes(n))??[n]}
+function requiredFieldValue(data:Record<string,unknown>,required:string){
+ const target=norm(required);
+ const get=(names:string[])=>{const k=Object.keys(data).find(name=>names.includes(norm(name))&&!empty(data[name]));return k?data[k]:undefined};
+ const splitAddress=(value:unknown,part:1|2)=>{
+  if(empty(value))return undefined;
+  const text=String(value).normalize("NFKC").trim();
+  const parts=text.split(/[,\n;|]+/).map(v=>v.trim()).filter(Boolean);
+  if(parts.length>1)return part===1?parts[0]:parts.slice(1).join(", ");
+  const words=text.split(/\s+/).filter(Boolean);
+  if(words.length>=4){const splitAt=Math.ceil(words.length/2);return part===1?words.slice(0,splitAt).join(" "):words.slice(splitAt).join(" ");}
+  return part===1?text:"";
+ };
+ if(["addressline1","address1"].includes(target))return splitAddress(get(["address","fulladdress","completeaddress","residentialaddress","पता"]),1);
+ if(["addressline2","address2","secondaddressline"].includes(target))return splitAddress(get(["address","fulladdress","completeaddress","residentialaddress","पता"]),2);
+ const aliases=fieldAliasesFor(required);
+ const key=Object.keys(data).find(k=>aliases.includes(norm(k))&&!empty(data[k]));
+ if(key)return data[key];
+ if(["classsec","classsection","classandsec","classandsection","gradeandsection"].includes(target)){
+  const cls=get(["class","classname","grade","कक्षा"]),sec=get(["section","sec","सेक्शन","वर्ग"]);
+  if(cls!==undefined&&sec!==undefined)return String(cls)+" - "+String(sec);
+ }
+ if(["sessionstart","startsession","sessionfrom","fromyear","startyear","academicsessionstart","sessionyearstart"].includes(target)){
+  const value=get(["session","academicsession","schoolsession","academicyear","sessionyear","sessionperiod","शैक्षिकसत्र","शैक्षणिकसत्र"]);
+  const match=String(value??"").match(/((?:19|20|21)\d{2})\s*(?:-|–|—|\/|to|until)\s*((?:19|20|21)\d{2}|\d{2})/i);
+  if(match)return match[1];
+ }
+ if(["sessionend","endsession","sessionto","toyear","endyear","academicsessionend","sessionyearend"].includes(target)){
+  const value=get(["session","academicsession","schoolsession","academicyear","sessionyear","sessionperiod","शैक्षिकसत्र","शैक्षणिकसत्र"]);
+  const match=String(value??"").match(/((?:19|20|21)\d{2})\s*(?:-|–|—|\/|to|until)\s*((?:19|20|21)\d{2}|\d{2})/i);
+  if(match)return match[2].length===2?String(Math.floor(Number(match[1])/100)*100+Number(match[2])):match[2];
+ }
+ return undefined;
+}
 export function validateStudents(students:Student[],requiredFields:string[]=[],options:{admissionNumberUnique?:boolean}={}):Finding[]{
  const out:Finding[]=[],serials=new Map<string,Student[]>(),admissions=new Map<string,Student[]>();
  for(const s of students){const d=s.data??{},serial=s.serial_number==null?"":String(s.serial_number).trim();
@@ -15,7 +66,7 @@ export function validateStudents(students:Student[],requiredFields:string[]=[],o
  else serials.set(serial,[...(serials.get(serial)??[]),s]);
  const nk=Object.keys(d).find(k=>["studentname","name","fullname","pupilname"].includes(norm(k)));
  const nameValue=nk?d[nk]:undefined;if(!nk||empty(nameValue))out.push(make("STUDENT_NAME_MISSING","ERROR","Required student name is missing.","Map the correct name column and verify this student record.",{id:s.id,key:nk,value:nameValue},{studentId:s.id,fieldRef:nk??"student_name"}));
- for(const req of requiredFields){const k=Object.keys(d).find(x=>norm(x)===norm(req));const value=k?d[k]:undefined;if(!k||empty(value))out.push(make("STUDENT_REQUIRED_FIELD_MISSING","ERROR","A project-required student field is missing.","Fill the required field or update the school-specific configuration.",{id:s.id,req,k,value},{studentId:s.id,fieldRef:req}))}
+ for(const req of requiredFields){const value=requiredFieldValue(d,req);if(empty(value))out.push(make("STUDENT_REQUIRED_FIELD_MISSING","ERROR","A project-required student field is missing.","Fill the required field or update the school-specific configuration.",{id:s.id,req,value},{studentId:s.id,fieldRef:req}))}
  for(const [k,v]of Object.entries(d)){if(typeof v!=="string")continue;
  if(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(v))out.push(make("STUDENT_CONTROL_CHARACTER","WARNING","A field contains control characters.","Review the original spreadsheet cell; no value was changed automatically.",{id:s.id,k,v},{studentId:s.id,fieldRef:k}));
  if(/^\s*[=+@]/.test(v))out.push(make("STUDENT_FORMULA_LIKE_VALUE","WARNING","A value resembles a spreadsheet formula or untrusted expression.","Confirm the literal value is intentional before export.",{id:s.id,k,v},{studentId:s.id,fieldRef:k}));
