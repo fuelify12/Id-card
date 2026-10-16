@@ -10,6 +10,7 @@ function fieldAliases(field:Field):string[]{
  const identity=normalizeMappingName([field.key,field.label].join(" "));
  const aliases:Record<string,string[]>={
   student_name:["student name","name","student full name","name of student","विद्यार्थी का नाम","छात्र का नाम","विद्यार्थी का पूरा नाम"],
+  student_photo:["student photo","photo","photo filename","student image","image filename","विद्यार्थी का फोटो"],
   father_name:["father name","fathers name","father's name","father","father name of student","पिता का नाम","पिता का नाम"],
   mother_name:["mother name","mothers name","mother's name","mother","माता का नाम"],
   guardian_name:["guardian name","guardian","अभिभावक का नाम"],
@@ -29,6 +30,12 @@ function fieldAliases(field:Field):string[]{
   blood_group:["blood group","blood type","रक्त समूह"],
   phone:["phone","mobile","mobile number","contact number","मोबाइल नंबर","फोन नंबर"],
   session:["session","academic session","school session","academic year","session year","शैक्षिक सत्र","शैक्षणिक सत्र"],
+  session_start:["session start","start session","session from","from year","start year","academic year start","सत्र प्रारंभ"],
+  session_end:["session end","end session","session to","to year","end year","academic year end","सत्र समाप्ति"],
+  session_year_start:["session start","start session","session from","from year","start year","academic year start","सत्र प्रारंभ"],
+  session_year_end:["session end","end session","session to","to year","end year","academic year end","सत्र समाप्ति"],
+  academic_session_start:["session start","start session","session from","from year","start year","academic year start","सत्र प्रारंभ"],
+  academic_session_end:["session end","end session","session to","to year","end year","academic year end","सत्र समाप्ति"],
   academic_session:["session","academic session","school session","academic year","session year","शैक्षिक सत्र","शैक्षणिक सत्र"],
   school_session:["session","academic session","school session","academic year","session year","शैक्षिक सत्र","शैक्षणिक सत्र"],
   gender:["gender","sex","लिंग"],
@@ -43,12 +50,27 @@ function fieldAliases(field:Field):string[]{
 function autoMapFields(fields:Field[],headers:string[]):Field[]{
  const normalized=headers.map(raw=>({raw,n:normalizeMappingName(raw)}));
  const used=new Set<string>();
+ const sessionStart=normalized.find(h=>["session start","start session","session from","from year","start year","academic year start"].includes(h.n));
+ const sessionEnd=normalized.find(h=>["session end","end session","session to","to year","end year","academic year end"].includes(h.n));
+ const sessionFields=fields.filter(f=>normalizeMappingName(f.label)==="session").slice().sort((a,b)=>a.x-b.x);
+ const sessionIndex=new Map(sessionFields.map((f,i)=>[f.id,i]));
  return fields.map(field=>{
-  const aliases=new Set(fieldAliases(field));
-  const matches=normalized.filter(h=>aliases.has(h.n));
-  // Map only an unambiguous exact header match; never guess from partial text.
-  const available=matches.filter(h=>!used.has(h.n));
-  const chosen=matches.length===1&&available.length===1?available[0]:null;
+  const key=normalizeMappingName(field.key).replace(/ /g,"_");
+  const label=normalizeMappingName(field.label);
+  let chosen:null|{raw:string;n:string}=null;
+  if(label==="session"&&(key.includes("start")||key.includes("from")))chosen=sessionStart??null;
+  else if(label==="session"&&(key.includes("end")||key.includes("to")))chosen=sessionEnd??null;
+  else if(label==="session"&&sessionFields.length>=2){
+   const idx=sessionIndex.get(field.id);
+   chosen=(idx===0?sessionStart:idx===sessionFields.length-1?sessionEnd:null)??null;
+  }
+  if(!chosen){
+   const aliases=new Set(fieldAliases(field));
+   const matches=normalized.filter(h=>aliases.has(h.n));
+   // Map only an unambiguous exact header match; never guess from partial text.
+   const available=matches.filter(h=>!used.has(h.n));
+   chosen=matches.length===1&&available.length===1?available[0]:null;
+  }
   if(chosen)used.add(chosen.n);
   return {...field,source_column:chosen?.raw??null};
  });
