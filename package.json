@@ -25,7 +25,7 @@
     "@pdf-lib/fontkit": "^1.1.1",
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.117.3",
-    "@tensorflow-models/blazeface": "0.0.7",
+    "@tensorflow-models/blazeface": "0.1.0",
     "@tensorflow/tfjs": "4.22.0",
     "@types/qrcode": "^1.5.6",
     "bwip-js": "^4.11.4",
