@@ -11,24 +11,36 @@ function make(ruleId:string,severity:Severity,message:string,correctiveAction:st
 
 const fieldAliasGroups:string[][]=[
  ["studentname","name","fullname","pupilname","nameofstudent","studentfullname"],
- ["fathername","fathersname","father","nameofstudentfather"],
- ["mothername","mothersname","mother"],
+ ["fathername","fathersname","father","nameofstudentfather","fathernameofstudent","fathersnameofstudent","studentfathername"],
+ ["mothername","mothersname","mother","mothernameofstudent","studentmothername"],
  ["guardianname","guardian"],
  ["classsec","classsection","classandsec","classandsection","gradeandsection","classsectionname"],
+ ["class","classname","grade","कक्षा"],
+ ["section","sec","सेक्शन","वर्ग"],
+ ["rollnumber","rollno","roll","classrollnumber","studentrollnumber"],
  ["admissionnumber","admissionno","admissionid","enrollmentnumber","enrollmentno"],
  ["dateofbirth","dob","birthdate"],
  ["addressline1","address1","fulladdress","completeaddress","residentialaddress","address","पता"],
  ["addressline2","address2","secondaddressline"],
  ["sessionstart","startsession","sessionfrom","fromyear","startyear","academicsessionstart","sessionyearstart"],
  ["sessionend","endsession","sessionto","toyear","endyear","academicsessionend","sessionyearend"],
- ["academicsession","schoolsession","sessionyear","sessionperiod","शैक्षिकसत्र","शैक्षणिकसत्र"],
+ ["academicsession","schoolsession","session","sessionyear","sessionperiod","academicyear","academicperiod","शैक्षिकसत्र","शैक्षणिकसत्र"],
  ["bloodgroup","bloodtype"],
- ["phonenumber","mobile","mobilenumber","contactnumber","phone"]
+ ["phonenumber","mobile","mobilenumber","contactnumber","phone"],
+ ["gender","sex"],
+ ["studentid","studentidentifier","admissionid"],
+ ["pincode","postalcode","zipcode"],
+ ["village","villagename"],
+ ["district","districtname"],
+ ["state","statename"],
+ ["category","studentcategory"]
 ];
 function fieldAliasesFor(value:string){const n=norm(value);return fieldAliasGroups.find(group=>group.includes(n))??[n]}
-function requiredFieldValue(data:Record<string,unknown>,required:string){
+export function requiredFieldValue(data:Record<string,unknown>,required:string){
  const target=norm(required);
  const get=(names:string[])=>{const k=Object.keys(data).find(name=>names.includes(norm(name))&&!empty(data[name]));return k?data[k]:undefined};
+ const direct=get([target]);
+ if(!empty(direct))return direct;
  const splitAddress=(value:unknown,part:1|2)=>{
   if(empty(value))return undefined;
   const text=String(value).normalize("NFKC").trim();
@@ -64,9 +76,9 @@ export function validateStudents(students:Student[],requiredFields:string[]=[],o
  for(const s of students){const d=s.data??{},serial=s.serial_number==null?"":String(s.serial_number).trim();
  if(!serial)out.push(make("STUDENT_SERIAL_MISSING","CRITICAL","Student serial number is missing.","Correct the serial number in the source sheet and verify the imported record.",{id:s.id,serial},{studentId:s.id}));
  else serials.set(serial,[...(serials.get(serial)??[]),s]);
- const nk=Object.keys(d).find(k=>["studentname","name","fullname","pupilname"].includes(norm(k)));
+ const nk=Object.keys(d).find(k=>fieldAliasesFor("student_name").includes(norm(k))&&!empty(d[k]));
  const nameValue=nk?d[nk]:undefined;if(!nk||empty(nameValue))out.push(make("STUDENT_NAME_MISSING","ERROR","Required student name is missing.","Map the correct name column and verify this student record.",{id:s.id,key:nk,value:nameValue},{studentId:s.id,fieldRef:nk??"student_name"}));
- for(const req of requiredFields){const value=requiredFieldValue(d,req);if(empty(value))out.push(make("STUDENT_REQUIRED_FIELD_MISSING","ERROR","A project-required student field is missing.","Fill the required field or update the school-specific configuration.",{id:s.id,req,value},{studentId:s.id,fieldRef:req}))}
+ for(const req of requiredFields){const value=requiredFieldValue(d,req);if(empty(value))out.push(make("STUDENT_REQUIRED_FIELD_MISSING","ERROR",'Required project field "'+req+'" is missing.',"Fill the required field or update the school-specific configuration.",{id:s.id,req,value},{studentId:s.id,fieldRef:req}))}
  for(const [k,v]of Object.entries(d)){if(typeof v!=="string")continue;
  if(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(v))out.push(make("STUDENT_CONTROL_CHARACTER","WARNING","A field contains control characters.","Review the original spreadsheet cell; no value was changed automatically.",{id:s.id,k,v},{studentId:s.id,fieldRef:k}));
  if(/^\s*[=+@]/.test(v))out.push(make("STUDENT_FORMULA_LIKE_VALUE","WARNING","A value resembles a spreadsheet formula or untrusted expression.","Confirm the literal value is intentional before export.",{id:s.id,k,v},{studentId:s.id,fieldRef:k}));
