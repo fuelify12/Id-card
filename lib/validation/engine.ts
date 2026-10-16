@@ -54,7 +54,7 @@ export function requiredFieldValue(data:Record<string,unknown>,required:string){
  if(["addressline2","address2","secondaddressline"].includes(target))return splitAddress(get(["address","fulladdress","completeaddress","residentialaddress","पता"]),2);
  const classSectionTargets=["classsec","classsection","classandsec","classandsection","gradeandsection","classsectionname"];
  if(classSectionTargets.includes(target)){
-  const cls=get(["class","classname","grade","कक्षा"]),sec=get(["section","sectionname","sec","सेकشن","वर्ग"]);
+  const cls=get(["class","classname","grade","कक्षा"]),sec=get(["section","sectionname","sec","सेक्शन","वर्ग"]);
   const combined=[cls,sec].filter(v=>!empty(v)).map(String);
   if(combined.length)return combined.join(" - ");
  }
