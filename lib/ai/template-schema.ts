@@ -25,11 +25,11 @@ export const templateAnalysisSchema=z.object({
 export type TemplateAnalysis=z.infer<typeof templateAnalysisSchema>;
 
 export function refineValueBoxes(raw:TemplateAnalysis):TemplateAnalysis{
- const norm=(s:string)=>s.normalize("NFKC").toLocaleLowerCase("en-IN").replace(/['’`]/g,"").replace(/[^\\p{L}\\p{N}]+/gu," ").trim().replace(/\\s+/g," ");
+ const norm=(s:string)=>s.normalize("NFKC").toLocaleLowerCase("en-IN").replace(/['’`]/g,"").replace(/[^\p{L}\p{N}]+/gu," ").trim().replace(/\s+/g," ");
  const detected=raw.detectedText.map(item=>({...item,box:item.box.map(v=>Math.max(0,Math.min(1000,v))) as [number,number,number,number]}));
  const fields=raw.fields.map(field=>{
   const label=norm(field.label),key=norm(field.key.replace(/_/g," "));
-  const candidates=detected.filter(item=>{const text=norm(item.text.replace(/[:：]/g," "));return text===label||text===key||(label.length>=5&&text.replace(/\\b(the|field)\\b/g," ").trim()===label)});
+  const candidates=detected.filter(item=>{const text=norm(item.text.replace(/[:：]/g," "));return text===label||text===key||(label.length>=5&&text.replace(/\b(the|field)\b/g," ").trim()===label)});
   if(!candidates.length)return field;
   let box=[...field.box] as [number,number,number,number];
   for(const item of candidates){
