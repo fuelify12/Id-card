@@ -10,10 +10,7 @@ function fieldAliases(field:Field):string[]{
  const identity=normalizeMappingName([field.key,field.label].join(" "));
  const aliases:Record<string,string[]>={
   student_name:["student name","name","student full name","name of student","विद्यार्थी का नाम","छात्र का नाम","विद्यार्थी का पूरा नाम"],
-  student_photo:["student photo","photo filename","photo file name","student photo filename","photo","image filename","picture filename"],
-  session_start:["session start","start year","session from","academic session start","session year start"],
-  session_end:["session end","end year","session to","academic session end","session year end"],
-  student_photo:["student photo","photo","photo filename","student image","image filename","विद्यार्थी का फोटो"],
+  student_photo:["student photo","photo","photo filename","photo file name","student photo filename","student image","image filename","picture filename","विद्यार्थी का फोटो"],
   father_name:["father name","fathers name","father's name","father","father name of student","पिता का नाम","पिता का नाम"],
   mother_name:["mother name","mothers name","mother's name","mother","माता का नाम"],
   guardian_name:["guardian name","guardian","अभिभावक का नाम"],
@@ -33,8 +30,8 @@ function fieldAliases(field:Field):string[]{
   blood_group:["blood group","blood type","रक्त समूह"],
   phone:["phone","mobile","mobile number","contact number","मोबाइल नंबर","फोन नंबर"],
   session:["session","academic session","school session","academic year","session year","शैक्षिक सत्र","शैक्षणिक सत्र"],
-  session_start:["session start","start session","session from","from year","start year","academic year start","सत्र प्रारंभ"],
-  session_end:["session end","end session","session to","to year","end year","academic year end","सत्र समाप्ति"],
+  session_start:["session start","start session","session from","from year","start year","academic year start","academic session start","session year start","सत्र प्रारंभ"],
+  session_end:["session end","end session","session to","to year","end year","academic year end","academic session end","session year end","सत्र समाप्ति"],
   session_year_start:["session start","start session","session from","from year","start year","academic year start","सत्र प्रारंभ"],
   session_year_end:["session end","end session","session to","to year","end year","academic year end","सत्र समाप्ति"],
   academic_session_start:["session start","start session","session from","from year","start year","academic year start","सत्र प्रारंभ"],
