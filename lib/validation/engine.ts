@@ -58,6 +58,22 @@ export function requiredFieldValue(data:Record<string,unknown>,required:string){
   const combined=[cls,sec].filter(v=>!empty(v)).map(String);
   if(combined.length)return combined.join(" - ");
  }
+ // A single academic-session cell (for example, 2025-2026 or 2025–26)
+ // can supply separate start/end fields in templates that print two year boxes.
+ if (["sessionstart","startsession","sessionfrom","fromyear","startyear","academicsessionstart","sessionyearstart"].includes(target)) {
+  const combined=get(["academicsession","schoolsession","session","sessionyear","sessionperiod","academicyear","academicperiod","शैक्षिकसत्र","शैक्षणिकसत्र"]);
+  if (!empty(combined)) {
+   const match=String(combined).normalize("NFKC").trim().match(/^(\\d{4})\\s*[-–—/至]\\s*(\\d{2,4})$/);
+   if (match) return match[1];
+  }
+ }
+ if (["sessionend","endsession","sessionto","toyear","endyear","academicsessionend","sessionyearend"].includes(target)) {
+  const combined=get(["academicsession","schoolsession","session","sessionyear","sessionperiod","academicyear","academicperiod","शैक्षिकसत्र","शैक्षणिकसत्र"]);
+  if (!empty(combined)) {
+   const match=String(combined).normalize("NFKC").trim().match(/^(\\d{4})\\s*[-–—/至]\\s*(\\d{2,4})$/);
+   if (match) return match[2].length===2 ? match[1].slice(0,2)+match[2] : match[2];
+  }
+ }
  const aliases=fieldAliasesFor(required);
  const key=Object.keys(data).find(k=>aliases.includes(norm(k))&&!empty(data[k]));
  if(key)return data[key];
