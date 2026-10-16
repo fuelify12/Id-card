@@ -70,8 +70,8 @@ function autoMapFields(fields:Field[],headers:string[]):Field[]{
   const label=normalizeMappingName(field.label);
   let chosen:null|{raw:string;n:string}=null;
   let valueTransform:string|undefined;
-  if(label==="session"&&(key.includes("start")||key.includes("from")))chosen=sessionStart??null;
-  else if(label==="session"&&(key.includes("end")||key.includes("to")))chosen=sessionEnd??null;
+  if(label==="session"&&(key.includes("start")||key.includes("from"))){if(sessionStart)chosen=sessionStart;else if(combinedSession){chosen=combinedSession;valueTransform="session_start";}}
+  else if(label==="session"&&(key.includes("end")||key.includes("to"))){if(sessionEnd)chosen=sessionEnd;else if(combinedSession){chosen=combinedSession;valueTransform="session_end";}}
   else if(label==="session"&&sessionFields.length>=2){
    const idx=sessionIndex.get(field.id);
    if(idx===0&&sessionStart)chosen=sessionStart;
