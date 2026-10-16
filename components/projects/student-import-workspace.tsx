@@ -55,6 +55,12 @@ function autoMapFields(fields:Field[],headers:string[]):Field[]{
  const sessionStart=normalized.find(h=>startNames.includes(h.n));
  const sessionEnd=normalized.find(h=>endNames.includes(h.n));
  const combinedSession=normalized.find(h=>["session","academic session","school session","academic year","session year","session period","academic year period","शैक्षिक सत्र","शैक्षणिक सत्र"].includes(h.n));
+ const combinedClass=normalized.find(h=>["class & sec","class sec","class & section","class section","class and section","class-section","grade and section","कक्षा एवं सेक्शन","कक्षा और सेक्शन"].includes(h.n));
+ const classColumn=normalized.find(h=>["class","class name","grade","कक्षा"].includes(h.n));
+ const sectionColumn=normalized.find(h=>["section","sec","सेक्शन","वर्ग"].includes(h.n));
+ const addressColumn=normalized.find(h=>["address","full address","complete address","residential address","पता"].includes(h.n));
+ const address1Column=normalized.find(h=>["address line 1","address line one","address 1","address1","पहला पता","पता पंक्ति 1"].includes(h.n));
+ const address2Column=normalized.find(h=>["address line 2","address line two","address 2","address2","second address line","दूसरा पता","पता पंक्ति 2"].includes(h.n));
  const sessionFields=fields.filter(f=>normalizeMappingName(f.label)==="session").slice().sort((a,b)=>a.x-b.x);
  const sessionIndex=new Map(sessionFields.map((f,i)=>[f.id,i]));
  const tokenScore=(alias:string,header:string)=>{
@@ -70,7 +76,11 @@ function autoMapFields(fields:Field[],headers:string[]):Field[]{
   const label=normalizeMappingName(field.label);
   let chosen:null|{raw:string;n:string}=null;
   let valueTransform:string|undefined;
-  if(label==="session"&&(key.includes("start")||key.includes("from"))){if(sessionStart)chosen=sessionStart;else if(combinedSession){chosen=combinedSession;valueTransform="session_start";}}
+  let valueTransformSecondaryColumn:string|undefined;
+  if((key==="class_sec"||key==="class_section"||label==="class sec"||label==="class and sec")&&!combinedClass&&classColumn&&sectionColumn){chosen=classColumn;valueTransform="class_section";valueTransformSecondaryColumn=sectionColumn.raw;}
+  else if(key.includes("address")&&(key.includes("line_1")||key.includes("address_1"))&&!address1Column&&addressColumn){chosen=addressColumn;valueTransform="address_line_1";}
+  else if(key.includes("address")&&(key.includes("line_2")||key.includes("address_2"))&&!address2Column&&addressColumn){chosen=addressColumn;valueTransform="address_line_2";}
+  else if(label==="session"&&(key.includes("start")||key.includes("from"))){if(sessionStart)chosen=sessionStart;else if(combinedSession){chosen=combinedSession;valueTransform="session_start";}}
   else if(label==="session"&&(key.includes("end")||key.includes("to"))){if(sessionEnd)chosen=sessionEnd;else if(combinedSession){chosen=combinedSession;valueTransform="session_end";}}
   else if(label==="session"&&sessionFields.length>=2){
    const idx=sessionIndex.get(field.id);
@@ -89,7 +99,7 @@ function autoMapFields(fields:Field[],headers:string[]):Field[]{
    }
   }
   if(chosen&&!(valueTransform&&combinedSession?.n===chosen.n))used.add(chosen.n);
-  return {...field,source_column:chosen?.raw??null,render_options:valueTransform?{...(field.render_options??{}),valueTransform}:field.render_options??null};
+  return {...field,source_column:chosen?.raw??null,render_options:valueTransform?{...(field.render_options??{}),valueTransform,...(valueTransformSecondaryColumn?{valueTransformSecondaryColumn}:{})}:field.render_options??null};
  });
 }
 export function StudentImportWorkspace({projectId,templateId,fields:initialFields}:{projectId:string;templateId:string|null;fields:Field[]}) {
