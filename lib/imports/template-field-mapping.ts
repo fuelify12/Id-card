@@ -42,7 +42,7 @@ function fieldAliases(field:Field):string[]{
  const aliasKey=Object.keys(aliases).find(k=>aliases[k].some(a=>normalizeMappingName(a)===labelKey));
  return [...new Set([field.source_column??"",field.key,field.label,...(aliases[key]??[]),...(aliases[labelKey.replace(/ /g,"_")]??[]),...(aliases[labelKey]??[]),...(aliasKey?aliases[aliasKey]:[]),...(aliases[identity.replace(/ /g,"_")]??[])].map(normalizeMappingName).filter(Boolean))];
 }
-function autoMapFields(fields:Field[],headers:string[]):Field[]{
+export function autoMapFields(fields:Field[],headers:string[]):Field[]{
  const normalized=headers.map(raw=>({raw,n:normalizeMappingName(raw)}));
  const used=new Set<string>();
  const startNames=["session start","start session","session from","from year","start year","academic year start","academic session start","session year start","session start year","academic session from","session year from"];
@@ -72,9 +72,11 @@ function autoMapFields(fields:Field[],headers:string[]):Field[]{
   let chosen:null|{raw:string;n:string}=null;
   let valueTransform:string|undefined;
   let valueTransformSecondaryColumn:string|undefined;
+  const addressLine1=key.includes("line_1")||key.includes("address_1")||label==="address line 1"||label==="address line one";
+  const addressLine2=key.includes("line_2")||key.includes("address_2")||label==="address line 2"||label==="address line two";
   if((key==="class_sec"||key==="class_section"||label==="class sec"||label==="class and sec")&&!combinedClass&&classColumn&&sectionColumn){chosen=classColumn;valueTransform="class_section";valueTransformSecondaryColumn=sectionColumn.raw;}
-  else if(key.includes("address")&&(key.includes("line_1")||key.includes("address_1"))&&!address1Column&&addressColumn){chosen=addressColumn;valueTransform="address_line_1";}
-  else if(key.includes("address")&&(key.includes("line_2")||key.includes("address_2"))&&!address2Column&&addressColumn){chosen=addressColumn;valueTransform="address_line_2";}
+  else if(key.includes("address")&&addressLine1&&!address1Column&&addressColumn){chosen=addressColumn;valueTransform="address_line_1";}
+  else if(key.includes("address")&&addressLine2&&!address2Column&&addressColumn){chosen=addressColumn;valueTransform="address_line_2";}
   else if(label==="session"&&(key.includes("start")||key.includes("from"))){if(sessionStart)chosen=sessionStart;else if(combinedSession){chosen=combinedSession;valueTransform="session_start";}}
   else if(label==="session"&&(key.includes("end")||key.includes("to"))){if(sessionEnd)chosen=sessionEnd;else if(combinedSession){chosen=combinedSession;valueTransform="session_end";}}
   else if(label==="session"&&sessionFields.length>=2){
@@ -93,7 +95,7 @@ function autoMapFields(fields:Field[],headers:string[]):Field[]{
     if(candidates.length&&(!candidates[1]||candidates[0].score-candidates[1].score>=.12))chosen=candidates[0].h;
    }
   }
-  if(chosen&&!(valueTransform&&combinedSession?.n===chosen.n))used.add(chosen.n);
+  if(chosen&&!(valueTransform&&["session_start","session_end","address_line_1","address_line_2","class_section"].includes(valueTransform)))used.add(chosen.n);
   return {...field,source_column:chosen?.raw??null,render_options:valueTransform?{...(field.render_options??{}),valueTransform,...(valueTransformSecondaryColumn?{valueTransformSecondaryColumn}:{})}:field.render_options??null};
  });
 }
