@@ -40,7 +40,7 @@ function fieldAliases(field:Field):string[]{
  const key=normalizeMappingName(field.key).replace(/ /g,"_");
  const labelKey=normalizeMappingName(field.label).replace(/ /g,"_");
  const aliasKey=Object.keys(aliases).find(k=>aliases[k].some(a=>normalizeMappingName(a)===labelKey));
- return [...new Set([field.source_column??"",field.key,field.label,...(aliases[key]??[]),...(aliases[labelKey.replace(/ /g,"_")]??[]),...(aliases[labelKey]??[]),...(aliasKey?aliases[aliasKey]:[]),...(aliases[identity.replace(/ /g,"_")]??[])].map(normalizeMappingName).filter(Boolean))];
+ return [...new Set([field.key,field.label,...(aliases[key]??[]),...(aliases[labelKey.replace(/ /g,"_")]??[]),...(aliases[labelKey]??[]),...(aliasKey?aliases[aliasKey]:[]),...(aliases[identity.replace(/ /g,"_")]??[])].map(normalizeMappingName).filter(Boolean))];
 }
 export function autoMapFields(fields:Field[],headers:string[]):Field[]{
  const normalized=headers.map(raw=>({raw,n:normalizeMappingName(raw)}));
@@ -94,11 +94,13 @@ export function autoMapFields(fields:Field[],headers:string[]):Field[]{
   }
   if(!chosen){
    const aliases=[...new Set(fieldAliases(field))];
-   const exact=normalized.filter(h=>aliases.includes(h.n));
+   const role=fieldNameRole(field);
+   const roleCompatible=(header:string)=>{const headerRole=keyNameRole(header);return !role||!headerRole||role===headerRole;};
+   const exact=normalized.filter(h=>aliases.includes(h.n)&&roleCompatible(h.n));
    const availableExact=exact.filter(h=>!used.has(h.n));
    if(exact.length===1&&availableExact.length===1)chosen=availableExact[0];
    else if(exact.length===0){
-    const role=fieldNameRole(field); const candidates=normalized.filter(h=>!used.has(h.n)&&(!role||!keyNameRole(h.n)||role===keyNameRole(h.n))).map(h=>({h,score:Math.max(0,...aliases.map(a=>tokenScore(a,h.n)))})).filter(x=>x.score>=.8).sort((a,b)=>b.score-a.score);
+    const candidates=normalized.filter(h=>!used.has(h.n)&&roleCompatible(h.n)).map(h=>({h,score:Math.max(0,...aliases.map(a=>tokenScore(a,h.n)))})).filter(x=>x.score>=.8).sort((a,b)=>b.score-a.score);
     if(candidates.length&&(!candidates[1]||candidates[0].score-candidates[1].score>=.12))chosen=candidates[0].h;
    }
   }

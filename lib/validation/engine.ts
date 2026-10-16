@@ -21,7 +21,7 @@ const fieldAliasGroups:string[][]=[
  ["addressline2","address2","secondaddressline"],
  ["sessionstart","startsession","sessionfrom","fromyear","startyear","academicsessionstart","sessionyearstart"],
  ["sessionend","endsession","sessionto","toyear","endyear","academicsessionend","sessionyearend"],
- ["academicsession","schoolsession","sessionyear","sessionperiod","शैक्षिकसत्र","शैक्षणिकसत्र"],
+ ["session","academicsession","schoolsession","academicyear","sessionyear","sessionperiod","शैक्षिकसत्र","शैक्षणिकसत्र"],
  ["bloodgroup","bloodtype"],
  ["phonenumber","mobile","mobilenumber","contactnumber","phone"]
 ];
