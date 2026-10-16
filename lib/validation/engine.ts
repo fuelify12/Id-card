@@ -52,23 +52,15 @@ export function requiredFieldValue(data:Record<string,unknown>,required:string){
  };
  if(["addressline1","address1"].includes(target))return splitAddress(get(["address","fulladdress","completeaddress","residentialaddress","पता"]),1);
  if(["addressline2","address2","secondaddressline"].includes(target))return splitAddress(get(["address","fulladdress","completeaddress","residentialaddress","पता"]),2);
+ const classSectionTargets=["classsec","classsection","classandsec","classandsection","gradeandsection","classsectionname"];
+ if(classSectionTargets.includes(target)){
+  const cls=get(["class","classname","grade","कक्षा"]),sec=get(["section","sectionname","sec","सेक्शन","वर्ग"]);
+  const combined=[cls,sec].filter(v=>!empty(v)).map(String);
+  if(combined.length)return combined.join(" - ");
+ }
  const aliases=fieldAliasesFor(required);
  const key=Object.keys(data).find(k=>aliases.includes(norm(k))&&!empty(data[k]));
  if(key)return data[key];
- if(["classsec","classsection","classandsec","classandsection","gradeandsection"].includes(target)){
-  const cls=get(["class","classname","grade","कक्षा"]),sec=get(["section","sectionname","sec","सेक्शन","वर्ग"]);
-  if(cls!==undefined&&sec!==undefined)return String(cls)+" - "+String(sec);
- }
- if(["sessionstart","startsession","sessionfrom","fromyear","startyear","academicsessionstart","sessionyearstart"].includes(target)){
-  const value=get(["session","academicsession","schoolsession","academicyear","sessionyear","sessionperiod","शैक्षिकसत्र","शैक्षणिकसत्र"]);
-  const match=String(value??"").match(/((?:19|20|21)\d{2})\s*(?:-|–|—|\/|to|until)\s*((?:19|20|21)\d{2}|\d{2})/i);
-  if(match)return match[1];
- }
- if(["sessionend","endsession","sessionto","toyear","endyear","academicsessionend","sessionyearend"].includes(target)){
-  const value=get(["session","academicsession","schoolsession","academicyear","sessionyear","sessionperiod","शैक्षिकसत्र","शैक्षणिकसत्र"]);
-  const match=String(value??"").match(/((?:19|20|21)\d{2})\s*(?:-|–|—|\/|to|until)\s*((?:19|20|21)\d{2}|\d{2})/i);
-  if(match)return match[2].length===2?String(Math.floor(Number(match[1])/100)*100+Number(match[2])):match[2];
- }
  return undefined;
 }
 export function validateStudents(students:Student[],requiredFields:string[]=[],options:{admissionNumberUnique?:boolean}={}):Finding[]{
