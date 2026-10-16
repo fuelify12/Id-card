@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { templateAnalysisSchema, normalizeAnalysis } from "@/lib/ai/template-schema";
+import { templateAnalysisSchema, normalizeAnalysis, refineValueBoxes } from "@/lib/ai/template-schema";
 import sharp from "sharp";
 import { sanitizeSvg } from "@/lib/rendering/engine";
 
@@ -157,11 +157,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     const parsed = templateAnalysisSchema.safeParse(raw);
     if (!parsed.success) return NextResponse.json({ error: "Gemini output failed validation.", details: parsed.error.issues.slice(0, 5) }, { status: 502 });
     // Coordinates must use the uploaded template's real pixel basis, not dimensions guessed by the model.
-    const analysisData = {
+    const analysisData = refineValueBoxes({
       ...parsed.data,
       width: Number(t.width_px) > 0 ? Number(t.width_px) : parsed.data.width,
       height: Number(t.height_px) > 0 ? Number(t.height_px) : parsed.data.height
-    };
+    });
     const normalized = normalizeAnalysis(analysisData);
     const { error: del } = await s.from("template_fields").delete().eq("template_id", templateId);
     if (del) return NextResponse.json({ error: "Analysis succeeded but old field map could not be replaced.", details: del.message }, { status: 500 });
